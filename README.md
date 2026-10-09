@@ -2,6 +2,8 @@
 
 Faculty observation and assessment coordination using Next.js.
 
+Install Nodejs and Docker
+
 ## Setup
 
 1. Open the project folder and run `npm ci`.
