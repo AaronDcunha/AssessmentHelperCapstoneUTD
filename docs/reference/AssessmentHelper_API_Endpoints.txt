@@ -1,0 +1,222 @@
+ASSESSMENT HELPER - PROPOSED API ENDPOINTS
+========================================
+Draft for team planning.
+
+1. AUTHENTICATION AND CURRENT USER
+---------------------------------
+Auth.js-managed routes: /api/auth/*
+  Login, logout, session and related Auth.js operations.
+  Temporary Credentials login uses JWT sessions and stored password hashes.
+
+GET /api/me
+  Current user's profile and effective permissions.
+
+GET /api/me/evaluation-status
+  Current professor's last completed evaluation and due/overdue status.
+
+GET /api/me/course-sections?semesterId={semesterId}
+  Sections taught by the current professor, including course and meeting details.
+
+2. EVALUATION CYCLES AND SIGNUPS
+------------------------------
+GET /api/evaluation-cycles
+  AC lists current and previous evaluation cycles within their authorized scope.
+
+POST /api/evaluation-cycles
+  AC creates a cycle with its semester and deadlines.
+
+GET /api/evaluation-cycles/{cycleId}
+  Retrieve cycle details and deadlines.
+
+PATCH /api/evaluation-cycles/{cycleId}
+  AC updates permitted cycle settings.
+
+GET /api/me/signups?cycleId={cycleId}
+  Current professor's own signups, optionally filtered by cycle.
+  Always returns only their own records, even if they also have AC permissions.
+
+GET /api/evaluation-cycles/{cycleId}/signups
+  AC lists all signups for this cycle within their authorized scope.
+
+POST /api/evaluation-cycles/{cycleId}/signups
+  Professor signs up with a section they teach before the signup deadline.
+
+3. MATCHING AND RECOMMENDATIONS
+------------------------------
+POST /api/evaluation-cycles/{cycleId}/recommendations/generate
+  AC generates candidate lists after signup closes.
+  Should be able to handle Per Department, or Per Professor as well
+  Show up to five eligible candidates. Alert AC for no/insufficient matches.
+
+POST /api/evaluation-cycles/{cycleId}/recommendations/release
+  AC releases generated lists and creates in-app notifications for observees.
+  Generation and release are separate actions.
+
+POST /api/observations/{observationId}/recommendations/regenerate
+  AC reruns automatic matching for an unresolved observation, including the
+  all-recommended-observers-declined case.
+  Preserve previous candidate responses. Repeat-invitation policy needs agreement.
+
+GET /api/observations/{observationId}/candidates
+  AC reviews candidates; the observee sees their released candidate list.
+  Include invitation/response state where the caller is authorized to see it.
+
+
+4. OBSERVATIONS AND CANDIDATE RESPONSES
+-------------------------------------
+GET /api/me/observations?cycleId={cycleId}&participation={participation}&status={status}
+  Current professor's own observations, optionally filtered by cycle and status.
+  participation may be observee or observer
+
+GET /api/evaluation-cycles/{cycleId}/observations?status={status}
+  AC lists observations for this cycle.
+
+GET /api/observations/{observationId}
+  Retrieve participants, section, schedule and progress.
+
+POST /api/observations/{observationId}/invitations
+  Observee invites all or a subset of their recommended candidates.
+
+GET /api/me/observation-requests
+  Current professor's received observation invitations and their response states.
+
+PATCH /api/observation-candidates/{candidateId}/response
+  The invited professor accepts or declines their own active invitation.
+  Reject responses after expires_at even if the scheduled expiry job has not run.
+  Multiple professors may accept
+
+PUT /api/observations/{observationId}/selected-observer
+  Observee selects an accepting candidate for their observation.
+
+POST /api/observations/{observationId}/incomplete-report
+  Observee reports that the arranged observation did not occur.
+  Record the outcome for progress tracking and Missing Observation Count. (??? NOT SURE IF WE NEED THIS)
+
+5. ASSESSMENTS AND TEMPLATES
+---------------------------
+GET /api/observation-templates
+  List template versions available to the caller.
+
+GET /api/observation-templates/{templateId}
+  Retrieve a specific template version and its criteria, subject to authorization.
+
+GET /api/observation-templates/current
+  Retrieve the applicable current published template for new observations.
+
+GET /api/observations/{observationId}/template
+  Authorized participant retrieves the template version assigned to this observation.
+
+POST /api/observation-templates
+  AC creates a template.
+
+PATCH /api/observation-templates/{templateId}
+  AC edits a draft template, including criteria, scales, question types and weights.
+
+POST /api/observation-templates/{templateId}/versions
+  AC creates a revised/new version while preserving the earlier version.
+  
+(HAVE BOTH PATCH AND POST?? IF ITS A FILE ITS PROBABLY ONLY POST?)
+
+POST /api/observations/{observationId}/assessment
+  Selected observer uploads the jointly signed assessment.
+  Validate authorization and file properties; save the file privately and its
+  reference in the database.
+(SHOULD WE ALLOW THEM TO OVERWRITE THE UPLOADED ASSESSMENT?)
+
+GET /api/observations/{observationId}/assessment
+  Authorized user views assessment metadata.
+
+GET /api/observations/{observationId}/assessment/file
+  Authorized download through the backend. Never expose the private storage folder.
+
+6. PROCESS FEEDBACK
+-------------------
+POST /api/evaluation-cycles/{cycleId}/feedback
+  Submit end-of-process feedback after the observation period.
+
+GET /api/me/feedback?cycleId={cycleId}
+  Current professor retrieves their own submitted feedback, optionally by cycle.
+
+GET /api/evaluation-cycles/{cycleId}/feedback
+  AC retrieves cycle feedback within their authorized scope.
+  AC visibility of individual feedback still needs confirmation before implementation.
+
+7. IN-APP NOTIFICATIONS
+----------------------
+GET /api/notifications?cursor={cursor}&limit=20
+  Paginated notification list for the current user only.
+  Support a separate incremental-fetch cursor/filter for new notifications.
+
+GET /api/notifications/unread-count
+  Current user's unread count. Could alternatively be included in list responses.
+
+PATCH /api/notifications/{notificationId}
+  Current user marks their own notification read/unread.
+  Do not allow arbitrary edits to its message or recipient.
+
+POST /api/notifications/mark-all-read
+  Mark the user's existing notifications read, using a request-time cutoff.
+
+POST /api/evaluation-cycles/{cycleId}/notifications
+  AC sends an allowed cycle announcement/reminder to authorized recipients.
+  Automatic event notifications are created by backend services, not separate
+  browser requests.
+
+8. ADMINISTRATION AND EVALUATION RULES
+------------------------------------
+GET /api/users
+  Admin lists/searches users.
+
+PATCH /api/users/{userId}
+  Admin updates permitted account/profile information, including professor rank.
+
+PUT /api/users/{userId}/roles
+  Admin changes the user's role assignments.
+
+GET /api/roles
+  Retrieve role definitions for authorized user-management interfaces.
+
+POST /api/roles
+  Admin creates a role.
+
+PATCH /api/roles/{roleId}
+  Admin updates a role.
+
+DELETE /api/roles/{roleId}
+  Admin removes a role, subject to assignment and administrative-access safeguards.
+
+GET /api/permissions
+  Admin retrieves supported permission definitions.
+
+PUT /api/roles/{roleId}/permissions
+  Admin changes which supported permissions a role grants.
+
+GET /api/hiring-levels
+  Retrieve available hiring levels and evaluation intervals.
+
+PATCH /api/hiring-levels/{hiringLevelId}
+  Changing any settings to the Hiring Level such as frequency of being observed.
+
+9. AC REPORTS AND KPI METRICS
+---------------------------
+GET /api/evaluation-cycles/{cycleId}/reports
+  AC retrieves operational report summaries: due, overdue, unmatched and outstanding.
+  These operational views remain available during the cycle.
+
+GET /api/evaluation-cycles/{cycleId}/metrics
+  AC retrieves the dashboard's metric values together after the feedback deadline.
+  One response can contain all metrics
+
+  Planned metrics:
+  - Evaluation Eligibility Accuracy
+  - Overdue Evaluation Count
+  - Assessment Participation Rate
+  - Observer Utilization Rate
+  - List Sufficiency Rate
+  - Missing Observation Count
+  - Survey Completion Rate
+
+  Executive summaries:
+  - Faculty due, broken down by hiring level
+  - Outstanding observations, broken down by hiring level
+  - Unmatched faculty

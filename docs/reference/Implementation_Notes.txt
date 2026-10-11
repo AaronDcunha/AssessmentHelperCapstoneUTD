@@ -1,0 +1,60 @@
+ASSESSMENT HELPER IMPLEMENTATION NOTES
+Updated October 11, 2026
+
+1. WEB-BASED ASSESSMENT FORM - CONFIRMED
+Assessments will be completed through a web-based form. Signed assessment
+document uploads are no longer part of the workflow. Update older references,
+the API draft, and the relational schema to reflect this decision. Store form
+answers against the applicable template criteria/version. Define acknowledgement
+and finalization behavior for the web form separately from file uploads.
+
+2. AUTOMATIC INVITATION RESEND - TO DO
+Implement automatic resending of expired invitations as described in UC4.
+Define when uncontacted candidates are invited before earlier invitations are
+resent, how a new 48-hour response window starts, retry limits, and the cutoff
+at the observation deadline. Preserve invitation-attempt history and notify
+the AC when invitations are automatically resent. This notification is
+informational and does not require AC approval.
+
+3. AC APPROVAL FOR EXPIRED INVITATIONS - TO DO
+Implement the request and AC approval flow for an observer who wants to accept
+an expired invitation that has not already been resent. After AC approval,
+reopen the invitation or otherwise enable acceptance. Add the required API
+operations, permission checks, approval records, and notifications. Prevent
+acceptance of an expired invitation without a new active window or approval.
+
+4. MANUAL OBSERVER REPLACEMENT - STRETCH GOAL
+Manual selection/invitation of a replacement observer by the AC is a stretch
+goal. Mark UC8 and related planning references accordingly. If implemented,
+define replacement eligibility, how acceptance leads to final assignment,
+and whether postponement is supported.
+
+5. EVALUATION ELIGIBILITY - FREQUENCY AND SIGNUP DEADLINE CONFIRMED
+Assistant professors require evaluation every year. Associate/full professors
+require evaluation every two years. A professor due in a particular semester
+must sign up by that semester's evaluation-cycle signup deadline. For example,
+a professor due in Fall 2026 must sign up by the Fall 2026 signup deadline.
+Signing up does not itself mean the observation has been completed; observation
+completion is tracked separately against the observation deadline.
+Remaining edge cases: faculty without evaluation history, missing hire dates,
+and rank changes. Retain the first-semester exclusion and voluntary signup
+behavior described in UC2, and specify how they are checked.
+
+6. KPI DEFINITIONS - NEEDS CLARIFICATION
+Agree on each metric's numerator, denominator, reporting period, and treatment
+of missing data before implementation.
+- Evaluation Eligibility Accuracy: clarify whether this measures faculty
+  evaluation eligibility or observer matching correctness.
+- Assessment Participation Rate: decide how voluntary signups affect the rate.
+- Observer Utilization Rate: distinguish accepting invitations from being
+  selected as the final observer; count distinct professors consistently.
+- List Sufficiency Rate: clarify whether this is the percentage receiving five
+  candidates or the average candidate count per signup. The current formula
+  is ambiguous.
+- Missing Observation Count: distinguish an observation that did not occur
+  from an observation whose assessment form has not yet been submitted.
+- Survey Completion Rate: clarify the eligible population and prevent double
+  counting professors participating as both observer and observee.
+- Overdue Evaluation Count: use the agreed due/overdue eligibility rule.
+Clarify whether any provisional KPIs appear during the cycle; final KPIs are
+expected after the feedback deadline, while operational reports remain live.

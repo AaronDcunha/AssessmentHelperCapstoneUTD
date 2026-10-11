@@ -1,0 +1,1031 @@
+READABLE EXTRACTION OF Expanded Use Cases.docx Read README.md and Implementation_Notes.txt first; newer decisions override this source. This extraction preserves paragraph text in document order, not visual layout. 
+UC1: User Authentication and Role-Based Access
+Description
+This use case describes how a registered user logs into the Assessment Helper system. The system authenticates the user’s credentials, identifies their assigned role, establishes a session, and provides access to the appropriate dashboard and functionality.
+
+Actor - User (Administrator, Assessment Committee member, Professor/Faculty [Observer, Observee])
+
+Preconditions
+The user has an existing account in the system.
+The user has been assigned a valid system role.
+The user is not currently authenticated.
+
+Trigger - The user accesses the system login page to sign in.
+
+Actor - User
+System - Assessment Helper System
+
+0) System displays the login page
+1) User enters their login credentials and submits the login request
+2) System validates the submitted credentials
+
+3) System authenticates the user and retrieves the user’s assigned role
+
+4) System determines the user’s authorized access based on their assigned role
+
+5) System establishes an authenticated session and displays the appropriate role-based dashboard
+6) User accesses the dashboard/features available for their assigned role
+
+
+Exception Flows
+2a) Invalid credentials
+The system determines that the submitted credentials are invalid.
+The system displays an error message (Invalid credentials).
+The user can reenter their credentials and attempt to log in again.
+
+
+
+
+
+Postconditions
+Success:
+The user is authenticated.
+An authenticated session is established.
+The appropriate dashboard with associated functionality is displayed.
+Failure:
+The user remains unauthenticated.
+No protected system functionality is accessible.
+
+Nontrivial Step
+Step 4-5: The system determines the user’s access and displays the appropriate dashboard based on their assigned role. This step is nontrivial because the response differs depending on the user’s role.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+UC2: Faculty Evaluation Signup and Course Selection
+Description
+This use case describes how a professor user uses the Observee tab of the professor dashboard to view their evaluation status and sign up for an evaluation. If an evaluation is due or overdue, the system allows the professor to select one of their assigned course sections and submit the evaluation signup. A professor who is not currently due may also voluntarily sign up for an observation.
+
+Actor - Professor/Faculty (Observee)
+
+Preconditions
+The professor has an existing account and is authenticated.
+The professor has access to the professor dashboard.
+An active evaluation cycle has been established.
+Course assignment information for the current semester is available to the system.
+
+Trigger - The professor selects the Sign Up tab from the observee section of the professor dashboard.
+
+Actor - Observee
+System - Assessment Helper System
+0) Professor is viewing the Observee section of the professor section
+
+1) Professor selects the Sign Up tab
+2) System retrieves the professor’s evaluation information and determines their current evaluation status
+
+3) System displays the professor’s evaluation status and, if an evaluation is due, displays the course section assigned to the professor
+4) Professor selects a course section for the evaluation
+5) System displays the selected course section and signup information for review
+6) Professor confirms and submits the evaluation signup
+7) System validates and records the evaluation signup
+
+8) System displays confirmation that the evaluation signup was successfully submitted
+
+
+
+
+
+
+Exception Flows
+2a) Professor is not due or overdue for evaluation
+The system determines that the professor is not currently due or overdue for evaluation.
+The system displays the professor’s current evaluation status.
+The system allows the professor to voluntarily sign up for an observation for the current cycle.
+
+2b) Professor is in their first semester
+The system determines that the professor is not yet eligible for observation.
+The system displays that observation eligibility begins in the professor’s second semester.
+The professor cannot submit an evaluation signup for the current cycle.
+
+3a) No course sections are available
+The system determines that no course sections are currently assigned to the professor.
+The system displays a message indicating that no eligible course sections are available for signup.
+The professor cannot continue the signup process until course information is available.
+
+7a) Signup deadline has passed
+The system determines that the signup deadline for the current evaluation cycle has passed.
+The system does not record the signup.
+The system displays a message informing the professor that the signup period has ended.
+
+7b) Invalid or incomplete signup information
+The system determines that required signup information is missing or invalid.
+The system does not record the signup.
+The system identifies the missing or invalid information and displays an error notification.
+The professor may correct the information and submit the signup again.
+
+Postconditions
+Success:
+The professor’s evaluation signup is recorded for the current evaluation cycle.
+The selected course section is associated with the professor’s observation request.
+The professor can view the submitted signup and its current status.
+The signup becomes available for the observer recommendation process.
+
+Failure: 
+No evaluation signup is created.
+The professor’s evaluation status remains unchanged.
+The professor may attempt the signup again if the issue can be corrected and the signup deadline has not passed.
+
+Nontrivial Step
+Step 2-3: The system determines the professor’s current evaluation status based on their faculty rank and previous evaluation history, then determines whether signup options should be displayed. This step is nontrivial because the result depends on the professor’s rank, previous completed evaluations, the current evaluation cycle, and whether the professor is due, overdue, or voluntarily participating.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+UC3: Observer Recommendation and Selection 
+Description
+This use case describes how a professor who has signed up to be observed views a list of eligible observer recommendations for the selected course section. The system evaluates faculty eligibility based on department, course level, availability, and current participation in the evaluation cycle, and presents the eligible observers to the Observee.
+
+Actor - Professor/Faculty (Observee)
+
+Preconditions
+The professor is authenticated.
+The professor has successfully signed up for the current evaluation cycle.
+The professor has selected a course section for observation.
+The signup deadline has passed or observer selection has been enabled.
+Eligible faculty information and teaching schedules are available in the system.
+
+Trigger - The professor selects the Observer Recommendation tab for their current evaluation signup.
+
+
+Actor - Observee
+System - Assessment Helper System
+0) Professor is viewing their current evaluation signup
+
+1) Professor selects the Observer Recommendation tab
+2) System retrieves the selected course, course level, department, and meeting time
+
+3) System retrieves professors available in the current observer pool
+
+4) System filters the Observer pool using teaching history and removes the Observee and faculty who are not in the same department, have not taught the same course level within the required history period, or are unavailable during the selected class time.
+
+5) System generates the eligible observer list
+
+6) If five or more eligible observers exist, the system randomly selects and displays five eligible observers
+
+7) If fewer than five eligible observers exist, the system displays all eligible observers
+8) Professor reviews and selects one or more recommended observers to contact
+9) System records the selected observer candidates and allows the professor to proceed with sending requests
+
+Exception Flows
+5a) No eligible observers are found
+The system determines that no eligible observers are available.
+The system marks the observation request as unmatched.
+The system displays amessage to the Observee indicating that no eligible observers are currently available.
+The system creates an unmatched-request alert for the Assessment Committee (AC).
+
+6a) Fewer than five observers are available
+The system displays all available eligible observers instead of 5.
+The Observee may continue with the available list.
+
+Postconditions
+Success: 
+The Observee is shown a valid list of eligible observers.
+The Observee has selected one or more observer candidates for invitation.
+
+
+Failure: 
+No eligible observer is selected.
+The evaluation request remains unmatched or awaiting observer selection.
+
+Nontrivial Step
+Step 4-6: The system determines observer eligibility by checking multiple constraints, including department, course level, schedule availability, and self-exclusion. This is nontrivial because multiple pieces of faculty and course data must be evaluated before the recommendation list is generated.
+
+
+
+
+
+
+
+
+
+
+UC4: Observer Invitation and Final Pairing
+Description
+This use case describes how an Observee sends observation requests to one or more recommended observers. Observers may accept or decline the request. Once at least one observer confirms availability, the Observee selects one confirmed observer, and the system records the final observer-observee pairing.
+
+Actor - Professor/Faculty (Observee)
+Supporting Actor - Professor/Faculty (Observer) / Assessment Committee Member
+
+Preconditions
+The Observee is authenticated.
+The Observee has signed up for the current evaluation cycle.
+The Observee has received a list of eligible observers.
+At least one observer candidate has been selected.
+The observation period has not ended.
+
+Trigger - The Observee selects one or more recommended observers and chooses to send observation requests.
+
+Actor - Observee/Observer
+System - Assessment Helper System
+1) Observee selects one or more recommended observers
+
+2) Observee submits the invitations
+3) System creates the observation invitations for the selected observers
+
+4) System records each invitation as pending and sets a 48-hour response period
+
+5) System sends the observation request to each selected Observer, including the course, section, meeting days/time, and proposed observation date(s) before the observation-period deadline.
+6) Observer views the observation request
+
+7) Observer accepts or declines the request
+8) System records the Observer’s response
+
+9) If the Observer accepts, the system notifies the Observee that the Observer is available
+10) Observee reviews confirmed observers
+
+11) Observee selects one confirmed Observer
+12) System records the Observer as the final pairing
+
+13) System cancels the remaining pending or confirmed invitations
+
+14) System notifies the other invited observers that they were not selected
+15) Observee views the confirmed observation pairing
+
+
+Exception Flows
+7a) Observer declines the request
+The system records the invitation as declined.
+The Observee may continue waiting for responses from other invited observers.
+If necessary, the Observee may send invitations to other recommended Observers.
+
+7b) Observer does not respond within 48 hours
+The system marks the Observer’s invitation as expired.
+The Observee may send invitations to other recommended Observers that have not yet been contacted.
+If other recommended Observers are available, those Observers are contacted before previously expired invitations are resent.
+If none of the contacted Observers respond within 48 hours, the system automatically resends invitations to the previously invited Observers.
+The resent invitations become active again and may be accepted normally.
+The system sends a notification to the Assessment Committee (AC) informing them that invitations were automatically resent.
+The AC notification is informational only and does not require approval or action.
+
+
+7c) Observer wants to accept an expired invitation
+The Observer views an invitation after its 48-hour response period has expired.
+If the invitation has not already been automatically resent, the Observer cannot accept it directly.
+The Observer sends a request to the Assessment Committee (AC) asking for permission to accept the expired invitation.
+The system notifies the Assessment Committee (AC) of the Observer’s request.
+The Assessment Committee (AC) reviews the request.
+If the AC approves the request, the system reopens the invitation or enables the Observer to accept it.
+The Observer may then confirm availability.
+The system notifies the Observee that the Observer is available.
+
+9a) No invited Observer accepts
+The system leaves the observation without a confirmed Observer.
+The Observee may send requests to additional recommended Observers.
+If all available recommended Observers have already been contacted and no responses are received, the system follows the resend process described in 7b.
+The Assessment Committee (AC) is notified if the request continues without a confirmed Observer.
+
+11a) More than one Observer accepts
+The system displays all confirmed Observers to the Observee.
+The Observee selects one Observer as the final choice.
+The system records that Observer as the final pairing.
+The remaining confirmed Observers receive a graceful cancellation notification.
+
+Postconditions
+Success: 
+One Observer is confirmed as the final Observer.
+The observer-observee pairing is stored in the system.
+The selected Observer is associated with the Observee’s course/section and observation request.
+Remaining pending or accepted invitations are cancelled.
+Both the Observee and selected Observer can view the confirmed pairing.
+Failure: 
+No Observer is confirmed.
+The observation remains awaiting an Observer.
+The Observee may continue contacting recommended Observers.
+If the issue remains unresolved, the Assessment Committee (AC) is notified and can monitor the request.
+
+
+Nontrivial Step
+Step 12-14: The system must finalize exactly one Observer while updating or canceling all other active invitations and sending the appropriate notifications. This is nontrivial because several invitations may be pending or confirmed at the same time, and the system must ensure that only one Observer becomes the final pairing while all remaining invitations are correctly canceled or updated.
+
+
+
+
+
+
+
+UC5: Observation Completion and Evaluation Submission
+Description
+This use case describes how an Observer completes the faculty observation process. After observing the selected class, the Observer completes the evaluation form, provides ratings and comments, signs the observation, and submits it. The Observee reviews the completed observation and signs to acknowledge that the observation occurred.
+
+Actor - Professor/Faculty (Observer)
+Supporting Actor - Professor/Faculty (Observee)
+
+Preconditions
+The Observer and Observee are authenticated users.
+A final observer-observee pairing has been confirmed.
+An observation has been scheduled for the Observer and Observee.
+An active evaluation template is available.
+The evaluation has not already been finalized.
+
+Trigger - The Observer opens the assigned observation after the scheduled observation has occurred.
+
+Actor - Observer/Observee
+System - Assessment Helper System
+1) Observer opens the assigned observation
+2) System retrieves the applicable observation template
+
+3) System displays the evaluation criteria, rating fields, and comment fields
+4) Observer enters ratings, comments, and observation notes
+
+5) Observer signs and submits the completed observation
+6) System validates the required evaluation fields
+
+7) System stores the completed evaluation information
+
+8) System notifies the Observee that the completed observation is available
+9) Observee opens the completed observation
+10) System displays the submitted evaluation
+11) Observee reviews the evaluation and signs the observation
+12) System records the Observee’s acknowledgement
+
+13) System marks the observation as completed/finalized
+
+14) System prevents further edits to the finalized observation
+
+Exception Flows
+1a) Observation does not occur
+The Observee or Observer indicates that the scheduled observation did not take place.
+The system records the observation as incomplete or not completed.
+The Assessment Committee (AC) can view the missing observation status.
+
+6a) Required evaluation information is missing
+The system does not allow final submission.
+The system identifies the missing required fields and notifies the Observer.
+The Observer may correct the form and submit again.
+
+11a) Observee wants to provide additional information
+The system allows the Observee to submit supporting information or an attachment related to the observation.
+The Observee may still acknowledge that the observation occurred.
+
+Postconditions
+Success: 
+The completed observation is stored.
+Both required acknowledgements/signatures are recorded.
+The observation is marked finalized.
+The completed observation is no longer editable.
+
+Failure: 
+The observation remains incomplete.
+The final evaluation is not treated as completed.
+
+
+Nontrivial Step
+Step 13-14: The system finalizes and locks the observation after the required confirmation/signature process. This is nontrivial because the system must preserve the completed record and prevent future modification.
+
+
+
+
+
+
+
+UC6: Assessment Committee Evaluation Cycle Management
+Description
+This use case describes how an Assessment Committee (AC) member manages an evaluation cycle. The committee member can configure cycle deadlines, view faculty who are due and overdue, review faculty signups, monitor incomplete evaluations, and send reminders to faculty who still have outstanding actions.
+
+Actor - Assessment Committee (AC) member
+
+Preconditions
+The Assessment Committee member has an existing account.
+The user is authenticated.
+The user has the Assessment Committee role.
+Faculty evaluation history and hiring-level information are available.
+
+Trigger - The Assessment Committee member opens the Evaluation Cycle Management section of the AC dashboard.
+
+Actor - Assessment Committee Member
+System - Assessment Helper System
+1) AC member opens Evaluation Cycle Management
+2) System retrieves the current evaluation cycle
+
+3) System displays the current cycle deadlines and status
+4) AC member enters or updates the signup, observation, and feedback deadlines
+5) System validates and saves the updated evaluation-cycle settings
+6) AC member requests the due/overdue faculty list
+7) System evaluates faculty rank and previous evaluation history
+
+8) System displays faculty who are due or overdue for the current cycle
+9) AC member views current cycle signups and observation progress
+10) System displays signups, confirmed pairings, unmatched requests, and outstanding reports
+11) AC member selects faculty with outstanding actions and sends a reminder
+12) System generates and sends the reminder notification
+13) AC member continues monitoring the evaluation cycle
+
+
+
+
+Exception Flows
+5a) Invalid deadline configuration
+The system determines that the entered deadlines are invalid or out of order.
+The system displays an error message.
+The AC member must correct the dates before saving.
+
+8a) No faculty are due or overdue
+The system displays an empty due/overdue list.
+The AC member may still view voluntary faculty signups.
+
+10a) Unmatched request exists
+The system highlights the unmatched observation request.
+The AC member can review the case and identify an alternate Observer.
+
+Postconditions
+Success: 
+Evaluation-cycle settings are stored.
+The AC member can view the current status of the cycle.
+Due, overdue, unmatched, and incomplete cases are visible.
+Selected reminder notifications are sent.
+
+Failure: 
+Invalid changes are not saved.
+The existing cycle configuration remains unchanged.
+
+Nontrivial Step
+Step 7-10: The system calculates evaluation status and compiles several different workflow states across the current evaluation cycle. This is nontrivial because faculty rank, evaluation history, signups, observer pairing, and completion status must all be considered.
+
+
+
+
+
+
+
+
+
+
+
+
+
+UC7: Assessment Committee Evaluation Template Management
+Description
+This use case describes how an Assessment Committee (AC) member manages the observation/evaluation template. The AC member can modify evaluation criteria, question wording, rating scales, required fields, and weights. Changes apply to future observations, while finalized observations retain the version of the template used when they were completed.
+
+Actor - Assessment Committee (AC) member
+
+Preconditions
+The Assessment Committee (AC) member has an existing account.
+The AC member is authenticated.
+The user has Assessment Committee privileges.
+An evaluation template exists in the system.
+
+Trigger - The Assessment Committee member selects the Evaluation Template Management option from the AC dashboard.
+
+Actor - Assessment Committee Member
+System - Assessment Helper System
+1) AC member opens Evaluation Template Management
+2) System retrieves the current evaluation template
+
+3) System displays the current criteria, questions, rating scales, and weights
+4) AC member modifies the desired template fields
+5) System validates the modified template
+6) AC member confirms the changes
+7) System creates and stores the updated template version
+
+8) System confirms that the new template is available for future observations
+
+
+Exception Flows
+5a) Invalid template configuration
+The system identifies missing or invalid required information.
+The system does not save the modified template.
+The AC member may correct the information and resubmit it.
+
+7a) Existing finalized observations use an older template
+The system does not modify previously finalized observations.
+Existing observations continue displaying the template version originally used.
+
+Postconditions
+Success: 
+A new evaluation template version is stored.
+Future observations use the updated template.
+Existing finalized observations remain unchanged.
+
+Failure: 
+The existing template remains active.
+No changes are applied.
+
+Nontrivial Step
+Step 7: The system creates a new template version while preserving previously finalized observations. This is nontrivial because historical observation records must remain unchanged even after the evaluation template is updated.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+UC8: Unmatched Observer Request Handling
+Description
+This use case describes how the Assessment Committee (AC) handles an observation request when the system cannot find any eligible Observers. The system marks the request as unmatched and alerts the AC so that a suitable alternate Observer can be contacted.
+
+Actor - Assessment Committee (AC) member
+Supporting Actor - Professor/Faculty (Replacement Observer)
+
+Preconditions
+The Assessment Committee member has an existing account.
+The user is authenticated.
+The user has the Assessment Committee role.
+An Observee has submitted an evaluation signup.
+The system has attempted to generate eligible Observer recommendations.
+No eligible Observer is currently available.
+
+Trigger - The system determines that no eligible Observer can be found for an Observee’s request.
+
+Actor - Assessment Committee Member / Replacement Observer
+System - Assessment Helper System
+
+1) System determines that no eligible Observer is available
+
+2) System marks the observation request as unmatched
+
+3) System displays an unmatched-request alert on the AC dashboard
+4) AC member opens the unmatched request
+5) System displays the Observee, course, section, meeting time, and unmatched status
+6) AC member identifies an alternate professor to contact
+7) System creates an observation request for the selected alternate Observer
+
+8) System sends a notification to the alternate Observer
+9) Replacement Observer reviews and accepts the request
+10) System records the Observer confirmation
+
+11) System updates the observation request and removes the unmatched status
+
+Exception Flows
+9a) Replacement Observer declines the request
+The system records the request as declined.
+The AC member may select another appropriate professor.
+The observation request remains unmatched until an Observer accepts.
+
+9b) No replacement Observer can be found
+The system keeps the request marked as unmatched.
+The unmatched request remains visible on the AC dashboard.
+The AC member may postpone the observation if necessary.
+
+Postconditions
+Success: 
+A replacement Observer has accepted the observation request.
+The observation is no longer marked as unmatched.
+The selected Observer is associated with the observation request.
+
+Failure: 
+No Observer is assigned.
+The request remains marked as unmatched.
+The AC member can continue monitoring the request.
+
+
+
+
+Nontrivial Step
+Step 6-10: The AC member selects an appropriate replacement Observer outside the normal recommendation process. This is nontrivial because the selected Observer may not have originally signed up for the evaluation cycle but must still be associated correctly with the observation request.
+
+
+
+
+
+
+
+
+
+
+
+
+UC9: Outstanding Observation Report Tracking and Reminder
+Description
+This use case describes how an Assessment Committee (AC) member identifies observation cases that still have incomplete actions or missing reports. The AC member can view the outstanding requirement and send a reminder to the responsible faculty member.
+
+Actor - Assessment Committee (AC) member
+Supporting Actor - Professor/Faculty (Observer)
+
+Preconditions
+The Assessment Committee member has an existing account.
+The user is authenticated.
+The user has the Assessment Committee role.
+Observation records exist for the current evaluation cycle.
+At least one observation has an outstanding action or missing report.
+
+Trigger - The Assessment Committee member opens the Outstanding Observation Report section of the AC dashboard.
+
+Actor - Assessment Committee Member / Observer
+System - Assessment Helper System
+1) AC member opens the Outstanding Observation Report section
+2) System retrieves observations with incomplete actions or missing reports
+
+3) System displays the Observee, Observer, semester, and current observation status
+4) AC member selects an outstanding case
+5) System displays the specific missing action or report
+6) AC member selects the option to send a reminder
+7) System sends a reminder notification to the responsible faculty member
+8) Observer completes the missing action or submits the report
+9) System records the completed action
+
+10) System updates the observation status and removes the case from the outstanding list when all requirements are complete
+
+
+
+
+
+
+Exception Flows
+7a) Reminder notification cannot be sent
+The system displays that the notification was unsuccessful.
+The outstanding observation remains unchanged.
+The AC member may attempt to send the reminder again.
+8a) Observer does not complete the outstanding action
+The observation remains on the outstanding report list.
+The AC member may send another reminder later.
+The observation remains incomplete until the required action is completed.
+
+Postconditions
+Success: 
+The missing action or report is completed.
+The observation status is updated.
+The case is removed from the outstanding list when all required actions are complete.
+
+Failure: 
+Observation remains incomplete.
+The case remains visible on the AC dashboard.
+
+Nontrivial Step
+Step 2-5: The system identifies observations that have progressed through part of the evaluation workflow but are still missing a required action. This is nontrivial because different observations may be incomplete at different stages of the process.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+UC10: End-of-Cycle Survey and Feedback Submission
+Description
+This use case describes how a Professor/Faculty member submits feedback about the evaluation process after the observation period ends. The professor can provide ratings, describe difficulties, suggest improvements, and optionally provide supporting material.
+
+Actor - Professor/Faculty (Observer or Observee)
+
+Preconditions
+The professor has an existing account.
+The professor is authenticated.
+The professor participated in the current evaluation cycle.
+The observation period has ended.
+The survey/feedback period is active.
+
+Trigger - The professor opens the end-of-cycle survey from the professor dashboard.
+
+Actor - Professor/Faculty
+System - Assessment Helper System
+1) Professor opens the end-of-cycle survey
+2) System verifies that the professor participated in the current evaluation cycle
+
+3) System displays the feedback survey
+4) Professor enters survey responses, difficulties, and improvement suggestions
+
+5) Professor optionally uploads supporting material
+6) System stores the supporting material with the survey response
+7) Professor submits the survey
+8) System validates and records the survey response
+
+9) System displays confirmation that the survey was successfully submitted
+
+
+Exception Flows
+2a) Professor is not eligible to complete the survey
+The system determines that the professor did not participate in the current evaluation cycle.
+The system does not display the survey.
+The system informs the professor that they are not eligible to submit feedback for the selected cycle.
+
+
+8a) Required survey information is missing
+The system identifies the missing required information.
+The survey is not submitted
+The professor may complete the missing fields and submit the survey again.
+
+Postconditions
+Success: 
+The survey response is recorded.
+Any supporting material is associated with the survey response.
+The professor is counted toward the survey completion metrics.
+
+Failure: 
+No survey response is recorded.
+The professor may attempt the submission again while the feedback period is active.
+
+Nontrivial Step
+Step 2 & 8: The system verifies that the professor is eligible for the survey and correctly associates the submitted feedback with the current evaluation cycle. This is nontrivial because only participating faculty should be able to submit feedback for that cycle.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+UC11: Assessment Reporting and KPI Dashboard
+Description
+This use case describes how an Assessment Committee (AC) member views evaluation-cycle reports and Key Performance Indicators (KPIs). The system calculates metrics using faculty evaluation status, cycle signups, Observer activity, recommendation results, observation completion, and survey information.
+
+Actor - Assessment Committee (AC) member
+
+Preconditions
+The AC member has an existing account.
+The user is authenticated.
+The user has the Assessment Committee role.
+Faculty, observation, and survey records are available.
+
+Trigger - The AC member opens the Reports/KPI section of the AC dashboard.
+
+Actor - Assessment Committee Member
+System - Assessment Helper System
+1) AC member opens the Reports/KPI section
+2) System displays the available evaluation cycles
+3) AC member selects an evaluation cycle
+4) System retrieves the data associated with the selected cycle
+
+5) System calculates faculty evaluation metrics
+
+6) System calculates participation and Observer utilization metrics
+
+7) System calculates recommendation and list-sufficiency metrics
+
+8) System calculates observation and survey completion metrics
+
+9) System generates the executive dashboard reports
+10) AC member reviews the dashboard
+11) System displays the calculated KPIs and report breakdown
+
+
+
+
+
+Exception Flows
+4a) No data exists for the selected evaluation cycle
+The system displays that insufficient data is available.
+Metrics requiring unavailable data are not calculated.
+The AC member may select another evaluation cycle.
+
+8a) Some cycle data is incomplete
+The system calculates the metrics that can be determined from the available data.
+The system indicates metrics that cannot yet be finalized.
+
+Postconditions
+Success: 
+The AC member can view the calculated KPIs for the selected evaluation cycle.
+The AC member can view reports for faculty due or overdue, unmatched requests, and outstanding observations.
+
+Failure: 
+No complete KPI report is generated if the required data is unavailable.
+Existing evaluation records remain unchanged.
+
+Nontrivial Step
+Step 5-9: The system calculates multiple KPIs and reports using data from different parts of the evaluation workflow. This is nontrivial because faculty status, signups, Observer activity, recommendations, observations, and surveys must all be combined accurately.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+UC12: Faculty Evaluation History and Outstanding Tasks
+Description
+This use case describes how a Professor/Faculty member views their evaluation history and outstanding responsibilities. The professor can view evaluations received as an Observee, evaluations completed as an Observer, and any current actions that still need to be completed.
+
+Actor - Professor/Faculty (Observer or Observee)
+
+Preconditions
+The professor has an existing account.
+The professor is authenticated.
+The professor has access to the professor dashboard.
+
+Trigger - The professor opens the Evaluation History or Activity section of the professor dashboard.
+
+Actor - Professor/Faculty
+System - Assessment Helper System
+1) Professor opens the Evaluation History or Activity section
+2) System retrieves evaluation records associated with the professor
+
+3) System retrieves the professor’s current outstanding actions
+
+4) System displays evaluations received as an Observee
+
+5) System displays evaluations completed as an Observer
+
+6) System displays incomplete or outstanding tasks
+7) Professor selects an evaluation record
+8) System verifies that the professor is authorized to view the selected record
+
+9) System displays the selected evaluation information
+
+Exception Flows
+2a) No evaluation history exists
+The system displays that no previous evaluation records are available.
+The professor can still view any current outstanding actions.
+
+8a) Professor attempts to access an evaluation they are not authorized to view
+The system denies access to that evaluation record.
+The evaluation information is not displayed.
+Postconditions
+Success: 
+The professor can view their authorized evaluation history.
+The professor can view any outstanding actions that still need to be completed.
+No evaluation records are modified.
+
+Failure: 
+Unauthorized evaluation records are not displayed.
+Existing evaluation information remains unchanged.
+
+Nontrivial Step
+Step 2-8: The system retrieves evaluation records across multiple semesters while enforcing access restrictions. This is nontrivial because a professor should only be able to view evaluations they received or completed themselves.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+UC13: Admin User, Role, and Faculty Rank Management
+Description
+This use case describes how an Administrator manages system users, roles, permissions, and faculty hiring levels. The Administrator can modify a faculty member’s rank or system role, and changes to hiring level affect future evaluation eligibility calculations.
+
+Actor - Administrator
+
+Preconditions
+The Administrator has an existing account.
+The Administrator is authenticated.
+The user has the Administrator role.
+User and faculty profile information exists in the system.
+
+Trigger - The Administrator opens the User/Profile Management section of the Admin dashboard.
+
+Actor - Administrator
+System - Assessment Helper System
+1) Administrator opens User/Profile Management
+2) System retrieves and displays existing users and their assigned roles
+3) Administrator selects a faculty member to view
+4) System displays the faculty member’s profile, current role, and hiring level
+5) Administrator modifies the faculty member’s role, permissions, or hiring level
+6) System validates the requested changes
+7) Administrator confirms the changes
+8) System updates the faculty member’s user/profile information
+
+9) If the hiring level changed, the system updates future evaluation eligibility calculations
+
+10) System displays confirmation that the changes were successfully saved
+
+
+Exception Flows
+6a) Invalid role or hiring-level selection
+The system determines that the selected value is invalid.
+The system displays an error message.
+The Administrator must select a valid role or hiring level before saving.
+
+
+8a) User/profile update cannot be completed
+The system does not save the requested changes.
+The existing user/profile information remains unchanged.
+The Administrator may attempt the update again.
+
+Postconditions
+Success: 
+The faculty member’s user/profile information is updated.
+Any role or permission changes are reflected in the user’s system access.
+Any hiring-level change is reflected in future evaluation eligibility calculations.
+
+Failure: 
+The requested changes are not saved.
+The existing user/profile information remains unchanged.
+
+Nontrivial Step
+Step 9: The system updates future evaluation eligibility after a hiring-level change while preserving the faculty member’s unrelated roles and permissions. This is nontrivial because hiring level affects evaluation scheduling but should not automatically change other system access.
+
