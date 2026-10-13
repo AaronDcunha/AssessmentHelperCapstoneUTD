@@ -1,26 +1,107 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Shared palette from the Assessment Helper Figma foundations. */
+  --background: #fafbfc;
+  --foreground: #192329;
+  --surface: #ffffff;
+  --sidebar: #103e30;
+  --active: #2e5a49;
+  --muted: #617078;
+  --light: #d4e5dd;
+  --border: #e1e6ea;
+  --accent: #ea7600;
+  --danger: #a43814;
+  --danger-bg: #fbe7e0;
+  --warning: #75501a;
+  --warning-bg: #fff0cf;
+  --neutral-bg: #edf0f2;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-canvas: var(--background);
+  --color-ink: var(--foreground);
+  --color-surface: var(--surface);
+  --color-sidebar: var(--sidebar);
+  --color-active: var(--active);
+  --color-muted: var(--muted);
+  --color-light: var(--light);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-danger: var(--danger);
+  --color-danger-bg: var(--danger-bg);
+  --color-warning: var(--warning);
+  --color-warning-bg: var(--warning-bg);
+  --color-neutral-bg: var(--neutral-bg);
+  --font-sans: var(--font-inter), Arial, Helvetica, sans-serif;
+
+  /* Figma AH text styles: size, line height, weight, and tracking. */
+  --text-title: 2.25rem;
+  --text-title--line-height: 3.125rem;
+  --text-title--font-weight: 700;
+  --text-title--letter-spacing: 0;
+  --text-section: 1.5rem;
+  --text-section--line-height: 2.125rem;
+  --text-section--font-weight: 600;
+  --text-section--letter-spacing: 0;
+  --text-brand: 1.5rem;
+  --text-brand--line-height: 2.125rem;
+  --text-brand--font-weight: 600;
+  --text-brand--letter-spacing: 0;
+  --text-body: 1rem;
+  --text-body--line-height: 1.375rem;
+  --text-body--font-weight: 400;
+  --text-body--letter-spacing: 0;
+  --text-label: 0.875rem;
+  --text-label--line-height: 1.25rem;
+  --text-label--font-weight: 500;
+  --text-label--letter-spacing: 0;
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1.0625rem;
+  --text-caption--font-weight: 400;
+  --text-caption--letter-spacing: 0;
+  --text-metric: 3rem;
+  --text-metric--line-height: 4.1875rem;
+  --text-metric--font-weight: 600;
+  --text-metric--letter-spacing: 0;
+
+  /* Explicit Figma pixel-token names avoid confusion with Tailwind's numeric scale. */
+  --spacing-ah-0: 0;
+  --spacing-ah-4: 0.25rem;
+  --spacing-ah-8: 0.5rem;
+  --spacing-ah-12: 0.75rem;
+  --spacing-ah-16: 1rem;
+  --spacing-ah-24: 1.5rem;
+  --spacing-ah-32: 2rem;
+  --spacing-ah-40: 2.5rem;
+  --spacing-ah-48: 3rem;
+  --spacing-ah-64: 4rem;
+  --radius-ah-0: 0;
+  --radius-ah-8: 0.5rem;
+  --radius-ah-12: 0.75rem;
+  --radius-ah-pill: 999px;
+  --spacing-control-56: 3.5rem;
+  --spacing-control-88: 5.5rem;
 }
 
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    color-scheme: light;
   }
-}
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-inter), Arial, Helvetica, sans-serif;
+    font-size: 1rem;
+    line-height: 1.375;
+  }
+
+  /* Preserve a visible keyboard focus indicator throughout the app. */
+  :focus-visible {
+    outline: 2px solid var(--sidebar);
+    outline-offset: 3px;
+  }
 }

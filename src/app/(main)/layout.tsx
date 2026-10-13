@@ -12,18 +12,16 @@ export default function MainLayout({ children }: { children: ReactNode }) {
   // share its result. Individual pages do not need to repeat that fetch.
 
   return (
-    <div className="flex flex-1 flex-col bg-zinc-50 dark:bg-zinc-950">
-      <header className="border-b border-zinc-200 bg-white px-6 py-5 dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="mx-auto max-w-5xl">
-          <p className="text-lg font-semibold">Assessment Helper</p>
-          {/* TODO(nav): Insert the shared navbar here, using effective permissions
-              to show available links. Server access checks still enforce access. */}
-          {/* TODO(account): Add the current user's name and an Auth.js logout action. */}
-        </div>
-      </header>
-      <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-12">
-        {children}
-      </main>
+    <div className="flex flex-1">
+      {/* TODO(sidebar): Add the Figma left sidebar: branding, permission-based
+          Faculty / Assessment Committee / Admin links, and user info at the bottom.
+          Server access checks still enforce access independently of visible links. */}
+      <div className="min-w-0 flex-1">
+        {/* TODO(header): Add shared notification and profile controls here.
+            Page-specific titles belong with the page's content. */}
+        {/* TODO(account): Connect the user controls to an Auth.js logout action. */}
+        <main>{children}</main>
+      </div>
     </div>
   );
 }
