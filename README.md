@@ -32,8 +32,6 @@ AUTH_DEMO_ENABLED=true
 
 Keep `.env.local` private and uncommitted (it is ignored by Git). Reuse the same secret across restarts; changing it invalidates existing sessions. Restart `npm run dev` after changing these settings. Demo login only works in development, with no database required for authentication.
 
-See [Authentication backend setup](docs/reference/AUTH_BACKEND.md) for test accounts, permissions, and frontend integration.
-
 ### Start the services
 
 ```bash
