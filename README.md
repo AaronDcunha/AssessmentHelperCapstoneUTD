@@ -15,6 +15,27 @@ PostgreSQL and Mailpit run in Docker; no separate installations needed.
 
 ## Run locally
 
+### Local authentication setup
+
+Each teammate should generate their own Auth.js secret once, from the project folder:
+
+```powershell
+node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
+```
+
+Copy the output into `.env.local` and enable the temporary development login:
+
+```dotenv
+AUTH_SECRET=paste_generated_value_here
+AUTH_DEMO_ENABLED=true
+```
+
+Keep `.env.local` private and uncommitted (it is ignored by Git). Reuse the same secret across restarts; changing it invalidates existing sessions. Restart `npm run dev` after changing these settings. Demo login only works in development, with no database required for authentication.
+
+See [Authentication backend setup](docs/reference/AUTH_BACKEND.md) for test accounts, permissions, and frontend integration.
+
+### Start the services
+
 ```bash
 #To Start
 docker compose up -d --wait

@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
+import { requireUser } from "@/server/permissions";
 
-export default function MainLayout({ children }: { children: ReactNode }) {
-  // TODO(auth): Once src/auth.ts exists, check auth() here and redirect
-  // unauthenticated users to /login. This layout is not protected yet.
+export default async function MainLayout({ children }: { children: ReactNode }) {
+  await requireUser();
+  // TODO(auth): Switch the sign-in destination to /login when the frontend exists.
   // Restricted pages, server queries, and API handlers must also enforce current
   // permissions and record ownership; a layout check alone is insufficient.
 

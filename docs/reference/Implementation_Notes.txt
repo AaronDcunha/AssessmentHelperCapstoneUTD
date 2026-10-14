@@ -1,5 +1,17 @@
 ASSESSMENT HELPER IMPLEMENTATION NOTES
-Updated October 11, 2026
+Authentication backend branch update (October 14, 2026):
+Development-only Auth.js Credentials/JWT sessions, GET /api/me, and protected
+test pages/APIs are implemented without the database. Explicitly enable with
+AUTH_DEMO_ENABLED=true in development and configure AUTH_SECRET. Reserved
+faculty/ac/admin accounts use password 123. Faculty has Faculty access;
+AC has AC and Faculty access; Admin has Admin, AC and Faculty access.
+Assigned roles remain distinct from inherited effective permissions;
+other nonempty credentials receive all three temporary test permissions.
+Wrong reserved passwords fail. Production demo access is disabled. Final
+permissions and database-backed authentication are not implemented.
+See AUTH_BACKEND.md for the frontend contract, setup, tests, and migration work.
+
+Updated October 14, 2026
 
 1. WEB-BASED ASSESSMENT FORM - CONFIRMED
 Assessments will be completed through a web-based form. Signed assessment

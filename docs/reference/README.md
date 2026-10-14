@@ -14,6 +14,8 @@ The original documents are preserved as supplied. They contain outdated requirem
 
 ## Files
 
+Authentication backend: see `AUTH_BACKEND.md` for the implemented development-only mock login, frontend integration contract, permission probes, and remaining database work.
+
 | File | Use |
 | --- | --- |
 | `Implementation_Notes.txt` | Current decisions and remaining implementation questions |
