@@ -82,9 +82,8 @@ Keep the successful-login destination `/test` for now. Currently the backend use
 | faculty | 123 | Faculty |
 | ac | 123 | Faculty + AC |
 | admin | 123 | Faculty + AC + Admin |
-| Any other username | Any nonempty password | All three test areas |
 
-Reserved usernames with the wrong password must fail. Blank credentials must fail.
+Unknown usernames, incorrect passwords, and blank credentials must fail. Only the three accounts above are accepted.
 
 - `/auth-test`: identity, effective permissions, role-page links, and logout.
 - `/test/faculty`, `/test/ac`, `/test/admin`: plain-text permission checks and logout buttons.

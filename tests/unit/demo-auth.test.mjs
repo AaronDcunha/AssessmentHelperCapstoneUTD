@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { authenticateDemo, canAccess, demoEnabled } from "../../src/server/demo-auth.ts";
+import { authenticateDemo, canAccess, demoEnabled, resolveDemoUser } from "../../src/server/demo-auth.ts";
 
 const env = { NODE_ENV: "development", AUTH_DEMO_ENABLED: "true" };
 
@@ -27,10 +27,12 @@ test("reserved wrong passwords never fall through to unrestricted access", () =>
   }
 });
 
-test("other nonempty credentials receive all temporary test permissions", () => {
-  const user = authenticateDemo({ username: " Aaron ", password: "anything" }, env);
-  assert.equal(user.username, "aaron");
-  assert.deepEqual(user.permissions, ["test:faculty", "test:ac", "test:admin"]);
+test("unknown usernames are rejected including identities from old fallback sessions", () => {
+  for (const password of ["anything", "123"]) {
+    assert.equal(authenticateDemo({ username: " Aaron ", password }, env), null);
+  }
+  assert.equal(resolveDemoUser("aaron"), null);
+  assert.equal(authenticateDemo({ username: " FACULTY ", password: "123" }, env).username, "faculty");
 });
 
 test("malformed and blank credentials are rejected", () => {

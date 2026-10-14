@@ -13,9 +13,8 @@ Demo authentication requires BOTH `NODE_ENV=development` and `AUTH_DEMO_ENABLED=
 | faculty | 123 | Faculty only |
 | ac | 123 | AC and Faculty |
 | admin | 123 | Admin, AC, and Faculty |
-| Any other username | Any nonempty password | All three test areas |
 
-A reserved username with the wrong password fails; it never falls through to unrestricted access. Blank or malformed credentials fail. There is no anonymous automatic login: arbitrary credentials create an authenticated demo session so logout and unauthenticated checks can still be tested.
+Only faculty, ac, and admin with password 123 can sign in. Unknown usernames and incorrect passwords fail, as do blank or malformed credentials. Existing sessions for previously accepted arbitrary usernames no longer grant access.
 
 After signing in, the default destination is `/test`, owned by the component branch. This branch preserves the empty /test placeholder from main until the component branch is integrated. `/auth-test` shows identity, permissions, links, and logout. Visit `/test/faculty`, `/test/ac`, and `/test/admin` directly. A permitted page says hello; a forbidden page redirects to `/test/forbidden`; logged-out page access redirects to the built-in sign-in screen. These placeholder pages are backend verification fixtures.
 

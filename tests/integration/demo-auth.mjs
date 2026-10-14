@@ -31,14 +31,14 @@ assert.equal((await anonymous("/api/me")).status, 401);
 assert.equal((await anonymous("/api/test/admin")).status, 401);
 assert.equal((await anonymous("/test/faculty")).status, 307);
 
-for (const role of ["faculty", "ac", "admin", "someone"]) {
+for (const role of ["faculty", "ac", "admin"]) {
   const request = client();
-  await login(request, role, role === "someone" ? "anything" : "123");
+  await login(request, role, "123");
   const me = await request("/api/me");
   assert.equal(me.status, 200);
   assert.equal((await me.json()).username, role);
   for (const area of ["faculty", "ac", "admin"]) {
-    const allowed = role === "someone" || role === "admin" || role === area || (role === "ac" && area === "faculty");
+    const allowed = role === "admin" || role === area || (role === "ac" && area === "faculty");
     assert.equal((await request(`/api/test/${area}`)).status, allowed ? 200 : 403);
     const page = await request(`/test/${area}`);
     assert.equal(page.status, allowed ? 200 : 307);
@@ -49,9 +49,11 @@ for (const role of ["faculty", "ac", "admin", "someone"]) {
   assert.equal((await request("/api/me")).status, 401);
 }
 const invalid = client();
+await login(invalid, "someone", "123");
+assert.equal((await invalid("/api/me")).status, 401);
 await login(invalid, "faculty", "wrong");
 assert.equal((await invalid("/api/me")).status, 401);
 // Auth.js must reject credentials submitted without a CSRF token.
 await invalid("/api/auth/callback/credentials", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ username: "faculty", password: "123" }) });
 assert.equal((await invalid("/api/me")).status, 401);
-console.log("Passed: anonymous access, four identities, page/API permission matrix, invalid credentials, CSRF, session persistence and logout.");
+console.log("Passed: anonymous access, three accounts, page/API permission matrix, unknown usernames, invalid passwords, CSRF, session persistence and logout.");
