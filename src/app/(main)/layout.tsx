@@ -17,11 +17,23 @@ export default async function MainLayout({ children }: { children: ReactNode }) 
       {/* TODO(sidebar): Add the Figma left sidebar: branding, permission-based
           Faculty / Assessment Committee / Admin links, and user info at the bottom.
           Server access checks still enforce access independently of visible links. */}
-      <div className="min-w-0 flex-1">
-        {/* TODO(header): Add shared notification and profile controls here.
-            Page-specific titles belong with the page's content. */}
-        {/* TODO(account): Connect the user controls to an Auth.js logout action. */}
+      <div className="min-w-0 flex-1 p-ah-24 md:p-ah-32">
+        {/* Center the shared header and content within the area beside the sidebar. */}
+        <div className="mx-auto w-full max-w-[1096px]">
+        {/* Task 1 handoff: replace this reserved row with Layout/Page Header
+            (Figma 3:126). It is shared by all Faculty / AC / Admin pages:
+            page title + optional subtitle on the left, notifications + profile
+            on the right. Keep it in normal flow above page content.
+            Supply page-specific title/subtitle when wiring the shared component;
+            do not add a second header inside each page.
+            TODO(account): Connect profile controls to Auth.js logout. */}
+        <div
+          data-slot="page-header"
+          aria-hidden="true"
+          className="min-h-[80px] w-full mb-ah-24"
+        />
         <main>{children}</main>
+        </div>
       </div>
     </div>
   );
