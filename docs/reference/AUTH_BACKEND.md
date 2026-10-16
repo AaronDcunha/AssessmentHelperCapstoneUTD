@@ -4,7 +4,7 @@ This branch implements Auth.js Credentials/JWT sessions without a database. The 
 
 ## Run and test manually
 
-In your untracked `.env` or `.env.local`, set `AUTH_DEMO_ENABLED=true` and a random `AUTH_SECRET`. Generate a secret using `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`. Keep it out of source control. Start `npm run dev` and visit `/api/auth/signin?callbackUrl=%2Ftest` for Auth.js's built-in sign-in form. No custom login frontend is implemented on this branch.
+In your untracked `.env` or `.env.local`, set `AUTH_DEMO_ENABLED=true` and a random `AUTH_SECRET`. Generate a secret using `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`. Keep it out of source control. Start `npm run dev` and visit `/login`. The custom login frontend is connected to Auth.js; only database-backed authentication remains pending.
 
 Demo authentication requires BOTH `NODE_ENV=development` and `AUTH_DEMO_ENABLED=true`. It is always disabled for production and test mode. Sessions last one hour. Disabling the flag also invalidates existing demo access. Credentials must have nonempty string values; usernames are trimmed and lowercased.
 
@@ -16,7 +16,7 @@ Demo authentication requires BOTH `NODE_ENV=development` and `AUTH_DEMO_ENABLED=
 
 Only faculty, ac, and admin with password 123 can sign in. Unknown usernames and incorrect passwords fail, as do blank or malformed credentials. Existing sessions for previously accepted arbitrary usernames no longer grant access.
 
-After signing in, the default destination is `/test`, owned by the component branch. This branch preserves the empty /test placeholder from main until the component branch is integrated. `/auth-test` shows identity, permissions, links, and logout. Visit `/test/faculty`, `/test/ac`, and `/test/admin` directly. A permitted page says hello; a forbidden page redirects to `/test/forbidden`; logged-out page access redirects to the built-in sign-in screen. These placeholder pages are backend verification fixtures.
+After signing in, the default destination is `/test`, owned by the component branch. This branch preserves the empty /test placeholder from main until the component branch is integrated. `/auth-test` shows identity, permissions, links, and logout. Visit `/test/faculty`, `/test/ac`, and `/test/admin` directly. A permitted page says hello; a forbidden page redirects to `/test/forbidden`; logged-out page access redirects to /login. These placeholder pages are backend verification fixtures.
 
 `GET /api/me` returns `{ id, username, name, roles, permissions }` or HTTP 401. `GET /api/test/faculty`, `/api/test/ac`, and `/api/test/admin` independently enforce permission checks: HTTP 200 when allowed, 401 when logged out, and 403 when forbidden. Unknown areas return 404. All three links intentionally remain visible on `/auth-test` so denied access can be exercised.
 
@@ -36,12 +36,12 @@ const result = await signIn("credentials", {
 // On result.error: show "Invalid username or password".
 // On success: router.push(result.url ?? "/test").
 
-await signOut({ redirectTo: "/login" }); // Once the teammate implements /login.
+await signOut({ redirectTo: "/login" });
 ```
 
 Use the Auth.js helper for CSRF and cookie handling; do not store a token manually. Auth.js exposes `/api/auth/*`, including session, CSRF, credentials callback, and logout. `/api/auth/session` supplies the session identity; `/api/me` supplies the effective roles/permissions for navigation. Changing client state or session update data does not grant permissions.
 
-The frontend owns `/login`; this branch does not claim that route. Until it exists, server guards redirect to the built-in form. When integrating, change the guard redirect to `/login` and configure `pages.signIn` in `src/auth.ts` together.
+The custom `/login` page is implemented. Server guards and test-page logout actions redirect to `/login`, and `pages.signIn` in `src/auth.ts` points there. The frontend uses the same Credentials provider and session handling as the backend.
 
 ## Server handoff
 

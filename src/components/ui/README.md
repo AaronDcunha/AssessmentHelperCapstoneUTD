@@ -17,7 +17,10 @@ import { Button } from "@/components/ui/button";
 </Section>
 ```
 
-`title` and `children` supply the heading and content. `description` and `actions` are optional. Use `headingLevel` (2–6, default 2) for the page's heading hierarchy, `className` for the section, and `contentClassName` for content layouts such as grids. Native section props, including `id`, refs, and accessible attributes, are supported. Both Server and Client Components can render Section; event handlers must be supplied from a Client Component.
+`title` and `children` supply the heading and content. `description` and `actions` are optional. Use `headingLevel` (1–6, default 2) for the page's heading hierarchy; the login card uses `headingLevel={1}`. Heading level controls HTML semantics while the shared `text-section` style stays consistent. Use `className` for the section and `contentClassName` for content layouts such as grids. Native section props, including `id`, refs, and accessible attributes, are supported. Both Server and Client Components can render Section; event handlers must be supplied from a Client Component.
+
+`Section` also accepts an optional `eyebrow` for text above its title, such as
+`<Section eyebrow="Assessment Helper" title="Login" headingLevel={1}>`.
 
 ## Buttons and form fields
 

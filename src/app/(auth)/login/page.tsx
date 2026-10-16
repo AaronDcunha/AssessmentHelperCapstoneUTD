@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/form-fields";
+import { Section } from "@/components/ui/section";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -46,20 +47,8 @@ export default function LoginPage() {
 
   return (
     <main className="flex min-h-screen flex-1 items-center justify-center bg-canvas p-ah-24">
-      <section
-        aria-labelledby="login-heading"
-        className="w-full max-w-[360px] rounded-ah-8 border border-border bg-surface p-ah-24"
-      >
-        <p className="mb-ah-16 text-body font-semibold text-ink">
-          Assessment Helper
-        </p>
-
-        <h1
-          id="login-heading"
-          className="mb-ah-16 text-section font-bold text-ink"
-        >
-          Login
-        </h1>
+      <div className="w-full max-w-[360px]">
+        <Section eyebrow="Assessment Helper" title="Login" headingLevel={1}>
 
         <form className="space-y-ah-24" onSubmit={handleSubmit}>
           <Input
@@ -103,7 +92,8 @@ export default function LoginPage() {
             {loading ? "Signing in..." : "Sign In"}
           </Button>
         </form>
-      </section>
+        </Section>
+      </div>
     </main>
   );
 }
