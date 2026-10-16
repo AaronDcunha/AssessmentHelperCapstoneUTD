@@ -12,7 +12,7 @@ export default async function AuthTestPage() {
       <p>Permissions: {user.permissions.join(", ")}.</p>
       <ul>{testAreas.map((area) => <li key={area}><Link href={`/test/${area}`}>{area} test page</Link></li>)}</ul>
       <p><a href="/api/me">Current user JSON</a></p>
-      <form action={async () => { "use server"; await signOut({ redirectTo: "/api/auth/signin" }); }}>
+      <form action={async () => { "use server"; await signOut({ redirectTo: "/login" }); }}>
         <button type="submit">Sign out</button>
       </form>
     </div>

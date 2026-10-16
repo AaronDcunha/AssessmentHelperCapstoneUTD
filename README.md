@@ -4,6 +4,28 @@ Faculty observation and assessment coordination using Next.js.
 
 Install Nodejs and Docker
 
+## Login status
+
+Login frontend and backend are implemented for development: the custom `/login`
+page connects to Auth.js, creates sessions, handles login errors and logout, and
+enforces server-side role-based access on protected test pages and APIs.
+
+Authentication currently uses three temporary accounts, all with password `123`:
+
+- `faculty`: Faculty access.
+- `ac`: Faculty and Assessment Committee access.
+- `admin`: Faculty, Assessment Committee, and Admin access.
+
+Unknown usernames and incorrect passwords are rejected. Successful login redirects
+to `/test`; `/auth-test` shows the current identity and permission-test links.
+
+**Database integration remains pending:** replace temporary users with real account
+lookup, password-hash verification, account-status checks, and database-backed roles
+and permissions. Demo login requires the local settings below and is disabled in
+production; database-backed production login is not implemented yet.
+
+See [authentication backend details](docs/reference/AUTH_BACKEND.md).
+
 ## Setup
 
 1. Open the project folder and run `npm ci`.

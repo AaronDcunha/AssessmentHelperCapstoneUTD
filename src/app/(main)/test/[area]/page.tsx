@@ -12,7 +12,7 @@ export default async function AreaTestPage({ params }: { params: Promise<{ area:
       <p>Hi, I&apos;m {area}.</p>
       <form action={async () => {
         "use server";
-        await signOut({ redirectTo: "/api/auth/signin" });
+        await signOut({ redirectTo: "/login" });
       }}>
         <button type="submit">Log out</button>
       </form>

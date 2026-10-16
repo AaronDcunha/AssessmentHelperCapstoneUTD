@@ -4,6 +4,7 @@ import { authenticateDemo, demoEnabled } from "@/server/demo-auth";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt", maxAge: 60 * 60 },
+  pages: { signIn: "/login" },
   providers: [Credentials({
     credentials: {
       username: { label: "Username", type: "text" },
