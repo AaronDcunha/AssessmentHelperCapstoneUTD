@@ -1,0 +1,88 @@
+@reference "../../app/globals.css";
+
+.calendar {
+  --rdp-accent-color: var(--sidebar);
+  --rdp-accent-background-color: var(--surface);
+  --rdp-disabled-opacity: 0.35;
+  --rdp-nav_button-height: 44px;
+  --rdp-nav_button-width: 44px;
+  --rdp-nav-height: 44px;
+  --rdp-today-color: var(--ink);
+  @apply w-full text-label text-ink;
+}
+
+.calendar :global(.rdp-months) {
+  @apply w-full;
+  max-width: none;
+}
+
+.calendar :global(.rdp-month) {
+  @apply w-full;
+}
+
+.calendar :global(.rdp-month_caption) {
+  @apply items-start px-ah-8 text-label;
+}
+
+.calendar:global(.rdp-root[data-nav-layout="around"]) :global(.rdp-month_caption) {
+  @apply justify-start;
+}
+
+.calendar :global(.rdp-button_previous),
+.calendar :global(.rdp-button_next) {
+  @apply rounded-ah-8 border border-border bg-surface p-ah-0 text-label text-sidebar;
+}
+
+.calendar :global(.rdp-month_grid) {
+  @apply mt-ah-8 block w-full;
+}
+
+.calendar :global(thead) {
+  display: block;
+}
+
+.calendar :global(.rdp-weekdays),
+.calendar :global(.rdp-week) {
+  @apply grid grid-cols-7 gap-ah-4;
+}
+
+.calendar :global(.rdp-weekdays) {
+  @apply mb-ah-8;
+}
+
+.calendar :global(.rdp-weeks) {
+  @apply flex flex-col gap-ah-8;
+}
+
+.calendar :global(.rdp-weekday) {
+  @apply p-ah-0 text-left text-label text-muted;
+  opacity: 1;
+}
+
+.calendar :global(.rdp-day) {
+  @apply h-9 w-auto text-label;
+}
+
+.calendar :global(.rdp-day_button) {
+  @apply h-9 w-full rounded-ah-8 border border-border bg-surface text-label text-ink;
+}
+
+.calendar :global(.rdp-day_button:enabled:hover) {
+  @apply bg-neutral-bg;
+}
+
+.calendar :global(.rdp-selected .rdp-day_button) {
+  @apply border-sidebar bg-sidebar text-light;
+}
+
+.calendar :global(.rdp-selected .rdp-day_button:enabled:hover) {
+  @apply bg-active;
+}
+
+.calendar :global(.rdp-selected .rdp-day_button:focus-visible) {
+  @apply outline-accent;
+}
+
+.calendar :global(.rdp-day_button:disabled) {
+  @apply cursor-not-allowed;
+}
