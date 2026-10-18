@@ -86,3 +86,44 @@ The Figma reference `3:126` is 1096x80px and resizes to its content width. PageH
 At viewports below Tailwind's `sm` breakpoint, controls move below the title and align right. Long titles/subtitles wrap at any word length and increase the header height; neither text nor focus outlines are clipped. The breakpoint and wrapping are implementation choices, since Figma supplies a desktop reference only. Omitting either action removes its occupied space; omitting both removes the action row.
 
 The component has no hooks or client directive, so static/navigational usage works in Server Components and callback usage is composed from Client Components. The preview `/test/task-1/page-header` contains sample identities and behavior only. When integrating the shared layout, replace its reserved header slot rather than adding a second header, supply the authenticated identity and agreed notification/account behavior, and coordinate the page title/heading hierarchy with screen owners. That layout/authentication integration is not performed here.
+
+## Sidebar and navigation configuration
+
+Import `Sidebar` / `SidebarProps` from `@/components/layout/sidebar`. The central `navigation-config.ts` exports `navigationDefinitions`, `createNavigationConfig`, `filterNavigation`, `navigationIcons`, and the navigation data/binding/authorization types.
+
+The definitions list all 16 Figma destinations, their labels/icons, and the Faculty, Assessment Committee, and Admin sections. IDs such as `faculty.dashboard` identify UI entries, not permissions or paths. `createNavigationConfig(bindings)` accepts a map from these IDs to `{ href, permission? }`. It omits destinations without a binding and removes empty sections. There are intentionally no guessed production paths or permission values. Keep approved bindings centralized in this module when those contracts are finalized. Until then, a parent supplies bindings or complete section data; the preview uses working local anchors only.
+
+Sidebar requires one of two authorization contracts:
+
+- `sections` plus a required `canAccess(item, section)` predicate. Only a strict `true` includes a destination. The predicate may consult effective permissions, ownership/scope information, or another agreed rule; Sidebar never evaluates assigned roles or invents permission inheritance. A binding's optional `permission` field is inert until the caller uses it in the predicate.
+- `authorizedSections`, explicitly asserting that the caller already filtered the data. No predicate is required in this mode. A trusted server query/adapter can prepare this configuration. It must never be constructed from untrusted role labels.
+
+Both modes remove empty categories, including their headings, panels, and separators. Denied destinations are absent from the DOM even inside collapsed panels. Raw `sections` without a predicate are rejected by TypeScript and fail closed at runtime. Filtering does not mutate the caller's configuration. Icon keys are serializable strings, so a server can pass prefiltered configuration across the client boundary without passing React component functions.
+
+```tsx
+"use client";
+
+import { useState } from "react";
+import { Sidebar } from "@/components/layout/sidebar";
+import type { NavigationSection } from "@/components/layout/navigation-config";
+
+export function AuthorizedSidebarExample({ sections }: { sections: NavigationSection[] }) {
+  // sections must already come from the application's authorized navigation adapter.
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({ faculty: true });
+  return <Sidebar authorizedSections={sections} expandedSections={expanded}
+    onExpandedChange={(id, next) => setExpanded((current) => ({ ...current, [id]: next }))}
+    user={{ name: "Jordan Davis", initials: "JD", description: "Faculty" }} />;
+}
+```
+
+`expandedSections` is controlled by section ID (missing IDs are collapsed). `onExpandedChange(id, next)` requests a change to just that section; merge it into the parent map to preserve independent state. Filtering does not reset the map, and sections may be expanded together. Each instance generates unique panel IDs for `aria-controls`, keeps authorized collapsed panels mounted with `hidden`, and restores focus to the heading if a parent collapses a panel containing keyboard focus. When permission changes remove an entire focused category/destination, the integration owner should move focus to a remaining meaningful control.
+
+`activeItemId` is explicit: Sidebar highlights exactly the authorized destination with that ID using NavigationItem and `aria-current="page"`. There is no prefix matching, role-based dashboard redirect, automatic expansion, or inferred query/hash policy. The parent maps its current route to an item ID. Optional `onItemNavigate(item)` runs on ordinary same-origin Next.js navigation, not modified clicks opening another tab. Route synchronization and browser history remain parent responsibilities. Item IDs must be unique globally; section IDs must be unique, stable, and contain no whitespace.
+
+`user` accepts optional `name`, `initials`, `description`, and `accessibleName`. Missing names use configurable `missingUserLabel` (default "User information unavailable"); missing initials reuse Avatar's Person fallback. Visible names/descriptions wrap. Avatar is decorative beside the visible identity. An optional `accessibleName` replaces the spoken name while preserving the visible name, so identity is announced once. Descriptions are display-only and never determine navigation access. `navigationLabel` labels the nav landmark; `emptyMessage` customizes the no-destinations message. Native aside props, refs, styles, and `className` are supported.
+
+The visual reference is Figma `15:394`: 288px width, 16px padding/gaps, dark sidebar surface, 88px branding row with shared Book icon and AH Brand text, green separators, shared RoleHeading and NavigationItem, and a 64px identity footer with the 40px Avatar. It uses a 960px minimum reference height and grows with content; no fixed positioning, clipping, drawer, or page layout changes are introduced. The parent can override minimum height via `style` when fitting the application shell. Width shrinks to its container, labels wrap, and all content stays in normal document flow on narrow viewports. Faculty's fixed Figma list frame includes 8px of unused trailing space; rendered lists use their natural content height. No invented global colors, effects, or sizes are introduced.
+
+Read-only branch inspection found `GET /api/me` supplies `{ id, username, name, roles, permissions }` in `origin/36-authentication-backend`; `src/server/demo-auth.ts` exposes only temporary fixture permissions `test:faculty`, `test:ac`, and `test:admin`. Its auth handoff explicitly defers final production permission definitions. Existing business route directories are placeholders. Those fixture permissions are not assigned to production Figma destinations here. Production bindings, permission-to-destination rules, route matching, authenticated identity loading, and shell/mobile-drawer integration require coordination with their owners. Server pages/APIs must independently authorize access. No authentication files or shared layout are changed.
+
+The isolated preview `/test/task-1/sidebar` demonstrates filtered and prefiltered inputs, all three sections and combined access, individual destination filtering, independent expansion, active destination changes/navigation, missing/long identity information, and narrow layouts. All sample destinations and allow lists stay in the preview.
