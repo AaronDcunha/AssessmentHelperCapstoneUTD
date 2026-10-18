@@ -1,6 +1,14 @@
 ASSESSMENT HELPER IMPLEMENTATION NOTES
 Updated October 11, 2026
 
+October 18, 2026 clarification (overrides older template-version guidance):
+Questions may be edited in an existing observation template. Major changes
+should use a new ObservationTemplate record; explicit version models are not
+required. In-place edits also affect the question text shown for older
+assessments linked to that template.
+Invitation-attempt history is deferred for now; retain the current candidate
+structure while reviewing the schema. This is not an implemented history flow.
+
 1. WEB-BASED ASSESSMENT FORM - CONFIRMED
 Assessments will be completed through a web-based form. Signed assessment
 document uploads are no longer part of the workflow. Update older references,

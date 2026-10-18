@@ -270,6 +270,8 @@ model EvaluationSignup {
 
   // An observee signs up only once per cycle.
   @@unique([cycleId, professorId])
+  // Allows observations to reference the signup and its cycle together.
+  @@unique([signupId, cycleId])
   @@map("evaluation_signup")
 }
 
@@ -286,7 +288,7 @@ model Observation {
   completedAt   DateTime? @map("completed_at")
 
   // Foreign key relationships.
-  signup   EvaluationSignup @relation(fields: [signupId], references: [signupId])
+  signup   EvaluationSignup @relation(fields: [signupId, cycleId], references: [signupId, cycleId])
   cycle    EvaluationCycle  @relation(fields: [cycleId], references: [cycleId])
   observer Professor?       @relation("SelectedObserver", fields: [observerId], references: [professorId])
 
