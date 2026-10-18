@@ -86,7 +86,7 @@ Keep the successful-login destination `/test` for now. Currently the backend use
 Unknown usernames, incorrect passwords, and blank credentials must fail. Only the three accounts above are accepted.
 
 - `/auth-test`: identity, effective permissions, role-page links, and logout.
-- `/test/faculty`, `/test/ac`, `/test/admin`: plain-text permission checks and logout buttons.
+- `/test/faculty`, `/test/ac`, `/test/admin`: Admin-only plain-text previews and logout buttons. All /test pages and /auth-test now require Admin; test APIs still demonstrate the per-role hierarchy.
 - `/test`: default login destination, reserved for the component demo; this branch has an empty placeholder.
 - `GET /api/me`: `{ id, username, name, roles, permissions }`, or HTTP 401 when logged out. Use this for shared user/navigation data. Server checks independently enforce access; hiding links is not authorization.
 

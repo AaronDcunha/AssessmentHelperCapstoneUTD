@@ -27,9 +27,12 @@ async function login(request, username, password) {
 }
 
 const anonymous = client();
+assert.equal((await anonymous("/login")).status, 200);
 assert.equal((await anonymous("/api/me")).status, 401);
 assert.equal((await anonymous("/api/test/admin")).status, 401);
 assert.equal((await anonymous("/test/faculty")).status, 307);
+assert.equal((await anonymous("/test")).status, 307);
+assert.equal((await anonymous("/auth-test")).status, 307);
 
 for (const role of ["faculty", "ac", "admin"]) {
   const request = client();
@@ -37,16 +40,27 @@ for (const role of ["faculty", "ac", "admin"]) {
   const me = await request("/api/me");
   assert.equal(me.status, 200);
   assert.equal((await me.json()).username, role);
+  const loginPage = await request("/login");
+  assert.equal(loginPage.status, 307);
+  assert.equal(new URL(loginPage.headers.get("location"), base).pathname, "/test");
   for (const area of ["faculty", "ac", "admin"]) {
     const allowed = role === "admin" || role === area || (role === "ac" && area === "faculty");
     assert.equal((await request(`/api/test/${area}`)).status, allowed ? 200 : 403);
     const page = await request(`/test/${area}`);
-    assert.equal(page.status, allowed ? 200 : 307);
-    if (!allowed) assert.ok(page.headers.get("location").includes("/test/forbidden"));
+    assert.equal(page.status, role === "admin" ? 200 : 307);
+    if (role !== "admin") assert.ok(page.headers.get("location").includes("/forbidden"));
   }
+  for (const path of ["/test", "/auth-test", "/test/task-1/icons", "/test/task-2"]) {
+    const response = await request(path);
+    assert.equal(response.status, role === "admin" ? 200 : 307);
+    if (role !== "admin") assert.ok(response.headers.get("location").includes("/forbidden"));
+  }
+  // The denial page must remain accessible outside the admin-only test layout.
+  assert.equal((await request("/forbidden")).status, 200);
   const { csrfToken } = await (await request("/api/auth/csrf")).json();
   await request("/api/auth/signout", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ csrfToken }) });
   assert.equal((await request("/api/me")).status, 401);
+  assert.equal((await request("/login")).status, 200);
 }
 const invalid = client();
 await login(invalid, "someone", "123");

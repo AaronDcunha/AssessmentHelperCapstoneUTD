@@ -18,7 +18,7 @@ export async function requireUser() {
 
 export async function requirePermission(permission: TestPermission) {
   const user = await requireUser();
-  if (!canAccess(user, permission)) redirect("/test/forbidden");
+  if (!canAccess(user, permission)) redirect("/forbidden");
   return user;
 }
 

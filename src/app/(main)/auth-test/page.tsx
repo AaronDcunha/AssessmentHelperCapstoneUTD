@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { signOut } from "@/auth";
-import { requireUser } from "@/server/permissions";
+import { requirePermission } from "@/server/permissions";
 import { testAreas } from "@/server/demo-auth";
 
 export default async function AuthTestPage() {
-  const user = await requireUser();
+  const user = await requirePermission("test:admin");
   return (
     <div>
       <h1>Authentication backend test</h1>

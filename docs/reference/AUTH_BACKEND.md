@@ -4,6 +4,19 @@ This branch implements Auth.js Credentials/JWT sessions without a database. The 
 
 ## Run and test manually
 
+The `/login` page checks the current user on the server before rendering the client
+form. Active authenticated users redirect to `/test`; logged-out users see the form.
+The Admin restriction on `/test` still applies, so Faculty/AC users are subsequently
+sent to `/forbidden` until role-specific landing pages are introduced.
+
+Access update: the shared main layout requires login. All `/test` pages and their
+subpages, plus `/auth-test`, now require `test:admin` (the temporary Admin permission).
+Faculty and AC users are redirected to `/forbidden`, outside the restricted test
+layout to avoid a redirect loop. The default successful-login destination remains
+`/test`, so non-admin demo users will see access denied there until real landing
+pages are added. Test APIs retain their separate role-specific permission checks.
+The shell receives safe user identity for the sidebar/header; navigation stays empty.
+
 In your untracked `.env` or `.env.local`, set `AUTH_DEMO_ENABLED=true` and a random `AUTH_SECRET`. Generate a secret using `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`. Keep it out of source control. Start `npm run dev` and visit `/login`. The custom login frontend is connected to Auth.js; only database-backed authentication remains pending.
 
 Demo authentication requires BOTH `NODE_ENV=development` and `AUTH_DEMO_ENABLED=true`. It is always disabled for production and test mode. Sessions last one hour. Disabling the flag also invalidates existing demo access. Credentials must have nonempty string values; usernames are trimmed and lowercased.
@@ -16,7 +29,7 @@ Demo authentication requires BOTH `NODE_ENV=development` and `AUTH_DEMO_ENABLED=
 
 Only faculty, ac, and admin with password 123 can sign in. Unknown usernames and incorrect passwords fail, as do blank or malformed credentials. Existing sessions for previously accepted arbitrary usernames no longer grant access.
 
-After signing in, the default destination is `/test`, owned by the component branch. This branch preserves the empty /test placeholder from main until the component branch is integrated. `/auth-test` shows identity, permissions, links, and logout. Visit `/test/faculty`, `/test/ac`, and `/test/admin` directly. A permitted page says hello; a forbidden page redirects to `/test/forbidden`; logged-out page access redirects to /login. These placeholder pages are backend verification fixtures.
+After signing in, the default destination is `/test`, owned by the component branch. The component demo is integrated at /test and is Admin-only. `/auth-test` shows identity, permissions, links, and logout. Visit `/test/faculty`, `/test/ac`, and `/test/admin` directly. A permitted page says hello; a forbidden page redirects to `/forbidden`; logged-out page access redirects to /login. These placeholder pages are backend verification fixtures.
 
 `GET /api/me` returns `{ id, username, name, roles, permissions }` or HTTP 401. `GET /api/test/faculty`, `/api/test/ac`, and `/api/test/admin` independently enforce permission checks: HTTP 200 when allowed, 401 when logged out, and 403 when forbidden. Unknown areas return 404. All three links intentionally remain visible on `/auth-test` so denied access can be exercised.
 

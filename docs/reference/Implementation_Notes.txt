@@ -1,4 +1,9 @@
 ASSESSMENT HELPER IMPLEMENTATION NOTES
+October 18 integration: shared main layout requires login and supplies user identity
+to AppShell. All /test pages and /auth-test require temporary test:admin permission.
+Access denial redirects to /forbidden. Test APIs retain role-specific probes;
+navigation remains intentionally empty until application routes are added.
+
 Authentication backend branch update (October 14, 2026):
 Development-only Auth.js Credentials/JWT sessions, GET /api/me, and protected
 test pages/APIs are implemented without the database. Explicitly enable with

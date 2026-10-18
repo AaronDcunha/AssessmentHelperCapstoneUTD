@@ -1,9 +1,14 @@
 import type { ReactNode } from "react";
 import { AppShell } from "@/components/layout/app-shell";
+import { requireUser } from "@/server/permissions";
 
-export default function MainLayout({ children }: { children: ReactNode }) {
-  // Auth integration: retain requireUser() from the auth branch here, then pass
-  // server-authorized navigation and safe identity fields to AppShell. This component
-  // branch has no auth backend. Pages/APIs must also check access independently.
-  return <AppShell authorizedSections={[]}>{children}</AppShell>;
+export default async function MainLayout({ children }: { children: ReactNode }) {
+  const user = await requireUser();
+  // Navigation stays empty until application destinations are ready.
+  // Pages/APIs must also check permissions and record ownership independently.
+  return <AppShell authorizedSections={[]}
+    user={{ name: user.name, initials: user.name, description: user.roles.join(" · ") }}
+    headerUser={{ name: user.name, initials: user.name }}>
+    {children}
+  </AppShell>;
 }
