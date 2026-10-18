@@ -15,9 +15,12 @@ model AppUser {
   email    String  @unique
   isActive Boolean @default(true) @map("is_active")
 
-  // One user can have multiple roles and one login credential record.
+  // Authentication relationships.
   userRoles       UserRole[]
   loginCredential LoginCredential?
+
+  // A user may also have a professor profile.
+  professor Professor?
 
   @@map("app_user")
 }
@@ -87,4 +90,49 @@ model LoginCredential {
   user AppUser @relation(fields: [userId], references: [userId])
 
   @@map("login_credential")
+}
+
+// Stores academic departments within the university.
+// Used to organize professors and support department-based
+// eligibility checks when selecting observers.
+model Department {
+  departmentId   String @id @default(uuid()) @map("department_id") @db.Uuid
+  departmentName String @unique @map("department_name")
+
+  // One department can have multiple professors.
+  professors Professor[]
+
+  @@map("department")
+}
+
+// Stores faculty hiring levels and their evaluation frequency.
+// Example: Assistant Professors are evaluated every 1 year,
+// while Associate and Full Professors are evaluated every 2 years.
+model HiringLevel {
+  hiringLevelId           String @id @default(uuid()) @map("hiring_level_id") @db.Uuid
+  levelName               String @unique @map("level_name")
+  evaluationIntervalYears Int    @map("evaluation_interval_years")
+
+  // One hiring level can be assigned to multiple professors.
+  professors Professor[]
+
+  @@map("hiring_level")
+}
+
+// Stores professor-specific information separately from login accounts.
+// Each professor belongs to a department and has a hiring level
+// that determines how frequently they require an evaluation.
+model Professor {
+  professorId   String    @id @default(uuid()) @map("professor_id") @db.Uuid
+  userId        String    @unique @map("user_id") @db.Uuid
+  departmentId  String    @map("department_id") @db.Uuid
+  hiringLevelId String    @map("hiring_level_id") @db.Uuid
+  hireDate      DateTime? @map("hire_date") @db.Date
+
+  // Foreign key relationships.
+  user        AppUser     @relation(fields: [userId], references: [userId])
+  department  Department  @relation(fields: [departmentId], references: [departmentId])
+  hiringLevel HiringLevel @relation(fields: [hiringLevelId], references: [hiringLevelId])
+
+  @@map("professor")
 }
