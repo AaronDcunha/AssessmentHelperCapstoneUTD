@@ -7,32 +7,84 @@ datasource db {
   provider = "postgresql"
 }
 
-// Stores the accounts of people who can access the system,
-// including Administrators, Assessment Committee members,
-// and Professors.
+// Stores user accounts for Administrators, Assessment Committee
+// members, and Professors.
 model AppUser {
-  userId    String  @id @default(uuid()) @map("user_id") @db.Uuid
-  fullName  String  @map("full_name")
-  email     String  @unique
-  isActive  Boolean @default(true) @map("is_active")
+  userId   String  @id @default(uuid()) @map("user_id") @db.Uuid
+  fullName String  @map("full_name")
+  email    String  @unique
+  isActive Boolean @default(true) @map("is_active")
+
+  // One user can have multiple roles and one login credential record.
+  userRoles       UserRole[]
+  loginCredential LoginCredential?
 
   @@map("app_user")
 }
 
-// Defines the different roles available in the system,
-// such as Administrator, Assessment Committee, and Professor.
+// Defines available system roles, such as Admin, AC Member, and Professor.
 model Role {
   roleId   String @id @default(uuid()) @map("role_id") @db.Uuid
   roleName String @unique @map("role_name")
 
+  // Connects roles to users and permissions.
+  userRoles       UserRole[]
+  rolePermissions RolePermission[]
+
   @@map("role")
 }
 
-// Defines individual permissions that control which
-// system features or actions a user is authorized to access.
+// Defines the individual actions that a role may be allowed to perform.
 model Permission {
   permissionId   String @id @default(uuid()) @map("permission_id") @db.Uuid
   permissionName String @unique @map("permission_name")
 
+  // A permission may be assigned to multiple roles.
+  rolePermissions RolePermission[]
+
   @@map("permission")
+}
+
+// Connects users to their assigned roles.
+// Allows one user to hold multiple roles.
+model UserRole {
+  userId String @map("user_id") @db.Uuid
+  roleId String @map("role_id") @db.Uuid
+
+  // Foreign key relationships.
+  user AppUser @relation(fields: [userId], references: [userId])
+  role Role    @relation(fields: [roleId], references: [roleId])
+
+  // Prevents assigning the same role to a user more than once.
+  @@id([userId, roleId])
+  @@map("user_role")
+}
+
+// Connects roles to permissions.
+// Allows each role to have multiple permissions.
+model RolePermission {
+  roleId       String @map("role_id") @db.Uuid
+  permissionId String @map("permission_id") @db.Uuid
+
+  // Foreign key relationships.
+  role       Role       @relation(fields: [roleId], references: [roleId])
+  permission Permission @relation(fields: [permissionId], references: [permissionId])
+
+  // Prevents duplicate role-permission assignments.
+  @@id([roleId, permissionId])
+  @@map("role_permission")
+}
+
+// Stores login credentials separately from general user information.
+// Authentication information should not be stored in the professor profile.
+model LoginCredential {
+  credentialId String   @id @default(uuid()) @map("credential_id") @db.Uuid
+  userId       String   @unique @map("user_id") @db.Uuid
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  // Each credential record belongs to one user.
+  user AppUser @relation(fields: [userId], references: [userId])
+
+  @@map("login_credential")
 }
