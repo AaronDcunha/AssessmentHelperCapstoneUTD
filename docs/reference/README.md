@@ -22,7 +22,8 @@ Authentication backend: see `AUTH_BACKEND.md` for the implemented development-on
 | `PROJECT_STRUCTURE.md` | Proposed directories and responsibilities |
 | `Expanded Use Cases.docx` / `.txt` | UC1–UC13 workflow descriptions; TXT is a paragraph-text extraction for AI/search |
 | `process_explanation_to_all.docx` / `.txt` | Faculty/AC process and draft KPI definitions |
-| `AssessmentHelper_API_Endpoints.txt` | Proposed routes; assessment upload/file routes need revision for web forms |
+| `AssessmentHelper_API_Contract_Draft_v2.txt` | New Figma-reviewed API proposal with parameters, return shapes, access rules, screen coverage, and unresolved decisions; not implemented/approved contracts |
+| `AssessmentHelper_API_Endpoints.txt` | Preserved earlier endpoint draft/backup; includes outdated assessment-upload routes |
 | `AssessmentHelper_Relational_Schema.drawio` | Proposed relational model; assessment answers, invitation attempts/approvals, and relevant constraints need revision |
 
 The TXT extracts aid reading; use the Word originals when table structure or formatting matters. Regenerate extracts when originals change. Treat older materials elsewhere in the workspace or the repository's presentation as historical context when they conflict with these decisions.

@@ -1,0 +1,515 @@
+ASSESSMENT HELPER -- API CONTRACT DRAFT V2
+October 18, 2026 | Reviewed against Faculty, AC, Admin and Shared Figma screens.
+
+STATUS
+======
+Proposed contracts, not implemented business APIs or approved database models.
+Implementation_Notes.txt and current team decisions take priority over this draft.
+The original AssessmentHelper_API_Endpoints.txt remains unchanged as a backup.
+
+Progress labels: (COMPLETED) = implemented for the stated scope; (INCOMPLETE) =
+partially implemented with remaining work noted. Unmarked endpoints are planned.
+
+Already implemented: Auth.js login/sessions/logout, custom /login, session-aware
+redirects, demo GET /api/me, role helpers and test APIs. All test pages are Admin-only.
+Pending auth work: demo professor-name lookup, account status/database grants, and
+eventual UTD SSO integration. No stored username or production local-password system
+is required by the agreed login plan.
+Other endpoints below remain planned. Reuse existing auth; do not build another system.
+
+CONVENTIONS
+===========
+Q = query; B = JSON body; R = response. ? = optional. {id} = opaque path ID.
+Fields/enums below are proposals. Typed shapes describe data, not executable JSON.
+List<T> = {items:T[],pageInfo:{nextCursor:string|null,hasMore:boolean}}.
+All lists accept cursor?/limit?; proposed default 20, maximum 100. Counts cover all
+matching records, not just the current page. Dates: YYYY-MM-DD; timestamps: UTC ISO
+8601. Include IANA timeZone with schedules. Exact deadline boundaries remain TBD.
+
+Standard errors: {error:{code,message,fieldErrors?,requestId?}}.
+400 invalid request; 401 logged out/inactive; 403 forbidden; 404 unavailable record;
+409 duplicate/stale revision/invalid transition; 422 validation; 413/415 upload errors;
+429 throttled. Auth.js retains its own error/redirect contract.
+Reads/updates: 200; creates: 201; deletes: 204. Async jobs: 202 + operation ID.
+Use no-store for private data; enforce CSRF/origin checks on cookie-based mutations.
+
+Security applies to EVERY route: active session, effective permission, organizational
+scope and record ownership. Derive actor from session. Validate/allow-list inputs;
+never trust browser ownership, roles, timestamps or completion states. Use revisions
+for concurrent edits and idempotent transactions for retried workflow mutations.
+Admin inherits AC + Faculty access; AC inherits Faculty access. /me remains personal.
+Final permission keys, AC scope, revision/idempotency details require agreement.
+
+COMMON RESPONSE SHAPES
+======================
+User = {id,name,email?}; return email only when needed.
+Semester = {id,name,year,season,startsOn,endsOn,timeZone,revision}.
+Cycle = {id,semester:Semester,signupDeadline,observationDeadline,feedbackDeadline,
+  status,revision,allowedActions: string[]}.
+Section = {id,course:{id,code,title,departmentId,level},sectionNumber,semesterId,
+  meetings:[{id,weekday,startTime,endTime,timeZone,location?}]}.
+Meeting = {id,sectionId,date,startsAt,endsAt,timeZone,location?,available,reason?}.
+Observation = {id,cycleId,signupId,section,observee:User,observer:User|null,
+  scheduledMeeting:Meeting|null,participation:string[],status,assessmentStatus,
+  occurred:boolean|null,revision,allowedActions:string[]}.
+Attempt = {id,candidateId,sequence,sentAt,expiresAt,responseStatus,respondedAt,
+  acceptedMeetingOptionId:string|null}.
+Candidate = {id,observationId,professor:User,availableMeetingOptionIds:string[],
+  responseStatus,outcome,acceptedMeetingOptionId,activeAttempt:Attempt|null}.
+Criterion = {id?,key,prompt,type,required,order,options?:[{value:number,label}],weight?}.
+Template = {id,version,title,status,publishedAt,revision,criteria:Criterion[],
+  commentPrompts:[{id?,prompt,required,order}],signatureLabels:{observer,observee}}.
+Assessment = {id,observationId,templateVersionId,status,revision,
+  answers:[{criterionId,value:number|string|null}],comments:[{promptId,text}],
+  submittedAt,acknowledgements:[{actorId,participantRole,acknowledgedAt}],allowedActions}.
+Alert = {id,observationId,type,status,reasonCode,details,createdAt,revision}.
+Approval = {id,candidateId,attemptId,observationId,status,requestedAt,decidedAt,revision}.
+Attachment = {id,originalName,contentType,sizeBytes,status,createdAt}.
+Feedback = {id,cycleId,templateVersionId,submittedAt,answers,difficulties?,suggestions?,
+  attachments:Attachment[]}; reviewer visibility is unresolved.
+Notification = {id,type,title,message,createdAt,readAt,target:{kind,id}|null}.
+Role = {id,key,name,description?,permissionKeys:string[],revision}.
+HiringLevel = {id,name,evaluationIntervalYears,active,revision}.
+Status enums, lifecycle transitions and privacy rules must be agreed before coding.
+
+RELATIONAL SCHEMA CROSS-CHECK
+=============================
+Checked AssessmentHelper_Relational_Schema.drawio. API camelCase can map to its
+snake_case fields; nested responses are authorized joins, not extra tables.
+- User.id -> app_user.user_id. Professor uses that same ID through professor.user_id;
+  teaches.professor_id and signup/candidate/feedback professor references identify it.
+  No username column exists or is needed. app_user.email is unique; name is not.
+- Roles/grants -> role, user_role, permission, role_permission. permissions uses
+  permission_key. role.key/description are proposed additions, not current fields;
+  use role_id/name or agree stable keys. Inheritance needs application/schema support.
+- Section.course -> course_section joined to course; title maps to course.name.
+  courseCode is derived from prefix/number; course level needs an agreed derivation.
+  Timetable -> class_meeting. Date occurrences require calendar/exception rules.
+- Cycle -> evaluation_cycle; signup -> evaluation_signup; Observation.id ->
+  observation.observation_id. cycleId/section/participants can be joined via signup.
+  scheduled_at alone does not identify the selected time_option or its end time.
+- Persisted proposed meetings -> observation_time_option.time_option_id, starts_at,
+  ends_at, observation_id. Pre-signup availability IDs are server-resolved occurrence
+  tokens, NOT existing time_option IDs. Signup creates the observation/time options;
+  candidate acceptance must reference one of those persisted options.
+- Candidate -> observation_candidate. Its current fields track only one send/response;
+  attempts, compatible dates and acceptedMeetingOptionId require additional relations.
+- Template -> observation_template.template_version_id. Criterion ->
+  template_criterion. type maps to question_type; options expand rating_range only
+  after its representation is agreed. key/order, scale labels, comment/signature
+  configuration and publication applicability are proposed extensions.
+- Feedback -> process_feedback. process_rating/difficulties/suggestions exist;
+  generic answers, survey version and multiple attachments need extensions. Its
+  participant_role column does not resolve dual-role submission/counting policy.
+- Notification -> notification. target can derive from observation_id/cycle_id;
+  title can derive from type. Other target kinds require an agreed extension.
+- evaluation_interval_years -> evaluationIntervalYears; account_status -> accountStatus.
+  Semester name derives from year/season. Semester dates/timezone, hiringLevel.active,
+  revisions, async operations and idempotency records are not in the current diagram.
+
+Required schema updates: web assessment/answer/history records replacing the old
+signed_assessment.signed_file_reference flow; invitation attempts; accepted/final
+meeting references; expired-acceptance approvals; AC alerts/resolution; private
+feedback attachment metadata. Acknowledgement/finalization details remain conditional.
+login_credential is an old local-password proposal, not a requirement for UTD SSO;
+future SSO identity linking needs its own agreed mapping to app_user.
+allowedActions, eligibility, unread/pending counts and dashboard summaries are derived
+server outputs, not necessarily stored columns. occurred must follow agreed reporting/
+acknowledgement rules; never infer it merely from a scheduled date or missing form.
+This cross-check does not change the diagram or the teammate's Prisma schema.
+
+1. AUTHENTICATION AND SHARED HEADER
+===================================
+(INCOMPLETE)
+/api/auth/* -- EXISTING Auth.js routes. Use library helpers:
+  signIn('credentials',{username,password,redirect:false,redirectTo:'/test'})
+  signOut({redirectTo:'/login'})
+  Auth.js handles session cookies and its CSRF flow; no manual token storage.
+  /login redirects active users to /test. Non-admins then see /forbidden for now.
+  Demo intent: look up the professor by name. The existing request key 'username'
+  is only a compatibility label, not a stored username. Current fixtures still use
+  faculty/ac/admin; database-backed name lookup is pending. Production uses UTD SSO.
+  Professor names are not identity proof or necessarily unique: use internal user
+  IDs for records, reject ambiguous demo matches, and later link verified SSO identity
+  to those IDs. The exact UTD SSO protocol/claim mapping is not established here.
+
+(COMPLETED)
+GET /api/auth/session -- session-cookie/JWT handling for current demo identities.
+  Auth.js reads the active session; no manual browser token storage.
+
+(COMPLETED)
+POST /api/auth/signout -- Auth.js logout, used by the shared profile dropdown.
+  Clears the session and redirects to /login. The client helper handles CSRF.
+
+(COMPLETED)
+Login UI and route guards -- /login form, active-session redirect, shared login
+  check, Admin-only test pages, and /forbidden sign-out action.
+  These work with demo identities; production identity/permission data is pending.
+
+(INCOMPLETE)
+GET /api/me -- EXISTING demo; permanent version belongs to the auth task.
+  R: {id,name,email?,roles:string[],permissions:string[],professor?:
+    {departmentId,hiringLevelId,hireDate?},roleDetails?:Role[]}.
+  Preserve roles/permissions string arrays; never return credentials. Existing demo
+  'username' output is temporary and is not a proposed database/profile requirement.
+  Remaining: database profile lookup, active-account checks and effective DB grants.
+
+(COMPLETED)
+GET /api/test/{area} -- temporary role-permission probes, not production endpoints.
+  area: faculty|ac|admin. R: {message,username}; 401 logged out, 403 forbidden.
+  Complete for demo testing only; uses temporary permissions and no database.
+
+No /header or /sidebar endpoint needed. Reuse /me, cycle context and notifications.
+Page titles/routes are frontend configuration. Filter links from effective access;
+server pages/APIs must still authorize independently.
+
+2. SEMESTERS, CYCLES AND ELIGIBILITY
+===================================
+GET /api/evaluation-cycles
+  Q: semesterId?,status?. R: List<Cycle>. Faculty: relevant cycles; AC/Admin: scope.
+  Agree current-cycle selection and behavior when several cycles are active.
+GET /api/evaluation-cycles/{cycleId}
+  R: Cycle. Authorized faculty may read relevant semester/deadline information.
+POST /api/evaluation-cycles -- scoped AC/Admin.
+  B: {semesterId,signupDeadline,observationDeadline,feedbackDeadline}. R: Cycle.
+PATCH /api/evaluation-cycles/{cycleId} -- scoped AC/Admin.
+  B: {expectedRevision,signupDeadline?,observationDeadline?,feedbackDeadline?}. R: Cycle.
+  Validate dates; agree duplicate-cycle, past-deadline edit and reopening policies.
+GET /api/semesters -- authorized lookup for filters and cycle setup.
+  Q: year?,season?. R: List<Semester>.
+PATCH /api/semesters/{semesterId} -- scoped AC/Admin; authority to confirm.
+  B: {expectedRevision,startsOn?,endsOn?,timeZone?}. R: Semester.
+  Semester Settings edits semester boundaries AND cycle deadlines. OPTIONAL atomic
+  PUT /api/evaluation-cycles/{cycleId}/settings can save both transactionally:
+  B: {expectedCycleRevision,expectedSemesterRevision,semester:{startsOn,endsOn},
+    deadlines:{signupDeadline,observationDeadline,feedbackDeadline}}.
+  R: {semester:Semester,cycle:Cycle}. Choose one save contract before integration.
+GET /api/me/evaluation-status
+  Q: cycleId?; omission requires agreed current-cycle rule.
+  R: {cycle:Cycle|null,hiringLevel:HiringLevel|null,lastCompletedEvaluation:
+    {observationId,completedAt,semesterId}|null,dueSemesterId,status,canSignUp,
+    signupMode:'required'|'voluntary'|null,reasons:string[]}.
+  Proposed statuses: due/overdue/notDue/ineligible/unknown. Assistant: annual;
+  associate/full: every two years. Retain first-semester exclusion and voluntary
+  signup. Missing history/hire dates and rank changes require agreed rules.
+
+3. COURSE SELECTION AND SIGNUP
+==============================
+GET /api/me/course-sections
+  Q: semesterId required. R: List<Section>, only sections taught by the caller.
+GET /api/me/course-sections/{sectionId}/meeting-options -- NEW.
+  Q: cycleId required,from?:date,to?:date.
+  R: {sectionId,cycleId,timeZone,observationDeadline,items:Meeting[]}.
+  Derive from actual schedule/calendar exceptions; validate again at signup.
+GET /api/me/signups
+  Q: cycleId?. R: List<{id,cycleId,sectionId,observationId,proposedMeetings:Meeting[],
+    signedUpAt,revision}>. Always own records, including for AC/Admin users.
+POST /api/evaluation-cycles/{cycleId}/signups
+  B: {sectionId,proposedMeetingOptionIds:string[]}.
+  R: {signup:{id,cycleId,sectionId,signedUpAt,revision},observation:Observation,
+    proposedMeetings:Meeting[]}.
+  Validate ownership, eligibility, signup window and nonempty unique eligible dates
+  before observation deadline. Signup enters observer pool. Confirm one-course and
+  duplicate-signup policy; one meeting per date is a current UI limitation.
+GET /api/evaluation-cycles/{cycleId}/signups -- scoped AC/Admin.
+  Q: departmentId?,hiringLevelId?,q?.
+  R: List<{signupId,observationId,observee:User,section:Section,proposedMeetings,signedUpAt}>.
+
+4. MATCHING AND INVITATIONS
+===========================
+POST /api/evaluation-cycles/{cycleId}/recommendations/generate -- scoped AC/Admin.
+  B: {scope?:{departmentId?,professorIds?:string[]}}.
+  R: {generationId,cycleId,status,generatedCount,insufficientCount,unmatchedCount,
+    generatedAt}; or 202 + operation tracking if asynchronous.
+  After signup closes: up to five eligible, same-department/course-level candidates
+  available for proposed meetings, excluding self. Ranking/overlap/capacity TBD.
+POST /api/evaluation-cycles/{cycleId}/recommendations/release -- scoped AC/Admin.
+  B: {generationId,observationIds?:string[]}.
+  R: {releaseId,releasedObservationIds:string[],releasedAt,notificationCount}.
+  Distinct from generation; create notifications idempotently.
+POST /api/observations/{observationId}/recommendations/regenerate -- scoped AC/Admin.
+  B: {reason?,expectedRevision}. R: {generationId,observationId,candidateCount,
+    unmatched,revision}. Preserve previous responses and invitation attempts.
+GET /api/observations/{observationId}/candidates
+  Q: responseStatus?. R: {observationId,releasedAt,proposedMeetings:Meeting[],
+    items:Candidate[],pageInfo}. Own observee sees only released list; AC sees scope.
+POST /api/observations/{observationId}/invitations -- own observee.
+  B: {candidateIds:string[],expectedRevision}.
+  R: {observationId,attempts:Attempt[],revision}.
+  Validate released candidates and deadline. Initial window: 48 hours. Preserve
+  attempt history; agree atomic batch behavior and retry/idempotency policy.
+GET /api/me/observation-requests -- own received invitations.
+  Q: cycleId?,responseStatus?. R: {items:[{candidateId,observation:Observation,
+    attempt:Attempt,availableMeetings:Meeting[],expiredAcceptanceRequest:Approval|null,
+    allowedActions:string[]}],pendingCount,pageInfo}.
+PATCH /api/observation-candidates/{candidateId}/response -- invited professor.
+  B: {attemptId,response:'accepted'|'declined',meetingOptionId?,expectedRevision}.
+  R: {candidate:Candidate,attempt:Attempt,observationRevision}.
+  Accept requires one compatible proposed meeting. Reject expired/superseded attempts
+  using server time even before the expiry job runs. Multiple acceptances are allowed;
+  acceptance is availability, not final selection. Meeting-conflict policy TBD.
+PUT /api/observations/{observationId}/selected-observer -- own observee.
+  B: {candidateId,acceptedAttemptId,expectedRevision}.
+  R: {observation:Observation,cancelledCandidateIds:string[]}.
+  Use accepted date; atomically choose one observer and cancel remaining pending/
+  accepted invitations. Notify participants and prevent competing finalizations.
+POST /api/observation-candidates/{candidateId}/expired-acceptance-requests -- NEW.
+  B: {attemptId,reason?}. R: Approval with pending status. Invited professor only;
+  expired, not already resent/superseded; no direct acceptance or duplicate request.
+GET /api/evaluation-cycles/{cycleId}/expired-acceptance-requests -- scoped AC/Admin.
+  Q: status?,departmentId?. R: List<Approval plus requester:User,reason,allowedActions>.
+PATCH /api/expired-acceptance-requests/{requestId} -- scoped AC/Admin.
+  B: {decision:'approved'|'rejected',comment?,expectedRevision}.
+  R: {request:Approval,reopenedAttempt:Attempt|null}.
+  Approval enables ordinary acceptance, not final assignment. Reopen duration,
+  deadline cutoff and races with resends require agreement.
+
+Automatic expiry/resend is a backend job, NOT a public browser endpoint. Preserve
+attempts, prioritize uncontacted candidates under agreed policy, create new windows
+and notify AC informationally. Retry limits/timing/cutoff remain unresolved.
+
+5. OBSERVATIONS AND AC ALERTS
+=============================
+GET /api/me/observations
+  Q: cycleId?,semesterId?,participation?:observer|observee,status?,assessmentStatus?.
+  R: List<Observation>. Supports dashboard/history; define current-observation rule.
+GET /api/observations/{observationId}
+  R: {observation:Observation,proposedMeetings:Meeting[],progress:[{key,label,state,
+    completedAt}],pendingAlert:Alert|null,templateVersionId}.
+  Participants or scoped authorized AC/Admin; redact data by caller visibility.
+GET /api/evaluation-cycles/{cycleId}/observations -- scoped AC/Admin.
+  Q: status?,assessmentStatus?,departmentId?,hiringLevelId?,observeeId?,observerId?,q?.
+  R: List<Observation>. Include form state and authorized view actions.
+POST /api/observations/{observationId}/incomplete-report -- own observee.
+  B: {reason,details?,expectedRevision}.
+  R: {reportId,observationId,reportedBy,reportedAt,reason,details?,revision}.
+  Required by Report Not Completed action. Timing/correction/state effects TBD;
+  non-occurrence is not the same as an unsubmitted form.
+POST /api/observations/{observationId}/alerts -- NEW; own observee.
+  B: {reasonCode,details}. R: Alert with pending status.
+  Attach observation/candidate context server-side; persist AC work item/notification.
+  Agree reason codes, limits and pending-alert deduplication; demo reasons are samples.
+GET /api/evaluation-cycles/{cycleId}/alerts -- NEW; scoped AC/Admin.
+  Q: status?,type?,departmentId?. R: List<Alert>.
+GET /api/alerts/{alertId} -- own observee or scoped AC/Admin.
+  R: Alert plus context,createdBy:User|null,allowedActions:string[].
+PATCH /api/alerts/{alertId} -- CONDITIONAL resolution flow; scoped AC/Admin.
+  B: {status:'acknowledged'|'resolved',resolutionNote?,expectedRevision}. R: Alert.
+  Agree lifecycle/re-alert rules. No automatic manual observer replacement.
+
+6. TEMPLATES AND WEB ASSESSMENTS
+================================
+GET /api/observation-templates
+  Q: status?. R: List<Template summary>. AC: authorized drafts; faculty: published only.
+GET /api/observation-templates/{templateId}
+  R: Template. Here templateId identifies a version; align naming with final schema.
+GET /api/observation-templates/current
+  Q: cycleId? if applicability is cycle-specific. R: Template; 404 if none applies.
+POST /api/observation-templates -- scoped AC/Admin.
+  B: {title,criteria:Criterion[],commentPrompts,signatureLabels}. R: draft Template.
+PATCH /api/observation-templates/{templateId} -- draft only; scoped AC/Admin.
+  B: {expectedRevision,title?,criteria?:Criterion[],commentPrompts?,signatureLabels?}.
+  R: Template. Proposed arrays replace supplied sections; omitted sections unchanged.
+  Validate IDs/order/options; agree deletion semantics. Published versions immutable.
+POST /api/observation-templates/{templateId}/versions -- scoped AC/Admin.
+  B: {title?}. R: new cloned draft Template; preserve previous versions/answers.
+POST /api/observation-templates/{templateId}/publish -- NEW; scoped AC/Admin.
+  B: {expectedRevision,cycleId?}. R: published Template. Validate completeness;
+  agree applicability and when observations get assigned a version.
+GET /api/observations/{observationId}/template
+  R: exact assigned Template, not latest. Authorized participants/reviewers only.
+GET /api/observations/{observationId}/assessment
+  R: {observationId,templateVersionId,assessment:Assessment|null,allowedActions}.
+  Draft/observee/AC visibility requires agreed rules.
+PUT /api/observations/{observationId}/assessment -- proposed draft save.
+  B: {templateVersionId,expectedRevision?,answers:[{criterionId,value}],
+    comments:[{promptId,text}]}. R: Assessment.
+  Selected observer only while editable. Agree first-save revision condition;
+  later saves check revision. Validate against assigned template and retain history.
+POST /api/observations/{observationId}/assessment/submit -- transition CONDITIONAL.
+  B: {expectedRevision}. R: Assessment. Validate required answers; selected observer.
+  Locking, amendments and relation to acknowledgements require agreement.
+POST /api/observations/{observationId}/assessment/acknowledgements -- CONDITIONAL.
+  B: {expectedRevision,acknowledged:true}. R: Assessment.
+  Derive participant from session; nobody signs for another user. Agree meaning,
+  identity proof, ordering, withdrawal and finalization. If explicit finalization is
+  chosen, propose POST .../assessment/finalize with {expectedRevision}; not approved yet.
+
+Web forms replace signed-file uploads; no core /assessment/file endpoint. Preview
+uses the template read. Question counts/scales are template-driven; Figma's five
+questions and inconsistent rating labels are examples, not fixed backend policy.
+
+7. PROCESS FEEDBACK AND PRIVATE EVIDENCE
+=======================================
+GET /api/evaluation-cycles/{cycleId}/feedback-form -- NEW.
+  R: {templateVersionId,questions:[{id,prompt,type,required,options?}],
+    eligibility:{canSubmit,reasons},opensAt,closesAt,existingFeedbackId,
+    attachmentPolicy:{allowedTypes,maxBytes}|null}.
+POST /api/evaluation-cycles/{cycleId}/feedback -- eligible participating faculty.
+  B: {templateVersionId,answers:[{questionId,value}],difficulties?,suggestions?,
+    attachmentIds?:string[]}. R: Feedback.
+  After observation period, within feedback window; validate ownership/schema.
+  Survey schema, duplicate submissions, dual-role counting and edits remain TBD.
+GET /api/me/feedback
+  Q: cycleId?. R: List<Feedback>. Own responses only.
+GET /api/evaluation-cycles/{cycleId}/feedback -- CONDITIONAL AC visibility.
+  Q: departmentId?. R: approved aggregates or List<Feedback>.
+  No individual response/identity exposure until privacy policy is agreed.
+POST /api/me/feedback-attachments -- proposed upload flow.
+  Multipart: cycleId,file. R: Attachment. Eligible owner; validate actual content,
+  type/size; private storage only. Managed private uploads are an alternative.
+GET /api/feedback-attachments/{attachmentId}/file
+  R: authorized download stream. Owner or explicitly allowed reviewer; safe content
+  headers; no public path. Attachments must belong to the submitting user/cycle.
+DELETE /api/me/feedback-attachments/{attachmentId} -- OPTIONAL cleanup.
+  R: 204. Own unattached uploads only unless retention policy permits more.
+
+8. AC REPORTS, REMINDERS AND BACKGROUND OPERATIONS
+================================================
+GET /api/evaluation-cycles/{cycleId}/reports -- scoped AC/Admin.
+  Q: departmentId?,hiringLevelId?. R: {cycleId,asOf,definitionsVersion,
+    summary:{facultyDue,overdue,unmatched,incomplete},
+    byHiringLevel:[{hiringLevelId,name,due,outstanding}],availableViews}.
+GET /api/evaluation-cycles/{cycleId}/faculty-status -- NEW.
+  Q: hiringLevelId?,evaluationStatus?,signedUp?:boolean,departmentId?,q?.
+  R: List<{professor:User,hiringLevel,lastEvaluation:{semesterId,completedAt}|null,
+    evaluationStatus,signupId,observationId}>. Scoped AC/Admin.
+GET /api/evaluation-cycles/{cycleId}/attention -- NEW; scoped AC/Admin.
+  Q: issue?:overdue|unmatched|incomplete|alert|expiredApproval,departmentId?.
+  R: List<{id,faculty:User,issue,observationStatus,observationId,alertId?,
+    approvalRequestId?,createdAt,allowedActions}>. Agree sorting/multi-issue deduplication.
+GET /api/evaluation-cycles/{cycleId}/metrics -- scoped AC/Admin.
+  Q: departmentId? if supported. R: {cycleId,available,availableAt,generatedAt,
+    formulaVersion,metrics:[{key,label,value:number|null,unit,numerator?,denominator?,
+    unavailableReason?}]}.
+  Operational counts are live; final KPIs follow feedback deadline. Return unavailable
+  rather than invented values. All KPI formulas/denominators remain to be agreed.
+POST /api/evaluation-cycles/{cycleId}/notifications -- scoped AC/Admin reminders.
+  B: {kind,recipientFilter:{evaluationStatus?,observationStatus?,departmentId?,
+    hiringLevelId?,professorIds?},channels?:('inApp'|'email')[],message?}.
+  R: {operationId,recipientCount,notificationCount,status} if queued.
+  Server authorizes recipients; agree templates, channel policy and retries.
+GET /api/operations/{operationId} -- OPTIONAL, needed if using 202 async contracts.
+  R: {id,type,status,createdAt,completedAt,summary?,error?:{code,message}}.
+  Initiator/authorized scope only. No public job-control endpoint.
+
+9. SHARED HEADER NOTIFICATIONS
+==============================
+GET /api/notifications
+  Q: read?:all|unread,after?:incremental cursor; normal cursor/limit pagination.
+  R: {items:Notification[],pageInfo,unreadCount,latestCursor}.
+  Own records only; define after vs pagination semantics. Resolve approved targets
+  to routes, not arbitrary trusted external links.
+GET /api/notifications/unread-count
+  R: {unreadCount,asOf}. May be combined with the list response if agreed.
+PATCH /api/notifications/{notificationId}
+  B: {read:boolean}. R: Notification. Own record only; server sets readAt.
+POST /api/notifications/mark-all-read
+  B: {}. R: {updatedCount,cutoff,unreadCount}. Server cutoff preserves new arrivals.
+Workflow services create notifications transactionally/idempotently. No browser API
+for inventing system notifications. Header logout continues to use Auth.js.
+
+10. ADMIN DESTINATION PAGES
+===========================
+Admin Dashboard itself is hyperlinks only. These routes support future tabs.
+All writes require effective Admin permissions and appropriate scope.
+
+GET /api/users
+  Q: q?:name/email,roleId?,accountStatus?,departmentId?,hiringLevelId?.
+  R: List<{id,name,email,accountStatus,roles:Role[],professor}>.
+GET /api/users/{userId} -- NEW edit-form read.
+  R: {id,name,email,accountStatus,roleIds:string[],
+    professor:{departmentId,hiringLevelId,hireDate?}|null,revision}.
+POST /api/users -- NEW, Create User screen.
+  B: {name,email,roleIds:string[],accountStatus,professor?}. R: user resource.
+  No username or local password provisioning. Associate accounts with verified UTD
+  SSO identities through the future auth integration; keep demo lookup separate.
+PATCH /api/users/{userId}
+  B: {expectedRevision,name?,email?,accountStatus?,professor?:
+    {departmentId?,hiringLevelId?,hireDate?}}. R: user resource.
+  Disabled users lose subsequent access, including existing sessions. Rank changes
+  must not erase roles/history. Agree atomic save if also editing role assignments.
+DELETE /api/users/{userId} -- policy CONDITIONAL; Figma Delete user.
+  R: 204. Agree deactivation vs deletion, retention and last-admin/self safeguards.
+PUT /api/users/{userId}/roles
+  B: {roleIds:string[],expectedRevision}. R: {userId,roleIds,permissions,revision}.
+  Replaces full role set; preserve unrelated roles in UI and protect admin access.
+GET /api/roles
+  R: List<Role>. Permission catalog and direct/inherited grants remain distinct.
+GET /api/permissions
+  R: {items:[{key,name,description,featureGroup}]}.
+PUT /api/roles/{roleId}/permissions
+  B: {permissionKeys:string[],expectedRevision}.
+  R: {roleId,permissionKeys,effectivePermissionKeys,revision}.
+  Reject unsupported keys; preserve agreed inheritance and admin safeguards.
+POST /api/roles -- confirm custom-role scope; retained from old draft.
+  B: {key,name,description?,permissionKeys?:string[]}. R: Role.
+PATCH /api/roles/{roleId} -- confirm scope.
+  B: {expectedRevision,name?,description?}. R: Role.
+DELETE /api/roles/{roleId} -- confirm scope.
+  R: 204 only if assignments/history/built-in-role/admin safeguards permit.
+GET /api/hiring-levels
+  R: {items:HiringLevel[]}. Authorized lookup; writes Admin-only.
+POST /api/hiring-levels -- NEW; Add Hiring Level.
+  B: {name,evaluationIntervalYears}. R: HiringLevel. Validate supported positive interval.
+PATCH /api/hiring-levels/{hiringLevelId}
+  B: {expectedRevision,name?,evaluationIntervalYears?,active?}. R: HiringLevel.
+DELETE /api/hiring-levels/{hiringLevelId} -- NEW; Remove action.
+  R: 204 if removable, otherwise 409. Agree archival/reassignment; preserve history.
+GET /api/departments -- NEW supporting lookup.
+  Q: q?. R: List<{id,code,name}>. No department CRUD implied.
+
+SCREEN COVERAGE
+===============
+Faculty Dashboard: /me, cycles, evaluation-status, own observations/requests.
+Signup: own course-sections, meeting-options, signups.
+Recommended/confirmed observers: candidates, invitations, selected-observer, alerts.
+Details/appointment: observation detail, incomplete-report, assessment/template reads.
+My Evaluation: evaluation-status, cycle, own signups.
+Observer Requests: invitation reads/responses and expired-acceptance approvals.
+Three form steps: assigned template, assessment read/save/submit/acknowledgements.
+History: own observations with semester/participation/status filters and form reads.
+AC Dashboard: cycle context, reports, attention and authorized detail reads.
+AC Cycles: cycle CRUD, semester lookup, matching/release services.
+AC Faculty Due: faculty-status, hiring-level filters and reminders.
+AC Progress: cycle observations, details and authorized form reads.
+AC Template sections: template draft/version/publish; preview uses ordinary GET.
+AC Reports: operational reports/drill-downs and final metrics.
+Semester Settings: semester boundaries plus cycle deadlines; agree atomic save.
+Admin Dashboard: links only. Users, roles and hiring levels use section 10.
+Shared Notifications: section 9. Login/header: section 1 plus notifications/cycle.
+Approval and feedback screens are incomplete in Figma but remain required workflows.
+Figma: https://www.figma.com/design/2fBuGKLRdHej1QAffDWsHr
+
+DECISIONS STILL REQUIRED
+========================
+- UTD SSO identity mapping/account linking and ambiguous demo-name handling;
+  permanent permission keys, AC scope and inheritance.
+- Current-cycle selection; deadline timezone/boundaries; editing/reopening rules.
+- Eligibility edge cases; signup uniqueness; multiple class meetings on one date.
+- Matching ranking/overlap/capacity; resend limits/timing/cutoff; approval-window races.
+- Template assignment, conflicting Figma scale labels, draft/form visibility,
+  signatures/acknowledgement meaning and order, finalization and amendments.
+- Non-occurrence report timing/effects; alert reasons/duplicates/resolution.
+- Survey schema, eligibility/uniqueness for dual-role users, edits, AC privacy,
+  attachment limits/access/retention.
+- Operational count/attention definitions and all KPI formulas/missing-data rules.
+- Final response enums, pagination, revision and idempotency contracts.
+
+EXCLUDED / OPTIONAL
+====================
+Manual observer replacement/postponement and Department Head: stretch only.
+Signed assessment uploads: replaced by web forms; survey evidence remains supported.
+Dedicated dashboard/activity APIs, exports, realtime streams, registration/reset UI
+and custom-role CRUD are not assumed necessary for current screens.
+Course ingestion, expiry/resend and email delivery are trusted backend jobs/services,
+not invented public browser endpoints. No schema changes are implemented by this draft.
+
+IMPLEMENTATION GROUPS
+=====================
+Keep auth in its existing task. Group remaining work into cycle/eligibility; signup;
+matching/release; invitations/selection; expiry/resend/approvals; observation reads/
+reports; AC alerts/non-occurrence; templates; assessment lifecycle; survey/evidence;
+shared header notifications/reminders; and Admin destination management.
+Test direct authorization, ownership, deadlines, stale revisions, concurrent pairing,
+idempotent retries/jobs, historical templates, private attachments and paginated counts.
