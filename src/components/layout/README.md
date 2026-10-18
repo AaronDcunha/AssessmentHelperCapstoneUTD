@@ -59,3 +59,30 @@ Figma master `1:171` has a 256x64px reference, 8px padding, 12px gaps, 24px role
 `className`, refs, native button attributes (including `disabled`), and styles are supported. The component fixes `type="button"`, derives `aria-expanded`, and owns `onClick`; use `onExpandedChange` for toggling. Enter and Space use native button behavior without extra key handlers. It is a Client Component because it wires the click callback; a client parent owns interactive state. The isolated preview is `/test/task-1/role-heading`.
 
 Sidebar integration remains separate: provide authorized categories, state/panel IDs, routing, and any persistence of expansion state. Hiding categories is not server authorization, and this component does not enforce access.
+
+## PageHeader
+
+Import `PageHeader`, `PageHeaderProps`, and `PageHeaderAction` from `@/components/layout/page-header`.
+
+```tsx
+<PageHeader
+  title="AC Dashboard"
+  subtitle="Fall 2026"
+  notificationAction={{ label: "Open notifications", href: "/notifications" }}
+  user={{ initials: "JD", name: "Jordan Davis", action: {
+    label: "Open account for Jordan Davis", onClick: onOpenAccount,
+  } }}
+/>
+```
+
+`title` is required and uses AH Title typography. `subtitle` is optional and uses muted AH Body text; null, empty, and whitespace-only values omit its element. Pass a semester label as `subtitle`. `headingLevel` defaults to `1` and supports 1-6 independently of the visual style. Native header props, refs, styles, and `className` are forwarded.
+
+`notificationAction` is optional; omit it to omit the Bell control. An action requires a nonempty accessible `label` and exactly one of `href` (Next.js Link destination) or `onClick` (native button handler). Callbacks must be passed from a Client Component. The component creates real non-submitting buttons for callbacks and Next.js Links for destinations. Actions also accept `aria-controls`, `aria-expanded`, and `aria-haspopup` for parent-owned menus/dialogs; the parent must supply the matching UI and state. It does not fetch notifications, infer destinations, display unread counts, or create account/authentication behavior.
+
+`user` is optional; omit it to omit the Avatar. Supply `user.name` as the accessible full name and optional `user.initials`; missing initials reuse Avatar's Person icon fallback. Without `user.action`, Avatar is a named standalone image. With an action, provide a full action label including identity (for example, "Open account for Jordan Davis"); the inner Avatar is decorative so its initials/name are not announced twice. Bell is always decorative inside its named control. All action controls preserve the existing visible global keyboard focus outline. There is no inert Bell or fake account action when configuration is omitted.
+
+The Figma reference `3:126` is 1096x80px and resizes to its content width. PageHeader uses full available width and an 80px minimum height with no added card background, border, shadow, or padding. Desktop content aligns at the top: title 36/50px at weight 700, subtitle 16/22px, and a 48px action row holding the shared 24px Bell and 40px Avatar. Its 24px visual gap and 12px trailing space reproduce the master's 100px action region when both controls are present. The Bell hit area is 24px and the account hit area is 40px, preserving the master geometry. Colors, spacing, and control corner radii use existing semantic tokens.
+
+At viewports below Tailwind's `sm` breakpoint, controls move below the title and align right. Long titles/subtitles wrap at any word length and increase the header height; neither text nor focus outlines are clipped. The breakpoint and wrapping are implementation choices, since Figma supplies a desktop reference only. Omitting either action removes its occupied space; omitting both removes the action row.
+
+The component has no hooks or client directive, so static/navigational usage works in Server Components and callback usage is composed from Client Components. The preview `/test/task-1/page-header` contains sample identities and behavior only. When integrating the shared layout, replace its reserved header slot rather than adding a second header, supply the authenticated identity and agreed notification/account behavior, and coordinate the page title/heading hierarchy with screen owners. That layout/authentication integration is not performed here.
