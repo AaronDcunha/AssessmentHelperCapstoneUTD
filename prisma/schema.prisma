@@ -99,8 +99,8 @@ model Department {
   departmentId   String @id @default(uuid()) @map("department_id") @db.Uuid
   departmentName String @unique @map("department_name")
 
-  // One department can have multiple professors.
   professors Professor[]
+  courses    Course[]
 
   @@map("department")
 }
@@ -134,5 +134,89 @@ model Professor {
   department  Department  @relation(fields: [departmentId], references: [departmentId])
   hiringLevel HiringLevel @relation(fields: [hiringLevelId], references: [hiringLevelId])
 
+  // A professor can teach multiple course sections across semesters.
+  teaches Teaches[]
+
   @@map("professor")
+}
+
+// Stores academic semesters such as Fall 2026 or Spring 2027.
+// Used to organize course offerings and teaching history.
+model Semester {
+  semesterId String @id @default(uuid()) @map("semester_id") @db.Uuid
+  termCode   String @unique @map("term_code")
+  termName   String @map("term_name")
+
+  // One semester can contain multiple course sections.
+  courseSections CourseSection[]
+
+  @@map("semester")
+}
+
+// Stores courses offered by academic departments.
+// A course can have multiple sections across different semesters.
+model Course {
+  courseId     String @id @default(uuid()) @map("course_id") @db.Uuid
+  departmentId String @map("department_id") @db.Uuid
+  courseCode   String @map("course_code")
+  courseTitle  String @map("course_title")
+  courseLevel  Int    @map("course_level")
+
+  // Relationships.
+  department     Department      @relation(fields: [departmentId], references: [departmentId])
+  courseSections CourseSection[]
+
+  // Prevents duplicate course codes within the same department.
+  @@unique([departmentId, courseCode])
+  @@map("course")
+}
+
+// Stores individual sections of courses offered in a semester.
+// Example: CS 3345.001 during Fall 2026.
+model CourseSection {
+  sectionId   String @id @default(uuid()) @map("section_id") @db.Uuid
+  courseId    String @map("course_id") @db.Uuid
+  semesterId  String @map("semester_id") @db.Uuid
+  sectionCode String @map("section_code")
+
+  // Relationships.
+  course        Course         @relation(fields: [courseId], references: [courseId])
+  semester      Semester       @relation(fields: [semesterId], references: [semesterId])
+  teaches       Teaches[]
+  classMeetings ClassMeeting[]
+
+  // A course section code should be unique within its course and semester.
+  @@unique([courseId, semesterId, sectionCode])
+  @@map("course_section")
+}
+
+// Connects professors to the course sections they teach.
+// This table also preserves historical teaching assignments.
+model Teaches {
+  professorId String @map("professor_id") @db.Uuid
+  sectionId   String @map("section_id") @db.Uuid
+
+  // Foreign key relationships.
+  professor Professor     @relation(fields: [professorId], references: [professorId])
+  section   CourseSection @relation(fields: [sectionId], references: [sectionId])
+
+  // Prevents duplicate teaching assignments.
+  @@id([professorId, sectionId])
+  @@map("teaches")
+}
+
+// Stores the scheduled meeting days, times, and locations
+// for individual course sections.
+model ClassMeeting {
+  meetingId String @id @default(uuid()) @map("meeting_id") @db.Uuid
+  sectionId String @map("section_id") @db.Uuid
+  dayOfWeek String @map("day_of_week")
+  startTime String @map("start_time")
+  endTime   String @map("end_time")
+  location  String?
+
+  // Each meeting belongs to a specific course section.
+  section CourseSection @relation(fields: [sectionId], references: [sectionId])
+
+  @@map("class_meeting")
 }
