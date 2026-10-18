@@ -1,5 +1,13 @@
 # Shared layout components
 
+## Application shell
+
+`src/app/(main)/layout.tsx` now renders `AppShell`, composing the sidebar on the left and the page header above centered main content. Small screens have a navigation toggle. Pages supply only their content.
+
+Navigation is intentionally empty for now; the shared layout passes `authorizedSections={[]}`. Populate it with authorized application destinations as pages become available. At auth integration, retain the server layout's `requireUser()` check. Supply safe identity data through `user` (sidebar) and `headerUser` (header), and a real `notificationAction` when available. No sample identity, semester, or fake action is injected. Restricted pages and APIs still enforce access independently.
+
+The longest matching navigation destination determines the active link and default header title. Pass `pageHeaders` with exact pathname keys to override page titles/subtitles, and `subtitle` for shared cycle context. Header callbacks must come from a Client Component; the server layout can pass serializable link actions. The global header replaces the old empty 80px placeholder.
+
 ## NavigationItem
 
 Import `NavigationItem` and `NavigationItemProps` from `@/components/layout/navigation-item`.
