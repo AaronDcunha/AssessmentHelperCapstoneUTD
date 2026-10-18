@@ -6,3 +6,33 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+// Stores the accounts of people who can access the system,
+// including Administrators, Assessment Committee members,
+// and Professors.
+model AppUser {
+  userId    String  @id @default(uuid()) @map("user_id") @db.Uuid
+  fullName  String  @map("full_name")
+  email     String  @unique
+  isActive  Boolean @default(true) @map("is_active")
+
+  @@map("app_user")
+}
+
+// Defines the different roles available in the system,
+// such as Administrator, Assessment Committee, and Professor.
+model Role {
+  roleId   String @id @default(uuid()) @map("role_id") @db.Uuid
+  roleName String @unique @map("role_name")
+
+  @@map("role")
+}
+
+// Defines individual permissions that control which
+// system features or actions a user is authorized to access.
+model Permission {
+  permissionId   String @id @default(uuid()) @map("permission_id") @db.Uuid
+  permissionName String @unique @map("permission_name")
+
+  @@map("permission")
+}
