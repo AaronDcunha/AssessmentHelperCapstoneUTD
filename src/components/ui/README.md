@@ -61,3 +61,54 @@ export function Example() {
 - Use native props for password/email/date/number inputs, `readOnly`, `disabled`, `required`, `min`, `max`, `step`, `pattern`, `autoComplete`, `value`/`defaultValue`, and events. Select has no native readOnly behavior; use disabled if appropriate. Disabled controls are omitted from form data; read-only inputs are included.
 - Use `className` for the control and `wrapperClassName` for the field container. Input also supports native checkbox/radio types via `checked`/`onChange`; their layout can be adjusted with these classes.
 - UI validation does not replace server validation or authorization.
+
+## Shared icons
+
+Import from `@/components/ui/icons`: `GridIcon`, `CalendarIcon`, `PersonIcon`, `PeopleIcon`, `ClipboardIcon`, `DocumentIcon`, `ChartIcon`, `ShieldIcon`, `BookIcon`, `DownIcon`, `UpIcon`, and `BellIcon`. All accept the exported `IconProps` type.
+
+The geometry comes directly from the Figma masters: a `0 0 24 24` view box, no fill, 1.7px strokes, and round caps/joins. `size` defaults to `24` and accepts a number or SVG length such as `"1em"`. Strokes scale with the icon. `className` and native SVG props (including refs) are supported. Use inherited color or semantic classes such as `text-sidebar`, `text-ink`, and `text-light`; no palette color is embedded in the paths. Use light icons on green surfaces and darker icons on light surfaces.
+
+```tsx
+import { CalendarIcon, BellIcon, ChartIcon } from "@/components/ui/icons";
+import { Button } from "@/components/ui/button";
+
+// Decorative: a nearby label or the parent control already explains the icon.
+<span><CalendarIcon className="text-sidebar" /> Observation date</span>
+<Button aria-label="Open notifications" onClick={onOpenNotifications}>
+  <BellIcon />
+</Button>
+
+// Meaningful standalone image: supply one nonempty naming attribute.
+<BellIcon size={32} aria-label="Unread notifications" className="text-ink" />
+<ChartIcon size="1em" aria-labelledby="report-label" />
+<span id="report-label">Assessment report</span>
+```
+
+Unnamed icons are decorative by default (`aria-hidden="true"`). A nonempty `aria-label` or `aria-labelledby` makes the icon an image (`role="img"`). `decorative={false}` can be explicit, but requires one of those naming attributes; `decorative={true}` forbids them in TypeScript. A referenced label must exist in the page. Blank names fall back to decorative at runtime. Icons do not enter the Tab order; put actions on a real Button or link and label that control, rather than making an SVG interactive.
+
+The icon module has no client directive, hooks, or browser dependencies and can be used in Server and Client Components. Event handlers belong in Client Components. The interactive preview is `/test/task-1/icons`. Task 1 supplies the Calendar icon for Person 2's existing `calendarIcon` prop; these exports do not change those components or the shared layout.
+
+## Avatar
+
+Import `Avatar` and its `AvatarProps` type from `@/components/ui/avatar`. The default matches Figma: 40px circle, `bg-light`, `text-sidebar`, and `text-label`. `size` accepts a positive pixel diameter; invalid values fall back to 40. Typography scales from the semantic label tokens for other sizes. Use `className` for surrounding layout or semantic color overrides; native span props, refs, and `style` are supported.
+
+```tsx
+import { Avatar } from "@/components/ui/avatar";
+
+// Meaningful standalone identity: provide a nonempty name.
+<Avatar initials="JD" aria-label="Jordan Davis" />
+<Avatar initials="JD" size={56} aria-labelledby="avatar-name" />
+<span id="avatar-name">Jordan Davis</span>
+
+// Decorative beside the same visible identity: avoid a duplicate announcement.
+<div className="flex items-center gap-ah-12">
+  <Avatar initials="JD" decorative />
+  <span>Jordan Davis</span>
+</div>
+```
+
+`initials` accepts a string, null, or an omitted value. Whitespace is trimmed; a multiword name is abbreviated to its first and last initials, and a single token to its first two graphemes. Text is uppercased and remains bounded inside the circle. Unicode graphemes are preserved using built-in `Intl.Segmenter`. Missing/blank input displays the shared decorative `PersonIcon`. The component never infers an accessible full name from the initials or fetches user data.
+
+Accessibility follows Shared Icons: unnamed avatars are decorative (`aria-hidden="true"`). A nonempty `aria-label` or `aria-labelledby` exposes `role="img"`; initials/fallback graphics do not add a second announcement. `decorative={false}` requires one naming attribute in TypeScript; `decorative={true}` forbids them. Blank accessible names fall back to decorative at runtime. For an avatar inside a profile button, label the real button and keep the avatar decorative. The component itself is not a control or Tab stop.
+
+Avatar works in Server and Client Components without a client directive or browser dependencies. PageHeader and Sidebar owners supply identity/accessibility props. The interactive preview is `/test/task-1/avatar`. No layout/authentication integration is performed by this component.
