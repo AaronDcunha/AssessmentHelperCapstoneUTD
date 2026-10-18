@@ -19,8 +19,11 @@ model AppUser {
   userRoles       UserRole[]
   loginCredential LoginCredential?
 
-  // A user may also have a professor profile.
+  // Faculty profile.
   professor Professor?
+
+  // Notifications received by the user.
+  notifications Notification[]
 
   @@map("app_user")
 }
@@ -141,6 +144,9 @@ model Professor {
   evaluationSignups     EvaluationSignup[]
   selectedObservations  Observation[]          @relation("SelectedObserver")
   observationCandidates ObservationCandidate[] @relation("CandidateProfessor")
+
+  // Feedback submitted about the evaluation process.
+  processFeedback ProcessFeedback[]
 
   @@map("professor")
 }
@@ -268,7 +274,8 @@ model EvaluationSignup {
 }
 
 // Tracks the observation process for a professor's signup.
-// Stores the final observer and overall observation status.
+// Stores the selected observer, scheduling information,
+// assessment, and process feedback.
 model Observation {
   observationId String    @id @default(uuid()) @map("observation_id") @db.Uuid
   signupId      String    @map("signup_id") @db.Uuid
@@ -283,9 +290,13 @@ model Observation {
   cycle    EvaluationCycle  @relation(fields: [cycleId], references: [cycleId])
   observer Professor?       @relation("SelectedObserver", fields: [observerId], references: [professorId])
 
-  // Observation-related records.
+  // Observer matching and scheduling.
   candidates  ObservationCandidate[]
   timeOptions ObservationTimeOption[]
+
+  // Assessment and feedback.
+  signedAssessment SignedAssessment?
+  processFeedback  ProcessFeedback[]
 
   @@map("observation")
 }
@@ -322,4 +333,99 @@ model ObservationTimeOption {
 
   @@unique([observationId, preferredDate])
   @@map("observation_time_option")
+}
+
+// Stores assessment templates configured by the Assessment Committee.
+// A template contains criteria used during classroom observations.
+model ObservationTemplate {
+  templateId   String   @id @default(uuid()) @map("template_id") @db.Uuid
+  templateName String   @map("template_name")
+  description  String?
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  // A template contains multiple assessment criteria.
+  criteria    TemplateCriterion[]
+  assessments SignedAssessment[]
+
+  @@map("observation_template")
+}
+
+// Defines individual criteria belonging to an observation template.
+// Each criterion can have its own rating range and weight.
+model TemplateCriterion {
+  criterionId   String  @id @default(uuid()) @map("criterion_id") @db.Uuid
+  templateId    String  @map("template_id") @db.Uuid
+  criterionText String  @map("criterion_text")
+  questionType  String  @map("question_type")
+  minRating     Int?    @map("min_rating")
+  maxRating     Int?    @map("max_rating")
+  weight        Float   @default(1.0)
+  isRequired    Boolean @default(true) @map("is_required")
+  displayOrder  Int     @map("display_order")
+
+  // Each criterion belongs to one assessment template.
+  template ObservationTemplate @relation(fields: [templateId], references: [templateId])
+
+  @@unique([templateId, displayOrder])
+  @@map("template_criterion")
+}
+
+// Stores the completed in-app observation assessment.
+// Both the Observer and Observee must sign before it is locked.
+model SignedAssessment {
+  assessmentId     String    @id @default(uuid()) @map("assessment_id") @db.Uuid
+  observationId    String    @unique @map("observation_id") @db.Uuid
+  templateId       String    @map("template_id") @db.Uuid
+  responses        Json
+  observerSignedAt DateTime? @map("observer_signed_at")
+  observeeSignedAt DateTime? @map("observee_signed_at")
+  isLocked         Boolean   @default(false) @map("is_locked")
+  completedAt      DateTime? @map("completed_at")
+
+  // Relationships.
+  observation Observation         @relation(fields: [observationId], references: [observationId])
+  template    ObservationTemplate @relation(fields: [templateId], references: [templateId])
+
+  @@map("signed_assessment")
+}
+
+// Stores feedback from Professors about the evaluation process.
+// Both Observers and Observees may submit feedback.
+model ProcessFeedback {
+  feedbackId    String   @id @default(uuid()) @map("feedback_id") @db.Uuid
+  observationId String   @map("observation_id") @db.Uuid
+  professorId   String   @map("professor_id") @db.Uuid
+  feedbackRole  String   @map("feedback_role")
+  satisfaction  Int?
+  difficulties  String?
+  suggestions   String?
+  submittedAt   DateTime @default(now()) @map("submitted_at")
+
+  // Relationships.
+  observation Observation @relation(fields: [observationId], references: [observationId])
+  professor   Professor   @relation(fields: [professorId], references: [professorId])
+
+  // Each professor submits one feedback response per observation and role.
+  @@unique([observationId, professorId, feedbackRole])
+  @@map("process_feedback")
+}
+
+// Stores notifications related to evaluation activities.
+// Notifications can inform users about invitations, deadlines,
+// confirmations, and completed assessments.
+model Notification {
+  notificationId   String    @id @default(uuid()) @map("notification_id") @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  title            String
+  message          String
+  notificationType String    @map("notification_type")
+  isRead           Boolean   @default(false) @map("is_read")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  readAt           DateTime? @map("read_at")
+
+  // Each notification belongs to one user.
+  user AppUser @relation(fields: [userId], references: [userId])
+
+  @@map("notification")
 }
