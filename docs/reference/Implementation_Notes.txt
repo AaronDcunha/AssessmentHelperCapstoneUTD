@@ -58,3 +58,37 @@ of missing data before implementation.
 - Overdue Evaluation Count: use the agreed due/overdue eligibility rule.
 Clarify whether any provisional KPIs appear during the cycle; final KPIs are
 expected after the feedback deadline, while operational reports remain live.
+
+7. FACULTY DASHBOARD PREVIEW - DISPLAY ONLY
+For the Faculty dashboard visual preview, the user authorized the status values,
+recent-activity wording, and semester supplied in the Figma screenshot. Explain
+their preview-only status in the handoff documentation, without an extra visible
+dashboard notice; they do not establish a real cycle or persisted records.
+Do not inject a sample identity, roles, or permissions into the shared shell.
+Keep its missing-user fallback and existing navigation authorization contract.
+Other Faculty screens retain their existing empty states. No backend policy,
+eligibility rule, or persistence behavior changes as part of this visual work.
+
+8. FACULTY NAVIGATION AND SCREEN PURPOSES - FRONTEND HANDOFF
+Keep the five Faculty entries visible. The user's later History-navigation request
+explicitly authorizes a simple read-only frontend at /observations/history,
+superseding the earlier History-page exclusion. Bind History to this route through
+the existing navigation configuration. Use the shared Faculty shell and filters
+for semester, participation role, and status. Show semester, role, course/section,
+other professor, and status/form action for authorized past records. The current
+page receives no records and displays a clear empty state. Do not fabricate data,
+add History APIs, change authentication/database behavior, or expose AC/Admin.
+
+The active Observations list, observation progress/details, confirmed appointment,
+released recommendations, accepted candidates, and incoming requests have distinct
+purposes. Do not offer links that skip signup, release, acceptance, or final pairing
+when the required record is unavailable. Show unavailable prerequisite states.
+Process feedback requires actual cycle participation and an active feedback period;
+without those data, keep its action unavailable. In-app notifications are MVP work;
+automated email remains a stretch goal, not an implemented frontend capability.
+
+Use the current web-form decision and UC5 over older offline signed-upload diagrams.
+Keep one course section per signup form. The attached senior-project notes allow
+multiple observations, while the observee diagram says one course per cycle; no
+global signup cap is added here. Eligibility edge cases, resend cutoffs/retry
+limits, and finalization/AC-review details still require backend policy agreement.

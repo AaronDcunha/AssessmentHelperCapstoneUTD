@@ -14,7 +14,7 @@ export type AppShellProps = {
   headerUser?: PageHeaderProps["user"];
   notificationAction?: PageHeaderProps["notificationAction"];
   subtitle?: string;
-  pageHeaders?: Record<string, { title: string; subtitle?: string }>;
+  pageHeaders?: Record<string, { title: string; subtitle?: string; facultyLayout?: boolean }>;
 };
 
 export function AppShell({ children, authorizedSections, user, headerUser, notificationAction, subtitle, pageHeaders }: AppShellProps) {
@@ -26,6 +26,7 @@ export function AppShell({ children, authorizedSections, user, headerUser, notif
     .filter((item) => typeof item.href === "string" && (pathname === item.href || pathname.startsWith(`${item.href}/`)))
     .sort((a, b) => String(b.href).length - String(a.href).length)[0];
   const header = pageHeaders?.[pathname];
+  const facultyLayout = header?.facultyLayout === true;
   const expandedSections = Object.fromEntries(authorizedSections.map((section) => [
     section.id, expanded[section.id] ?? (section.id === current?.sectionId || authorizedSections.length === 1),
   ]));
@@ -41,13 +42,15 @@ export function AppShell({ children, authorizedSections, user, headerUser, notif
         <Sidebar authorizedSections={authorizedSections} expandedSections={expandedSections}
           onExpandedChange={(id, open) => setExpanded((previous) => ({ ...previous, [id]: open }))}
           activeItemId={current?.id} onItemNavigate={() => setMobileOpen(false)} user={user} emptyMessage=""
+          centerProfileText={facultyLayout}
           className="h-full w-full lg:w-[288px]" style={{ minHeight: "100%" }} />
       </div>
-      <div className="min-w-0 flex-1 p-ah-24 md:p-ah-32">
+      <div className={`min-w-0 flex-1 p-ah-24 ${facultyLayout ? "md:p-ah-48" : "md:p-ah-32"}`}>
         <div className="mx-auto w-full max-w-[1096px]">
           <PageHeader title={header?.title ?? current?.label ?? "Assessment Helper"}
             subtitle={header?.subtitle ?? subtitle} user={headerUser} notificationAction={notificationAction}
-            className="mb-ah-24" />
+            showUnavailableControls={facultyLayout}
+            className={facultyLayout ? "mb-ah-32" : "mb-ah-24"} />
           <main>{children}</main>
         </div>
       </div>

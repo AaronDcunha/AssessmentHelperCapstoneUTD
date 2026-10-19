@@ -4,7 +4,7 @@
 
 `src/app/(main)/layout.tsx` now renders `AppShell`, composing the sidebar on the left and the page header above centered main content. Small screens have a navigation toggle. Pages supply only their content.
 
-Navigation is intentionally empty for now; the shared layout passes `authorizedSections={[]}`. Populate it with authorized application destinations as pages become available. At auth integration, retain the server layout's `requireUser()` check. Supply safe identity data through `user` (sidebar) and `headerUser` (header), and a real `notificationAction` when available. No sample identity, semester, or fake action is injected. Restricted pages and APIs still enforce access independently.
+The shared layout supplies the existing public Faculty preview destinations, including the read-only `/observations/history` page. No production permission names or role grants are inferred. At auth integration, retain the server layout's `requireUser()` check and supply server-authorized destinations. Supply safe identity through `user` (sidebar) and `headerUser` (header), and a real `notificationAction` when available. The dashboard's screenshot semester is display-only preview content; no sample identity or fake action is injected. Restricted pages and APIs must enforce access independently. Faculty page metadata opts into the shared Figma spacing/control presentation; component preview pages keep the default shell layout.
 
 The longest matching navigation destination determines the active link and default header title. Pass `pageHeaders` with exact pathname keys to override page titles/subtitles, and `subtitle` for shared cycle context. Header callbacks must come from a Client Component; the server layout can pass serializable link actions. The global header replaces the old empty 80px placeholder.
 
@@ -27,7 +27,7 @@ Required props are `label`, `href` (the Next.js Link string or URL object), and 
 
 Figma master `1:134` uses a 248x44px single-line reference, 24px icons, a 12px gap/horizontal padding, AH Body text, light text, 8px corners, an active green hover surface, and a 4x28px orange active marker 8px below the top. The implementation centers the icon/text within a minimum 44px height using semantic spacing tokens. It shrinks to its container and allows long labels to wrap and increase height; no ellipsis or clipped text. The 248px width, 44px minimum height, and 28px marker are component dimensions rather than new global tokens.
 
-Keyboard focus uses the existing global 2px outline with the contrasting `light` token. Links retain native Tab, Enter, modified-click, and context-menu behavior. There is no disabled variant in the Figma master; unavailable destinations should be omitted by the parent rather than supplying a false destination or a fake disabled anchor. This is not an authorization mechanism.
+Keyboard focus uses the existing global 2px outline with the contrasting `light` token. Working links retain native Tab, Enter, modified-click, and context-menu behavior. There is no disabled variant in the Figma master. `UnavailableNavigationItem` remains available for explicit no-route states; History now uses a working `NavigationItem` after the user authorized its read-only page. Denied destinations remain omitted; neither component grants authorization.
 
 The module has no hooks or client directive and can be composed in Server and Client Components. It contains no routes, identity fetching, or permission rules. The interactive preview is `/test/task-1/navigation-item`.
 
@@ -99,7 +99,7 @@ The component has no hooks or client directive, so static/navigational usage wor
 
 Import `Sidebar` / `SidebarProps` from `@/components/layout/sidebar`. The central `navigation-config.ts` exports `navigationDefinitions`, `createNavigationConfig`, `filterNavigation`, `navigationIcons`, and the navigation data/binding/authorization types.
 
-The definitions list all 16 Figma destinations, their labels/icons, and the Faculty, Assessment Committee, and Admin sections. IDs such as `faculty.dashboard` identify UI entries, not permissions or paths. `createNavigationConfig(bindings)` accepts a map from these IDs to `{ href, permission? }`. It omits destinations without a binding and removes empty sections. There are intentionally no guessed production paths or permission values. Keep approved bindings centralized in this module when those contracts are finalized. Until then, a parent supplies bindings or complete section data; the preview uses working local anchors only.
+The definitions list all 16 Figma destinations, their labels/icons, and the Faculty, Assessment Committee, and Admin sections. IDs such as `faculty.dashboard` identify UI entries, not permissions or paths. `createNavigationConfig(bindings)` accepts a map from these IDs to `{ href, permission? }` or `{ unavailableReason, permission? }`. An explicitly unavailable entry uses `UnavailableNavigationItem`, a keyboard-focusable disabled link with an accessible explanation and no URL. It is filtered by the same authorization contract as working destinations; it does not grant access. History is bound to its implemented `/observations/history` route. Entries without either binding are omitted and empty sections removed. There are no guessed production permission values.
 
 Sidebar requires one of two authorization contracts:
 

@@ -8,14 +8,17 @@ export const navigationIcons = {
 };
 export type NavigationIconName = keyof typeof navigationIcons;
 
+type NavigationTarget =
+  | { href: NavigationItemProps["href"]; unavailableReason?: never }
+  | { href?: never; unavailableReason: string };
+
 export type NavigationDestination = {
   id: string;
   label: string;
   icon: NavigationIconName;
-  href: NavigationItemProps["href"];
   /** Caller-supplied backend identifier, if agreed. It never grants access by itself. */
   permission?: string;
-};
+} & NavigationTarget;
 
 export type NavigationSection = {
   id: string;
@@ -52,7 +55,7 @@ export const navigationDefinitions = [
 ] as const;
 
 export type NavigationDestinationId = typeof navigationDefinitions[number]["items"][number]["id"];
-export type NavigationBindings = Partial<Record<NavigationDestinationId, Pick<NavigationDestination, "href" | "permission">>>;
+export type NavigationBindings = Partial<Record<NavigationDestinationId, NavigationTarget & Pick<NavigationDestination, "permission">>>;
 
 /** No fallback routes or production permission names: omit destinations without a binding. */
 export function createNavigationConfig(bindings: NavigationBindings): NavigationSection[] {
