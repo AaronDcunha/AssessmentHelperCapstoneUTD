@@ -1,0 +1,434 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Stores user accounts for Administrators, Assessment Committee
+// members, and Professors.
+model AppUser {
+  userId   String  @id @default(uuid()) @map("user_id") @db.Uuid
+  fullName String  @map("full_name")
+  username String  @unique
+  email    String  @unique
+  isActive Boolean @default(true) @map("is_active")
+
+  // Authentication relationships.
+  userRoles       UserRole[]
+  loginCredential LoginCredential?
+
+  // Faculty profile.
+  professor Professor?
+
+  // Notifications received by the user.
+  notifications Notification[]
+
+  @@map("app_user")
+}
+
+// Defines available system roles, such as Admin, AC Member, and Professor.
+model Role {
+  roleId   String @id @default(uuid()) @map("role_id") @db.Uuid
+  roleName String @unique @map("role_name")
+
+  // Connects roles to users and permissions.
+  userRoles       UserRole[]
+  rolePermissions RolePermission[]
+
+  @@map("role")
+}
+
+// Defines the individual actions that a role may be allowed to perform.
+model Permission {
+  permissionId   String @id @default(uuid()) @map("permission_id") @db.Uuid
+  permissionName String @unique @map("permission_name")
+
+  // A permission may be assigned to multiple roles.
+  rolePermissions RolePermission[]
+
+  @@map("permission")
+}
+
+// Connects users to their assigned roles.
+// Allows one user to hold multiple roles.
+model UserRole {
+  userId String @map("user_id") @db.Uuid
+  roleId String @map("role_id") @db.Uuid
+
+  // Foreign key relationships.
+  user AppUser @relation(fields: [userId], references: [userId])
+  role Role    @relation(fields: [roleId], references: [roleId])
+
+  // Prevents assigning the same role to a user more than once.
+  @@id([userId, roleId])
+  @@map("user_role")
+}
+
+// Connects roles to permissions.
+// Allows each role to have multiple permissions.
+model RolePermission {
+  roleId       String @map("role_id") @db.Uuid
+  permissionId String @map("permission_id") @db.Uuid
+
+  // Foreign key relationships.
+  role       Role       @relation(fields: [roleId], references: [roleId])
+  permission Permission @relation(fields: [permissionId], references: [permissionId])
+
+  // Prevents duplicate role-permission assignments.
+  @@id([roleId, permissionId])
+  @@map("role_permission")
+}
+
+// Stores login credentials separately from general user information.
+// Authentication information should not be stored in the professor profile.
+model LoginCredential {
+  credentialId String   @id @default(uuid()) @map("credential_id") @db.Uuid
+  userId       String   @unique @map("user_id") @db.Uuid
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  // Each credential record belongs to one user.
+  user AppUser @relation(fields: [userId], references: [userId])
+
+  @@map("login_credential")
+}
+
+// Stores academic departments within the university.
+// Used to organize professors and support department-based
+// eligibility checks when selecting observers.
+model Department {
+  departmentId   String @id @default(uuid()) @map("department_id") @db.Uuid
+  departmentName String @unique @map("department_name")
+
+  professors Professor[]
+  courses    Course[]
+
+  @@map("department")
+}
+
+// Stores faculty hiring levels and their evaluation frequency.
+// Example: Assistant Professors are evaluated every 1 year,
+// while Associate and Full Professors are evaluated every 2 years.
+model HiringLevel {
+  hiringLevelId           String @id @default(uuid()) @map("hiring_level_id") @db.Uuid
+  levelName               String @unique @map("level_name")
+  evaluationIntervalYears Int    @map("evaluation_interval_years")
+
+  // One hiring level can be assigned to multiple professors.
+  professors Professor[]
+
+  @@map("hiring_level")
+}
+
+// Stores professor-specific information separately from login accounts.
+// Connects faculty profiles to departments, hiring levels,
+// teaching assignments, and evaluation activities.
+model Professor {
+  professorId   String    @id @default(uuid()) @map("professor_id") @db.Uuid
+  userId        String    @unique @map("user_id") @db.Uuid
+  departmentId  String    @map("department_id") @db.Uuid
+  hiringLevelId String    @map("hiring_level_id") @db.Uuid
+  hireDate      DateTime? @map("hire_date") @db.Date
+
+  // Faculty profile relationships.
+  user        AppUser     @relation(fields: [userId], references: [userId])
+  department  Department  @relation(fields: [departmentId], references: [departmentId])
+  hiringLevel HiringLevel @relation(fields: [hiringLevelId], references: [hiringLevelId])
+
+  // Teaching history.
+  teaches Teaches[]
+
+  // Evaluation participation.
+  evaluationSignups     EvaluationSignup[]
+  selectedObservations  Observation[]          @relation("SelectedObserver")
+  observationCandidates ObservationCandidate[] @relation("CandidateProfessor")
+
+  // Feedback submitted about the evaluation process.
+  processFeedback ProcessFeedback[]
+
+  @@map("professor")
+}
+
+// Stores academic semesters such as Fall 2026 or Spring 2027.
+// Organizes course offerings and evaluation cycles.
+model Semester {
+  semesterId String @id @default(uuid()) @map("semester_id") @db.Uuid
+  termCode   String @unique @map("term_code")
+  termName   String @map("term_name")
+
+  // Relationships.
+  courseSections   CourseSection[]
+  evaluationCycles EvaluationCycle[]
+
+  @@map("semester")
+}
+
+// Stores courses offered by academic departments.
+// A course can have multiple sections across different semesters.
+model Course {
+  courseId     String @id @default(uuid()) @map("course_id") @db.Uuid
+  departmentId String @map("department_id") @db.Uuid
+  courseCode   String @map("course_code")
+  courseTitle  String @map("course_title")
+  courseLevel  Int    @map("course_level")
+
+  // Relationships.
+  department     Department      @relation(fields: [departmentId], references: [departmentId])
+  courseSections CourseSection[]
+
+  // Prevents duplicate course codes within the same department.
+  @@unique([departmentId, courseCode])
+  @@map("course")
+}
+
+// Stores individual course sections offered during a semester.
+// Each section may be selected for an evaluation signup.
+model CourseSection {
+  sectionId   String @id @default(uuid()) @map("section_id") @db.Uuid
+  courseId    String @map("course_id") @db.Uuid
+  semesterId  String @map("semester_id") @db.Uuid
+  sectionCode String @map("section_code")
+
+  // Foreign key relationships.
+  course   Course   @relation(fields: [courseId], references: [courseId])
+  semester Semester @relation(fields: [semesterId], references: [semesterId])
+
+  // Related records.
+  teaches       Teaches[]
+  classMeetings ClassMeeting[]
+  signups       EvaluationSignup[]
+
+  @@unique([courseId, semesterId, sectionCode])
+  @@map("course_section")
+}
+
+// Connects professors to the course sections they teach.
+// This table also preserves historical teaching assignments.
+model Teaches {
+  professorId String @map("professor_id") @db.Uuid
+  sectionId   String @map("section_id") @db.Uuid
+
+  // Foreign key relationships.
+  professor Professor     @relation(fields: [professorId], references: [professorId])
+  section   CourseSection @relation(fields: [sectionId], references: [sectionId])
+
+  // Prevents duplicate teaching assignments.
+  @@id([professorId, sectionId])
+  @@map("teaches")
+}
+
+// Stores the scheduled meeting days, times, and locations
+// for individual course sections.
+model ClassMeeting {
+  meetingId String  @id @default(uuid()) @map("meeting_id") @db.Uuid
+  sectionId String  @map("section_id") @db.Uuid
+  dayOfWeek String  @map("day_of_week")
+  startTime String  @map("start_time")
+  endTime   String  @map("end_time")
+  location  String?
+
+  // Each meeting belongs to a specific course section.
+  section CourseSection @relation(fields: [sectionId], references: [sectionId])
+
+  @@map("class_meeting")
+}
+
+// Defines an evaluation cycle and its deadlines.
+// The Assessment Committee manages these cycles.
+model EvaluationCycle {
+  cycleId             String   @id @default(uuid()) @map("cycle_id") @db.Uuid
+  semesterId          String   @map("semester_id") @db.Uuid
+  cycleName           String   @map("cycle_name")
+  signupDeadline      DateTime @map("signup_deadline")
+  observationDeadline DateTime @map("observation_deadline")
+  feedbackDeadline    DateTime @map("feedback_deadline")
+
+  // Relationships.
+  semester     Semester           @relation(fields: [semesterId], references: [semesterId])
+  signups      EvaluationSignup[]
+  observations Observation[]
+
+  @@map("evaluation_cycle")
+}
+
+// Records a professor signing up for an evaluation cycle.
+// Each signup identifies the course section being observed.
+model EvaluationSignup {
+  signupId    String   @id @default(uuid()) @map("signup_id") @db.Uuid
+  cycleId     String   @map("cycle_id") @db.Uuid
+  professorId String   @map("professor_id") @db.Uuid
+  sectionId   String   @map("section_id") @db.Uuid
+  signupDate  DateTime @default(now()) @map("signup_date")
+
+  // Foreign key relationships.
+  cycle        EvaluationCycle @relation(fields: [cycleId], references: [cycleId])
+  professor    Professor       @relation(fields: [professorId], references: [professorId])
+  section      CourseSection   @relation(fields: [sectionId], references: [sectionId])
+  observations Observation[]
+
+  // An observee signs up only once per cycle.
+  @@unique([cycleId, professorId])
+  // Allows observations to reference the signup and its cycle together.
+  @@unique([signupId, cycleId])
+  @@map("evaluation_signup")
+}
+
+// Tracks the observation process for a professor's signup.
+// Stores the selected observer, scheduling information,
+// assessment, and process feedback.
+model Observation {
+  observationId String    @id @default(uuid()) @map("observation_id") @db.Uuid
+  signupId      String    @map("signup_id") @db.Uuid
+  cycleId       String    @map("cycle_id") @db.Uuid
+  observerId    String?   @map("observer_id") @db.Uuid
+  status        String    @default("PENDING")
+  scheduledAt   DateTime? @map("scheduled_at")
+  completedAt   DateTime? @map("completed_at")
+
+  // Foreign key relationships.
+  signup   EvaluationSignup @relation(fields: [signupId, cycleId], references: [signupId, cycleId])
+  cycle    EvaluationCycle  @relation(fields: [cycleId], references: [cycleId])
+  observer Professor?       @relation("SelectedObserver", fields: [observerId], references: [professorId])
+
+  // Observer matching and scheduling.
+  candidates  ObservationCandidate[]
+  timeOptions ObservationTimeOption[]
+
+  // Assessment and feedback.
+  signedAssessment SignedAssessment?
+  processFeedback  ProcessFeedback[]
+
+  @@map("observation")
+}
+
+// Stores eligible observer candidates for an observation.
+// Tracks invitations and each candidate's response.
+model ObservationCandidate {
+  candidateId   String    @id @default(uuid()) @map("candidate_id") @db.Uuid
+  observationId String    @map("observation_id") @db.Uuid
+  professorId   String    @map("professor_id") @db.Uuid
+  status        String    @default("ELIGIBLE")
+  invitedAt     DateTime? @map("invited_at")
+  expiresAt     DateTime? @map("expires_at")
+  respondedAt   DateTime? @map("responded_at")
+
+  // Foreign key relationships.
+  observation Observation @relation(fields: [observationId], references: [observationId])
+  professor   Professor   @relation("CandidateProfessor", fields: [professorId], references: [professorId])
+
+  // Prevents duplicate candidates for the same observation.
+  @@unique([observationId, professorId])
+  @@map("observation_candidate")
+}
+
+// Stores preferred observation dates selected by the observee.
+// The actual meeting time comes from the course section schedule.
+model ObservationTimeOption {
+  timeOptionId  String   @id @default(uuid()) @map("time_option_id") @db.Uuid
+  observationId String   @map("observation_id") @db.Uuid
+  preferredDate DateTime @map("preferred_date") @db.Date
+
+  // Each preferred date belongs to an observation.
+  observation Observation @relation(fields: [observationId], references: [observationId])
+
+  @@unique([observationId, preferredDate])
+  @@map("observation_time_option")
+}
+
+// Stores assessment templates configured by the Assessment Committee.
+// A template contains criteria used during classroom observations.
+model ObservationTemplate {
+  templateId   String   @id @default(uuid()) @map("template_id") @db.Uuid
+  templateName String   @map("template_name")
+  description  String?
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  // A template contains multiple assessment criteria.
+  criteria    TemplateCriterion[]
+  assessments SignedAssessment[]
+
+  @@map("observation_template")
+}
+
+// Defines individual criteria belonging to an observation template.
+// Each criterion can have its own rating range and weight.
+model TemplateCriterion {
+  criterionId   String  @id @default(uuid()) @map("criterion_id") @db.Uuid
+  templateId    String  @map("template_id") @db.Uuid
+  criterionText String  @map("criterion_text")
+  questionType  String  @map("question_type")
+  minRating     Int?    @map("min_rating")
+  maxRating     Int?    @map("max_rating")
+  weight        Float   @default(1.0)
+  isRequired    Boolean @default(true) @map("is_required")
+  displayOrder  Int     @map("display_order")
+
+  // Each criterion belongs to one assessment template.
+  template ObservationTemplate @relation(fields: [templateId], references: [templateId])
+
+  @@unique([templateId, displayOrder])
+  @@map("template_criterion")
+}
+
+// Stores the completed in-app observation assessment.
+// Both the Observer and Observee must sign before it is locked.
+model SignedAssessment {
+  assessmentId     String    @id @default(uuid()) @map("assessment_id") @db.Uuid
+  observationId    String    @unique @map("observation_id") @db.Uuid
+  templateId       String    @map("template_id") @db.Uuid
+  responses        Json
+  observerSignedAt DateTime? @map("observer_signed_at")
+  observeeSignedAt DateTime? @map("observee_signed_at")
+  isLocked         Boolean   @default(false) @map("is_locked")
+  completedAt      DateTime? @map("completed_at")
+
+  // Relationships.
+  observation Observation         @relation(fields: [observationId], references: [observationId])
+  template    ObservationTemplate @relation(fields: [templateId], references: [templateId])
+
+  @@map("signed_assessment")
+}
+
+// Stores feedback from Professors about the evaluation process.
+// Both Observers and Observees may submit feedback.
+model ProcessFeedback {
+  feedbackId    String   @id @default(uuid()) @map("feedback_id") @db.Uuid
+  observationId String   @map("observation_id") @db.Uuid
+  professorId   String   @map("professor_id") @db.Uuid
+  feedbackRole  String   @map("feedback_role")
+  satisfaction  Int?
+  difficulties  String?
+  suggestions   String?
+  submittedAt   DateTime @default(now()) @map("submitted_at")
+
+  // Relationships.
+  observation Observation @relation(fields: [observationId], references: [observationId])
+  professor   Professor   @relation(fields: [professorId], references: [professorId])
+
+  // Each professor submits one feedback response per observation and role.
+  @@unique([observationId, professorId, feedbackRole])
+  @@map("process_feedback")
+}
+
+// Stores notifications related to evaluation activities.
+// Notifications can inform users about invitations, deadlines,
+// confirmations, and completed assessments.
+model Notification {
+  notificationId   String    @id @default(uuid()) @map("notification_id") @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  title            String
+  message          String
+  notificationType String    @map("notification_type")
+  isRead           Boolean   @default(false) @map("is_read")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  readAt           DateTime? @map("read_at")
+
+  // Each notification belongs to one user.
+  user AppUser @relation(fields: [userId], references: [userId])
+
+  @@map("notification")
+}
