@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,11 +12,17 @@ import ts from "typescript";
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const require = createRequire(import.meta.url);
 const cache = new Map();
+let currentUser = { id: "faculty-id", username: "faculty", name: "Faculty User", roles: ["Faculty"],
+  permissions: ["profile.read.own", "observations.read.own"] };
 function load(filename) {
   const path = resolve(root, filename);
   if (cache.has(path)) return cache.get(path);
   const loaded = { exports: {} };
   const localRequire = (name) => {
+    if (name === "@/server/permissions") return { requireUser: async () => {
+      if (!currentUser) throw new Error("Unauthenticated");
+      return currentUser;
+    } };
     if (!name.startsWith("@/") && !name.startsWith(".")) return require(name);
     const base = name.startsWith("@/") ? resolve(root, "src", name.slice(2)) : resolve(dirname(path), name);
     return load(existsSync(`${base}.tsx`) ? `${base}.tsx` : `${base}.ts`);
@@ -67,10 +73,10 @@ test("Denied History is absent from the DOM even in a collapsed section", () => 
   assert.doesNotMatch(html, /History|href="\/dashboard"|data-navigation-section/);
 });
 
-test("The application layout binds History to its implemented route and marks it active", () => {
+test("The application layout binds History to its implemented route and marks it active", async () => {
   const MainLayout = load("src/app/(main)/layout.tsx").default;
   const { facultyRoutes } = load("src/components/observations/faculty-routes.ts");
-  const shell = MainLayout({ children: null });
+  const shell = await MainLayout({ children: null });
   const sections = shell.props.authorizedSections;
   const history = sections.flatMap((section) => section.items).find((item) => item.id === "faculty.history");
   assert.equal(history.href, facultyRoutes.history);
@@ -81,4 +87,39 @@ test("The application layout binds History to its implemented route and marks it
   assert.match(html, /href="\/observations\/history"/);
   assert.doesNotMatch(html, /aria-disabled="true"/);
   assert.equal((html.match(/aria-current="page"/g) || []).length, 1);
+});
+
+test("Faculty navigation includes five working routes and real identity without Admin tools", async () => {
+  const shell = await load("src/app/(main)/layout.tsx").default({ children: null });
+  assert.deepEqual(shell.props.authorizedSections.map(s => s.id), ["faculty"]);
+  assert.equal(shell.props.authorizedSections[0].items.length, 5);
+  assert.equal(shell.props.user.name, currentUser.name);
+  assert.equal(shell.props.headerUser.name, currentUser.name);
+});
+
+test("Admin tools require effective permission, not just an Admin label", async () => {
+  const original = currentUser;
+  try {
+    currentUser = { ...original, roles: ["Admin"] };
+    const layout = load("src/app/(main)/layout.tsx").default;
+    assert.deepEqual((await layout({children:null})).props.authorizedSections.map(s=>s.id),["faculty"]);
+    currentUser = { ...currentUser, permissions: [...original.permissions, "test:admin"] };
+    const sections = (await layout({children:null})).props.authorizedSections;
+    assert.deepEqual(sections.map(s=>s.id),["faculty","admin"]);
+    const links = sections[1].items.map(item=>item.href);
+    const pages = readdirSync(resolve(root,"src/app/(main)/test"),{recursive:true})
+      .map(path=>String(path).replaceAll('\\','/'))
+      .filter(path=>path==='page.tsx'||path.endsWith('/page.tsx'))
+      .flatMap(path=>path.startsWith('[area]/') ? ['/test/faculty','/test/ac','/test/admin'] : ['/test'+(path==='page.tsx'?'':'/'+path.slice(0,-'/page.tsx'.length))]);
+    assert.deepEqual([...links].sort(),[...pages,'/auth-test'].sort());
+    assert.equal(links.length,new Set(links).size);
+  } finally { currentUser = original; }
+});
+
+test("Main layout rejects anonymous users", async () => {
+  const original = currentUser;
+  try {
+    currentUser = null;
+    await assert.rejects(load("src/app/(main)/layout.tsx").default({children:null}),/Unauthenticated/);
+  } finally { currentUser = original; }
 });

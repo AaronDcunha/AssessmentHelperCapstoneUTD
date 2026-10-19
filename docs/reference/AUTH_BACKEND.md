@@ -8,7 +8,7 @@ Start PostgreSQL yourself, run `npm run db:setup` once, configure a random `AUTH
 
 JWTs identify accounts by their database UUID. Account status is checked during session reads. Protected requests reload the current database roles and permission links; client session updates cannot grant access. Removing roles/permission links or disabling an account takes effect on subsequent protected requests. Password changes do not revoke existing JWTs; sessions retain the existing one-hour lifetime.
 
-For component test pages only, role names Faculty/AC/Admin also map to temporary `test:*` fixture permissions with the agreed hierarchy. Business permissions come from role_permission links. `/test` and `/auth-test` remain Admin-only, so Faculty and AC logins currently reach `/forbidden` after login until product landing routes are added. Record ownership must still be checked by future business services.
+For component test pages only, role names Faculty/AC/Admin also map to temporary `test:*` fixture permissions with the agreed hierarchy. Business permissions come from role_permission links. `/dashboard` is now the default landing page for every authenticated account with Faculty access. The sidebar includes five Faculty destinations and, for Admin only, Component Tests (`/test`) and Authentication Tests (`/auth-test`). Those test routes remain Admin-only. The shared shell receives the signed-in name and roles. Dashboard and observation route layouts enforce their read permissions on the server. Reserved development fixtures receive the same Faculty preview read permissions. Record ownership must still be checked by future business services.
 
 Checks: `node --test tests/unit/account-auth.test.mjs tests/unit/demo-auth.test.mjs`; `node tests/integration/database-auth.mjs` against a running seeded development server (optional `TEST_BASE_URL`). Integration checks create only sessions and do not edit database records.
 
@@ -60,10 +60,10 @@ const result = await signIn("credentials", {
   username,
   password,
   redirect: false,
-  redirectTo: "/test",
+  redirectTo: "/dashboard",
 });
 // On result.error: show "Invalid username or password".
-// On success: router.push(result.url ?? "/test").
+// On success: router.push(result.url ?? "/dashboard").
 
 await signOut({ redirectTo: "/login" });
 ```

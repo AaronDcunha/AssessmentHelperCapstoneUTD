@@ -55,7 +55,6 @@ export function AppShell({ children, authorizedSections, user, headerUser, notif
               <AccountDropdown name={headerUser.name} initials={headerUser.initials}
                 onLogout={() => signOut({ redirectTo: "/login" })} />
             ) : undefined}
-            className="mb-ah-24" />
             showUnavailableControls={facultyLayout}
             className={facultyLayout ? "mb-ah-32" : "mb-ah-24"} />
           <main>{children}</main>

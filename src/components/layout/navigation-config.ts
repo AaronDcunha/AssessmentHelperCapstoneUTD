@@ -28,6 +28,28 @@ export type NavigationSection = {
 };
 export type NavigationAuthorization = (item: NavigationDestination, section: NavigationSection) => boolean;
 
+/** Temporary Admin shortcuts for every implemented preview and role probe. */
+export const adminTestPages = [
+  { id: "admin.tests", label: "Component Tests", icon: "grid", href: "/test" },
+  { id: "admin.authTests", label: "Authentication Tests", icon: "shield", href: "/auth-test" },
+  { id: "admin.alertAcTest", label: "Alert AC Test", icon: "people", href: "/test/alert-ac" },
+  { id: "admin.ratingTest", label: "Assessment Rating Test", icon: "clipboard", href: "/test/assessment-rating" },
+  { id: "admin.textActionTest", label: "Text Action Test", icon: "document", href: "/test/text-action" },
+  { id: "admin.iconsTest", label: "Icons Test", icon: "grid", href: "/test/task-1/icons" },
+  { id: "admin.avatarTest", label: "Avatar Test", icon: "person", href: "/test/task-1/avatar" },
+  { id: "admin.navigationTest", label: "Navigation Item Test", icon: "document", href: "/test/task-1/navigation-item" },
+  { id: "admin.roleHeadingTest", label: "Role Heading Test", icon: "people", href: "/test/task-1/role-heading" },
+  { id: "admin.sidebarTest", label: "Sidebar Test", icon: "grid", href: "/test/task-1/sidebar" },
+  { id: "admin.headerTest", label: "Page Header Test", icon: "document", href: "/test/task-1/page-header" },
+  { id: "admin.datesTest", label: "Proposed Dates Test", icon: "calendar", href: "/test/task-2" },
+  { id: "admin.task3Test", label: "Metrics & Status Test", icon: "grid", href: "/test/task-3" },
+  { id: "admin.task4Test", label: "Question Editor Test", icon: "grid", href: "/test/task-4" },
+  { id: "admin.task5Test", label: "Attention Table Test", icon: "grid", href: "/test/task-5" },
+  { id: "admin.facultyAccessTest", label: "Faculty Access Test", icon: "person", href: "/test/faculty" },
+  { id: "admin.acAccessTest", label: "AC Access Test", icon: "people", href: "/test/ac" },
+  { id: "admin.adminAccessTest", label: "Admin Access Test", icon: "shield", href: "/test/admin" },
+] as const;
+
 /** Figma destination IDs identify UI entries, NOT backend permissions or URL paths. */
 export const navigationDefinitions = [
   { id: "faculty", label: "Faculty", icon: "person", items: [
@@ -47,6 +69,7 @@ export const navigationDefinitions = [
     { id: "ac.semester", label: "Semester Settings", icon: "calendar" },
   ] },
   { id: "admin", label: "Admin", icon: "shield", items: [
+    ...adminTestPages.map(({ id, label, icon }) => ({ id, label, icon })),
     { id: "admin.dashboard", label: "Dashboard", icon: "grid" },
     { id: "admin.users", label: "Users", icon: "people" },
     { id: "admin.roles", label: "Roles & Permissions", icon: "shield" },
@@ -56,6 +79,10 @@ export const navigationDefinitions = [
 
 export type NavigationDestinationId = typeof navigationDefinitions[number]["items"][number]["id"];
 export type NavigationBindings = Partial<Record<NavigationDestinationId, NavigationTarget & Pick<NavigationDestination, "permission">>>;
+
+export const adminTestBindings: NavigationBindings = Object.fromEntries(
+  adminTestPages.map(({ id, href }) => [id, { href, permission: "test:admin" }]),
+);
 
 /** No fallback routes or production permission names: omit destinations without a binding. */
 export function createNavigationConfig(bindings: NavigationBindings): NavigationSection[] {

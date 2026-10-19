@@ -1,28 +1,27 @@
 import type { ReactNode } from "react";
 import { AppShell } from "@/components/layout/app-shell";
 import { requireUser } from "@/server/permissions";
-import { createNavigationConfig } from "@/components/layout/navigation-config";
+import { adminTestBindings, createNavigationConfig, filterNavigation } from "@/components/layout/navigation-config";
 import { facultyPageHeaders, facultyRoutes } from "@/components/observations/faculty-routes";
 
-export default function MainLayout({ children }: { children: ReactNode }) {
-  // Auth integration: retain requireUser() from the auth branch here, then pass
-  // server-authorized navigation and safe identity fields to AppShell. This component
-  // branch has no auth backend. Pages/APIs must also check access independently.
+export default async function MainLayout({ children }: { children: ReactNode }) {
+  const user = await requireUser();
+  const sections = createNavigationConfig({
+    "faculty.dashboard": { href: facultyRoutes.dashboard, permission: "profile.read.own" },
+    "faculty.evaluation": { href: facultyRoutes.evaluation, permission: "profile.read.own" },
+    "faculty.requests": { href: facultyRoutes.requests, permission: "observations.read.own" },
+    "faculty.observations": { href: facultyRoutes.observations, permission: "observations.read.own" },
+    "faculty.history": { href: facultyRoutes.history, permission: "observations.read.own" },
+    ...adminTestBindings,
+  });
   return (
-  <AppShell
-    // These routes contain only empty states and temporary frontend previews.
-    // Replace these bindings with server-authorized destinations at auth integration.
-    // No role or permission names are assumed here.
-    authorizedSections={createNavigationConfig({
-      "faculty.dashboard": { href: facultyRoutes.dashboard },
-      "faculty.evaluation": { href: facultyRoutes.evaluation },
-      "faculty.requests": { href: facultyRoutes.requests },
-      "faculty.observations": { href: facultyRoutes.observations },
-      "faculty.history": { href: facultyRoutes.history },
-    })}
-    pageHeaders={facultyPageHeaders}
-  >
-    {children}
-  </AppShell>
-);
+    <AppShell
+      authorizedSections={filterNavigation(sections, item => !!item.permission && user.permissions.includes(item.permission))}
+      user={{ name: user.name, initials: user.name, description: user.roles.join(" · ") }}
+      headerUser={{ name: user.name, initials: user.name }}
+      pageHeaders={facultyPageHeaders}
+    >
+      {children}
+    </AppShell>
+  );
 }

@@ -20,11 +20,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   })],
   callbacks: {
     redirect({ url, baseUrl }) {
-      // The component branch owns /test; use it as the temporary landing page.
-      if (url === baseUrl || url === `${baseUrl}/`) return `${baseUrl}/test`;
+      // The faculty dashboard is the default landing page for authenticated users.
+      if (url === baseUrl || url === `${baseUrl}/`) return `${baseUrl}/dashboard`;
       if (url.startsWith("/") && !url.startsWith("//")) return `${baseUrl}${url}`;
       if (new URL(url).origin === baseUrl) return url;
-      return `${baseUrl}/test`;
+      return `${baseUrl}/dashboard`;
     },
     async jwt({ token, user }) {
       if (user) token.sub = user.id;

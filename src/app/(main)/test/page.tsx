@@ -5,10 +5,9 @@ export const metadata: Metadata = {
   title: "Test Page | Assessment Helper",
 };
 
-// TODO(login): Use redirectTo: "/test" as the temporary login destination.
+// Component previews are linked from Admin navigation.
 // The shared main layout now requires an authenticated session.
 export default function TestPage() {
-  // TODO(access): Add server permission checks when protected content is added.
-  // Do not rely on navbar visibility for access.
+  // The test layout enforces Admin access for every component preview.
   return <ComponentDemo />;
 }

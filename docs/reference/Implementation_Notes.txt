@@ -156,3 +156,16 @@ Keep one course section per signup form. The attached senior-project notes allow
 multiple observations, while the observee diagram says one course per cycle; no
 global signup cap is added here. Eligibility edge cases, resend cutoffs/retry
 limits, and finalization/AC-review details still require backend policy agreement.
+
+October 19, 2026 faculty/auth merge integration (overrides earlier empty-navigation
+and no-Admin-exposure preview notes): /dashboard is the default page and login
+destination. Restore requireUser in the main layout; pass actual user identity.
+Show all five implemented Faculty destinations subject to effective read grants.
+Only Admin sees Component Tests and Authentication Tests under Admin, and
+direct requests to those pages remain guarded. Dashboard/observation layouts
+enforce read access separately. Keep existing Faculty preview/empty-state content;
+no business records or dashboard queries are introduced by this integration.
+
+October 19, 2026 Admin navigation update: temporarily include direct links to
+all existing component preview pages and Faculty/AC/Admin role probes under
+Admin, including Alert AC. All links require test:admin and retain route guards.

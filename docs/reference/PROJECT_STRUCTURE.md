@@ -95,3 +95,8 @@ Run the scheduler as an explicit separate process when implemented; do not start
 6. Implement feedback, operational reports, agreed KPIs, and notifications/email.
 
 Build meaningful tests alongside business rules and access controls. Stretch goals should not block core workflows.
+
+October 19 faculty/auth integration: the shared main layout now authenticates
+and supplies user identity plus permission-filtered Faculty/Admin test navigation.
+Root and successful logins default to /dashboard. Faculty route-family layouts
+enforce read access. Business dashboard data remains preview/empty state.

@@ -32,7 +32,7 @@ export default function LoginForm() {
         username,
         password,
         redirect: false,
-        redirectTo: "/test",
+        redirectTo: "/dashboard",
       });
 
       if (!result || result.error) {
@@ -40,7 +40,7 @@ export default function LoginForm() {
         return;
       }
 
-      router.push(result.url ?? "/test");
+      router.push(result.url ?? "/dashboard");
       router.refresh();
       navigating = true;
     } catch {
