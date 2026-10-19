@@ -1,6 +1,6 @@
 <!-- BEGIN:nextjs-agent-rules -->
 
-# This is NOT the Next.js you know
+## This is NOT the Next.js you know
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
 
@@ -40,6 +40,7 @@ Do not silently invent KPI formulas, invitation retry limits, acknowledgement ru
 - Use Figma spacing tokens via `p-ah-24`, `gap-ah-16`, `mt-ah-8`, etc. Supported pixel values: 0, 4, 8, 12, 16, 24, 32, 40, 48, 64 (stored as rem at a 16px root). Tailwind's ordinary `p-4` means 16px, not Figma's 4px; the `ah-` names make this explicit.
 - Use `rounded-ah-0`, `rounded-ah-8`, `rounded-ah-12`, or `rounded-ah-pill` for the Figma radii. Existing shared control sizes are available as `h-control-56` and `h-control-88`; apply them only to components that use those sizes in Figma.
 - Global defaults include the light color scheme, body text style, and a visible keyboard focus outline. Preserve focus visibility; add a contrasting focus treatment for controls on green surfaces. Figma currently defines no shared shadow/effect styles, so do not invent a global shadow system. Breakpoints and component-specific sizing remain implementation decisions, not established Figma tokens.
+- On the authentication backend branch, read `docs/reference/AUTH_BACKEND.md` before changing login or access controls. Mock identities require `AUTH_DEMO_ENABLED=true` and development mode, and must remain disabled in production. The `test:*` permissions are temporary fixtures, not the final business permission model. Preserve the frontend teammate's ownership of `/login`.
 
 - Follow the responsibility map in `docs/reference/PROJECT_STRUCTURE.md`; keep shared business rules in server services and authorized reads in server queries.
 - Enforce permissions, record ownership, and deadline checks on the server, including direct API requests. UI visibility is not authorization.

@@ -19,6 +19,8 @@ export type PageHeaderProps = Omit<ComponentProps<"header">, "title" | "children
   subtitle?: string | null;
   headingLevel?: 1 | 2 | 3 | 4 | 5 | 6;
   notificationAction?: PageHeaderAction;
+  /** Optional shared account dropdown, replacing the standalone avatar/action. */
+  accountControl?: ReactNode;
   /** Reserve the Figma control positions without inventing actions or identity. */
   showUnavailableControls?: boolean;
   user?: {
@@ -45,6 +47,7 @@ function HeaderAction({ action, children, className }: { action: PageHeaderActio
 
 /** Shared presentational page heading. The parent supplies identity and working actions. */
 export function PageHeader({
+  title, subtitle, headingLevel = 1, notificationAction, accountControl, user, className, ...props
   title, subtitle, headingLevel = 1, notificationAction, showUnavailableControls = false, user, className, ...props
 }: PageHeaderProps) {
   const Heading = `h${headingLevel}` as "h1" | "h2" | "h3" | "h4" | "h5" | "h6";
@@ -61,6 +64,7 @@ export function PageHeader({
         <Heading className="text-title text-ink">{title}</Heading>
         {subtitle?.trim() && <p className="text-body text-muted">{subtitle}</p>}
       </div>
+      {(notificationAction || user || accountControl) && (
       {(notificationAction || user || showUnavailableControls) && (
         <div className="flex h-ah-48 shrink-0 items-center gap-ah-24 self-end pr-ah-12 sm:self-start">
           {notificationAction && (
@@ -68,6 +72,7 @@ export function PageHeader({
               <BellIcon />
             </HeaderAction>
           )}
+          {accountControl ?? (user && (user.action ? (
           {!notificationAction && showUnavailableControls && (
             <span className="inline-flex size-ah-24 items-center justify-center text-ink" role="img" aria-label="Notifications unavailable" title="Notifications unavailable">
               <BellIcon />
@@ -77,6 +82,7 @@ export function PageHeader({
             <HeaderAction action={user.action} className="size-ah-40 rounded-ah-pill">
               <Avatar initials={user.initials} decorative />
             </HeaderAction>
+          ) : <Avatar initials={user.initials} aria-label={user.name} />))}
           ) : <Avatar initials={user.initials} aria-label={user.name} />)}
           {!user && showUnavailableControls && <Avatar aria-label="User information unavailable" />}
         </div>

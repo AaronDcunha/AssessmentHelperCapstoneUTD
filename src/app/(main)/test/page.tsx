@@ -6,7 +6,7 @@ export const metadata: Metadata = {
 };
 
 // TODO(login): Use redirectTo: "/test" as the temporary login destination.
-// Authentication is not implemented yet; visiting this route does not prove login.
+// The shared main layout now requires an authenticated session.
 export default function TestPage() {
   // TODO(access): Add server permission checks when protected content is added.
   // Do not rely on navbar visibility for access.

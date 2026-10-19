@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { AppShell } from "@/components/layout/app-shell";
+import { requireUser } from "@/server/permissions";
 import { createNavigationConfig } from "@/components/layout/navigation-config";
 import { facultyPageHeaders, facultyRoutes } from "@/components/observations/faculty-routes";
 
