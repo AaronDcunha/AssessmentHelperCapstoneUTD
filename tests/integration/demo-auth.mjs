@@ -22,7 +22,7 @@ async function login(request, username, password) {
   const { csrfToken } = await (await request("/api/auth/csrf")).json();
   return request("/api/auth/callback/credentials", {
     method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Auth-Return-Redirect": "1" },
-    body: new URLSearchParams({ csrfToken, username, password, callbackUrl: `${base}/test` }),
+    body: new URLSearchParams({ csrfToken, username, password, callbackUrl: `${base}/dashboard` }),
   });
 }
 
@@ -42,7 +42,7 @@ for (const role of ["faculty", "ac", "admin"]) {
   assert.equal((await me.json()).username, role);
   const loginPage = await request("/login");
   assert.equal(loginPage.status, 307);
-  assert.equal(new URL(loginPage.headers.get("location"), base).pathname, "/test");
+  assert.equal(new URL(loginPage.headers.get("location"), base).pathname, "/dashboard");
   for (const area of ["faculty", "ac", "admin"]) {
     const allowed = role === "admin" || role === area || (role === "ac" && area === "faculty");
     assert.equal((await request(`/api/test/${area}`)).status, allowed ? 200 : 403);

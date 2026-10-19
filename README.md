@@ -6,23 +6,9 @@ Install Nodejs and Docker
 
 ## Login status
 
-Login frontend and backend are implemented for development: the custom `/login`
-page connects to Auth.js, creates sessions, handles login errors and logout, and
-enforces server-side role-based access on protected test pages and APIs.
+Login uses seeded PostgreSQL accounts and Auth.js sessions. Sample logins are generated locally in `prisma/demo-accounts.txt`. Successful login opens `/dashboard`. Faculty navigation is available to Faculty, AC, and Admin; only Admin sees and can access the test pages.
 
-Authentication currently uses three temporary accounts, all with password `123`:
-
-- `faculty`: Faculty access.
-- `ac`: Faculty and Assessment Committee access.
-- `admin`: Faculty, Assessment Committee, and Admin access.
-
-Unknown usernames and incorrect passwords are rejected. Successful login redirects
-to `/test`; `/auth-test` shows the current identity and permission-test links.
-
-**Database integration remains pending:** replace temporary users with real account
-lookup, password-hash verification, account-status checks, and database-backed roles
-and permissions. Demo login requires the local settings below and is disabled in
-production; database-backed production login is not implemented yet.
+Set `AUTH_DEMO_ENABLED=false` to use only database accounts. Optional reserved `faculty`/`ac`/`admin` logins require development mode and `AUTH_DEMO_ENABLED=true`.
 
 See [authentication backend details](docs/reference/AUTH_BACKEND.md).
 
@@ -45,14 +31,14 @@ Each teammate should generate their own Auth.js secret once, from the project fo
 node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 ```
 
-Copy the output into `.env.local` and enable the temporary development login:
+Copy the output into `.env.local`:
 
 ```dotenv
 AUTH_SECRET=paste_generated_value_here
 AUTH_DEMO_ENABLED=true
 ```
 
-Keep `.env.local` private and uncommitted (it is ignored by Git). Reuse the same secret across restarts; changing it invalidates existing sessions. Restart `npm run dev` after changing these settings. Demo login only works in development, with no database required for authentication.
+Keep `.env.local` private and uncommitted (it is ignored by Git). Reuse the same secret across restarts; changing it invalidates existing sessions. Restart `npm run dev` after changing these settings. Seeded login requires PostgreSQL to be running.
 
 ### Start the services
 

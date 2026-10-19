@@ -7,7 +7,11 @@ export async function getCurrentUser() {
   const session = await auth();
   const id = session?.user?.id;
   if (!id) return null;
-  if (id.startsWith("demo:")) return demoEnabled() ? resolveDemoUser(id.slice("demo:".length)) : null;
+  if (id.startsWith("demo:")) {
+    const demo = demoEnabled() ? resolveDemoUser(id.slice("demo:".length)) : null;
+    // Reserved development fixtures can reach the same faculty previews as seeded users.
+    return demo ? { ...demo, permissions: [...demo.permissions, "profile.read.own", "observations.read.own"] } : null;
+  }
   return resolveDatabaseUser(id);
 }
 

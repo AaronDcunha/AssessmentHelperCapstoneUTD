@@ -3,7 +3,7 @@
 import { useId, useLayoutEffect, useRef, type ComponentProps } from "react";
 import { Avatar } from "@/components/ui/avatar";
 import { BookIcon } from "@/components/ui/icons";
-import { NavigationItem } from "./navigation-item";
+import { NavigationItem, UnavailableNavigationItem } from "./navigation-item";
 import { RoleHeading } from "./role-heading";
 import { filterNavigation, navigationIcons, type NavigationAuthorization, type NavigationDestination, type NavigationSection } from "./navigation-config";
 
@@ -28,6 +28,8 @@ export type SidebarProps = Omit<ComponentProps<"aside">, "children"> & SidebarAu
     accessibleName?: string;
   };
   missingUserLabel?: string;
+  /** Center the profile text block beside the avatar, including the missing-user fallback. */
+  centerProfileText?: boolean;
 };
 
 function SidebarSection({ section, prefix, expanded, onExpandedChange, activeItemId, onItemNavigate }: {
@@ -54,8 +56,9 @@ function SidebarSection({ section, prefix, expanded, onExpandedChange, activeIte
           const ItemIcon = navigationIcons[item.icon];
           return (
             <li key={item.id}>
-              <NavigationItem label={item.label} href={item.href} icon={<ItemIcon />}
+              {item.href !== undefined ? <NavigationItem label={item.label} href={item.href} icon={<ItemIcon />}
                 active={item.id === activeItemId} onNavigate={() => onItemNavigate?.(item)} data-navigation-item={item.id} />
+                : <UnavailableNavigationItem label={item.label} icon={<ItemIcon />} reason={item.unavailableReason} />}
             </li>
           );
         })}
@@ -69,7 +72,7 @@ function SidebarSection({ section, prefix, expanded, onExpandedChange, activeIte
 export function Sidebar({
   authorizedSections, sections, canAccess, expandedSections, onExpandedChange, activeItemId, onItemNavigate,
   user, missingUserLabel = "User information unavailable", navigationLabel = "Main navigation",
-  emptyMessage = "No navigation available.", className, ...props
+  emptyMessage = "No navigation available.", centerProfileText = false, className, ...props
 }: SidebarProps) {
   const prefix = useId();
   const visibleSections = filterNavigation(authorizedSections ?? sections ?? [], authorizedSections !== undefined ? () => true : canAccess ?? (() => false));
@@ -95,7 +98,7 @@ export function Sidebar({
       <div aria-hidden="true" className="min-h-px flex-1" />
       <footer className="flex min-h-ah-64 shrink-0 items-center gap-ah-12">
         <Avatar initials={user?.initials} decorative />
-        <div className="flex min-h-ah-48 min-w-0 flex-1 flex-col gap-ah-4 [overflow-wrap:anywhere]">
+        <div className={`flex min-h-ah-48 min-w-0 flex-1 flex-col gap-ah-4 [overflow-wrap:anywhere] ${centerProfileText ? "justify-center" : ""}`}>
           <p className="text-label">
             <span aria-hidden={accessibleName ? true : undefined}>{name}</span>
             {accessibleName && <span className="sr-only">{accessibleName}</span>}

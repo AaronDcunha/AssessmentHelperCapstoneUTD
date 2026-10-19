@@ -43,7 +43,7 @@ async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
       username,
       password,
       redirect: false,
-      redirectTo: "/test",
+      redirectTo: "/dashboard",
     });
 
     if (!result || result.error) {
@@ -51,7 +51,7 @@ async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
       return;
     }
 
-    router.push(result.url ?? "/test");
+    router.push(result.url ?? "/dashboard");
     router.refresh();
   } catch {
     setError("Unable to sign in. Please try again.");

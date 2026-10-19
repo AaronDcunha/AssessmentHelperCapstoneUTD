@@ -122,3 +122,50 @@ Reserved mock logins remain opt-in development fixtures only; disabling
 AUTH_DEMO_ENABLED does not disable database logins. The existing login frontend
 is unchanged. /test remains Admin-only until product landing pages exist.
 See AUTH_BACKEND.md for setup, module boundaries and verification commands.
+
+7. FACULTY DASHBOARD PREVIEW - DISPLAY ONLY
+For the Faculty dashboard visual preview, the user authorized the status values,
+recent-activity wording, and semester supplied in the Figma screenshot. Explain
+their preview-only status in the handoff documentation, without an extra visible
+dashboard notice; they do not establish a real cycle or persisted records.
+Do not inject a sample identity, roles, or permissions into the shared shell.
+Keep its missing-user fallback and existing navigation authorization contract.
+Other Faculty screens retain their existing empty states. No backend policy,
+eligibility rule, or persistence behavior changes as part of this visual work.
+
+8. FACULTY NAVIGATION AND SCREEN PURPOSES - FRONTEND HANDOFF
+Keep the five Faculty entries visible. The user's later History-navigation request
+explicitly authorizes a simple read-only frontend at /observations/history,
+superseding the earlier History-page exclusion. Bind History to this route through
+the existing navigation configuration. Use the shared Faculty shell and filters
+for semester, participation role, and status. Show semester, role, course/section,
+other professor, and status/form action for authorized past records. The current
+page receives no records and displays a clear empty state. Do not fabricate data,
+add History APIs, change authentication/database behavior, or expose AC/Admin.
+
+The active Observations list, observation progress/details, confirmed appointment,
+released recommendations, accepted candidates, and incoming requests have distinct
+purposes. Do not offer links that skip signup, release, acceptance, or final pairing
+when the required record is unavailable. Show unavailable prerequisite states.
+Process feedback requires actual cycle participation and an active feedback period;
+without those data, keep its action unavailable. In-app notifications are MVP work;
+automated email remains a stretch goal, not an implemented frontend capability.
+
+Use the current web-form decision and UC5 over older offline signed-upload diagrams.
+Keep one course section per signup form. The attached senior-project notes allow
+multiple observations, while the observee diagram says one course per cycle; no
+global signup cap is added here. Eligibility edge cases, resend cutoffs/retry
+limits, and finalization/AC-review details still require backend policy agreement.
+
+October 19, 2026 faculty/auth merge integration (overrides earlier empty-navigation
+and no-Admin-exposure preview notes): /dashboard is the default page and login
+destination. Restore requireUser in the main layout; pass actual user identity.
+Show all five implemented Faculty destinations subject to effective read grants.
+Only Admin sees Component Tests and Authentication Tests under Admin, and
+direct requests to those pages remain guarded. Dashboard/observation layouts
+enforce read access separately. Keep existing Faculty preview/empty-state content;
+no business records or dashboard queries are introduced by this integration.
+
+October 19, 2026 Admin navigation update: temporarily include direct links to
+all existing component preview pages and Faculty/AC/Admin role probes under
+Admin, including Alert AC. All links require test:admin and retain route guards.
