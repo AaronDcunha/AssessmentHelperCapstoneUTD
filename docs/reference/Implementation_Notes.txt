@@ -66,3 +66,34 @@ of missing data before implementation.
 - Overdue Evaluation Count: use the agreed due/overdue eligibility rule.
 Clarify whether any provisional KPIs appear during the cycle; final KPIs are
 expected after the feedback deadline, while operational reports remain live.
+
+October 19, 2026 demo-seed decisions:
+Exclude CourseBook rows without instructor/day/time and date-prefixed days.
+Use the first department encountered among retained rows for each professor.
+Normalize titles before a spaced dash, remove trailing credit labels, and use
+the latest chronological term title. Usernames are firstname_lastname;
+emails are firstname.lastname@fakeutd.edu; initial demo password is 123, hashed.
+Repeatable username hashing assigns about 10% AC and 2% Admin. Everyone has
+Faculty; AC includes Faculty; Admin includes AC and Faculty. Permission grants
+follow that hierarchy: Faculty own-record actions; AC cycle, matching, template,
+approval and reporting actions; Admin account, role, permission and hiring-level
+management. These seed grants do not implement backend authorization.
+See prisma/SEED.md for execution and password hash details.
+
+October 19, 2026 additional demo-seed decisions:
+Create a Fall 2026 cycle using existing term code 26f. Signup deadline is
+October 31, observation deadline November 30, feedback deadline December 7,
+2026, all at 11:59 p.m. America/Chicago, converted to UTC for storage.
+Create one active basic observation template: four required equally weighted
+1-5 ratings for objectives, organization, engagement and understanding, plus
+optional strengths and improvements text. Scale: strongly disagree through
+strongly agree. Preserve AC edits to seeded cycles/templates on reruns.
+Leave downstream participation and assessment records empty.
+
+October 19, 2026 local database setup:
+Run npm run db:setup after configuring .env and starting PostgreSQL yourself
+via docker compose up -d --wait postgres or the Docker app. The script never
+starts Docker or containers. It checks connectivity, deploys committed
+migrations, checks schema drift, then
+runs the demo seed. Existing unmanaged schemas are not automatically reset
+or baselined. Prisma Studio can inspect the resulting database.

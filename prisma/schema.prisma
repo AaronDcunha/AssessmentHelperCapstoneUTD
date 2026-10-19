@@ -12,6 +12,7 @@ datasource db {
 model AppUser {
   userId   String  @id @default(uuid()) @map("user_id") @db.Uuid
   fullName String  @map("full_name")
+  username String  @unique
   email    String  @unique
   isActive Boolean @default(true) @map("is_active")
 
