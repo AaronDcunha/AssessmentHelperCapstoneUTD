@@ -1,3 +1,19 @@
+# Database-backed authentication
+
+October 19 update: the login form now authenticates seeded accounts from PostgreSQL through the existing Auth.js Credentials provider and one-hour JWT sessions. No frontend changes are required.
+
+Start PostgreSQL yourself, run `npm run db:setup` once, configure a random `AUTH_SECRET`, run `npm run dev`, and visit `/login`. Use the locally generated `prisma/demo-accounts.txt`: for example `arden_stone` / `123` (Admin), `amber_arrow` / `123` (AC), or `alder_sol` / `123` (Faculty). Set `AUTH_DEMO_ENABLED=false` to disable the old reserved mock accounts; database login does not depend on that flag.
+
+`account-auth.ts` verifies the seed-format scrypt hash asynchronously with a timing-safe comparison. Missing credentials, malformed hashes, wrong passwords, unknown users and inactive accounts are rejected. The shared `pg` pool in `db.ts` uses DATABASE_URL and parameterized queries against the Prisma-managed public schema; a generated Prisma client is not needed. Connection errors fail closed. `database-auth.ts` loads roles and permissions via the account joins. Password hashes never enter public identity/session responses.
+
+JWTs identify accounts by their database UUID. Account status is checked during session reads. Protected requests reload the current database roles and permission links; client session updates cannot grant access. Removing roles/permission links or disabling an account takes effect on subsequent protected requests. Password changes do not revoke existing JWTs; sessions retain the existing one-hour lifetime.
+
+For component test pages only, role names Faculty/AC/Admin also map to temporary `test:*` fixture permissions with the agreed hierarchy. Business permissions come from role_permission links. `/test` and `/auth-test` remain Admin-only, so Faculty and AC logins currently reach `/forbidden` after login until product landing routes are added. Record ownership must still be checked by future business services.
+
+Checks: `node --test tests/unit/account-auth.test.mjs tests/unit/demo-auth.test.mjs`; `node tests/integration/database-auth.mjs` against a running seeded development server (optional `TEST_BASE_URL`). Integration checks create only sessions and do not edit database records.
+
+The older mock-mode guide below still applies to reserved development fixtures; its database-pending statements are historical and superseded by this update.
+
 # Temporary authentication backend
 
 This branch implements Auth.js Credentials/JWT sessions without a database. The database schema, real account lookup, password-hash verification, account status, production authentication, and final role/permission definitions remain separate work. No accounts are persisted.

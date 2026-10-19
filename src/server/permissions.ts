@@ -1,13 +1,14 @@
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
-import { canAccess, demoEnabled, resolveDemoUser, type TestPermission } from "./demo-auth";
+import { demoEnabled, resolveDemoUser } from "./demo-auth";
+import { resolveDatabaseUser } from "./database-auth";
 
 export async function getCurrentUser() {
-  if (!demoEnabled()) return null;
   const session = await auth();
   const id = session?.user?.id;
-  if (!id?.startsWith("demo:")) return null;
-  return resolveDemoUser(id.slice("demo:".length));
+  if (!id) return null;
+  if (id.startsWith("demo:")) return demoEnabled() ? resolveDemoUser(id.slice("demo:".length)) : null;
+  return resolveDatabaseUser(id);
 }
 
 export async function requireUser() {
@@ -16,15 +17,15 @@ export async function requireUser() {
   return user;
 }
 
-export async function requirePermission(permission: TestPermission) {
+export async function requirePermission(permission: string) {
   const user = await requireUser();
-  if (!canAccess(user, permission)) redirect("/forbidden");
+  if (!user.permissions.includes(permission)) redirect("/forbidden");
   return user;
 }
 
-export async function checkApiPermission(permission: TestPermission) {
+export async function checkApiPermission(permission: string) {
   const user = await getCurrentUser();
   if (!user) return Response.json({ error: "Unauthenticated" }, { status: 401 });
-  if (!canAccess(user, permission)) return Response.json({ error: "Forbidden" }, { status: 403 });
+  if (!user.permissions.includes(permission)) return Response.json({ error: "Forbidden" }, { status: 403 });
   return user;
 }

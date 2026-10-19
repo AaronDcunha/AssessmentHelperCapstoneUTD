@@ -114,3 +114,11 @@ starts Docker or containers. It checks connectivity, deploys committed
 migrations, checks schema drift, then
 runs the demo seed. Existing unmanaged schemas are not automatically reset
 or baselined. Prisma Studio can inspect the resulting database.
+
+October 19, 2026 database login integration (supersedes database-pending notes):
+Auth.js now accepts seeded usernames and verifies stored scrypt hashes.
+Account status and current database role/permission links are checked server-side.
+Reserved mock logins remain opt-in development fixtures only; disabling
+AUTH_DEMO_ENABLED does not disable database logins. The existing login frontend
+is unchanged. /test remains Admin-only until product landing pages exist.
+See AUTH_BACKEND.md for setup, module boundaries and verification commands.

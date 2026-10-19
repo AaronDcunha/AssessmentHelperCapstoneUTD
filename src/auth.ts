@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { authenticateDemo, demoEnabled } from "@/server/demo-auth";
+import { authenticateDatabase, resolveDatabaseUser } from "@/server/database-auth";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt", maxAge: 60 * 60 },
@@ -11,7 +12,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       password: { label: "Password", type: "password" },
     },
     authorize(credentials) {
-      return authenticateDemo(credentials);
+      // Reserved fixtures remain available only with explicit development opt-in.
+      const demo = authenticateDemo(credentials);
+      if (demo) return demo;
+      return authenticateDatabase(credentials);
     },
   })],
   callbacks: {
@@ -22,9 +26,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (new URL(url).origin === baseUrl) return url;
       return `${baseUrl}/test`;
     },
-    jwt({ token, user }) {
-      if (!demoEnabled()) return null;
+    async jwt({ token, user }) {
       if (user) token.sub = user.id;
+      if (!token.sub) return null;
+      if (token.sub.startsWith("demo:")) {
+        if (!demoEnabled()) return null;
+      } else if (!await resolveDatabaseUser(token.sub)) return null;
       // Ignore client-supplied session updates; access is resolved on the server.
       return token;
     },

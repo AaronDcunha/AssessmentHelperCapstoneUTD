@@ -2,7 +2,7 @@
 
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/form-fields";
 import { Section } from "@/components/ui/section";
@@ -14,14 +14,18 @@ export default function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const submitting = useRef(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (loading) return;
+    // Lock synchronously, before React renders disabled controls.
+    if (submitting.current) return;
+    submitting.current = true;
 
     setLoading(true);
     setError("");
+    let navigating = false;
 
     try {
       const result = await signIn("credentials", {
@@ -38,10 +42,15 @@ export default function LoginForm() {
 
       router.push(result.url ?? "/test");
       router.refresh();
+      navigating = true;
     } catch {
       setError("Unable to sign in. Please try again.");
     } finally {
-      setLoading(false);
+      // Keep successful submissions locked until navigation unmounts the form.
+      if (!navigating) {
+        submitting.current = false;
+        setLoading(false);
+      }
     }
   }
 
@@ -50,7 +59,7 @@ export default function LoginForm() {
       <div className="w-full max-w-[360px]">
         <Section eyebrow="Assessment Helper" title="Login" headingLevel={1}>
 
-        <form className="space-y-ah-24" onSubmit={handleSubmit}>
+        <form className="space-y-ah-24" onSubmit={handleSubmit} aria-busy={loading}>
           <Input
             label="Username"
             name="username"

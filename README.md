@@ -88,6 +88,17 @@ To browse the database (keep PostgreSQL running):
 npx prisma studio
 ```
 
+### Reset and reseed
+
+With PostgreSQL running, run:
+
+```sh
+npx prisma migrate reset
+npm run db:seed
+```
+
+Confirm the reset when prompted. **This deletes all data in the configured database**, including signups, assessments, and account changes, then recreates the tables and restores demo data.
+
 ## Dependencies to revisit
 
 - Nodemailer: patched v10 is outside Auth.js beta's declared v7/v8 support; resolve compatibility before enabling email.
