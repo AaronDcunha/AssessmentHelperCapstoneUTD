@@ -2,6 +2,8 @@
 
 This is the target organization, not a list of implemented features. As of October 11, 2026, the app has a Next.js starter page, dependencies, local PostgreSQL/Mailpit services, and placeholder directories. Authentication, Prisma models, workflow APIs, dashboards, jobs, and tests remain to be implemented. Inspect the source for current progress.
 
+October 14 update on the authentication backend branch: Auth.js JWT sessions, development-only mock identities, `/api/me`, shared access guards, protected test pages/APIs, and authentication tests are implemented. Database-backed authentication and all business models remain pending. See `AUTH_BACKEND.md`; the mock test permissions do not define the final database permission model.
+
 ```text
 assessment-helper-capstoneutd/
   AGENTS.md                        Shared AI development instructions
@@ -93,3 +95,8 @@ Run the scheduler as an explicit separate process when implemented; do not start
 6. Implement feedback, operational reports, agreed KPIs, and notifications/email.
 
 Build meaningful tests alongside business rules and access controls. Stretch goals should not block core workflows.
+
+October 19 faculty/auth integration: the shared main layout now authenticates
+and supplies user identity plus permission-filtered Faculty/Admin test navigation.
+Root and successful logins default to /dashboard. Faculty route-family layouts
+enforce read access. Business dashboard data remains preview/empty state.

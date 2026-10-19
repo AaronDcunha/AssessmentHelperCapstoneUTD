@@ -27,3 +27,14 @@ export function NavigationItem({ label, icon, active = false, className, ...prop
     </Link>
   );
 }
+
+/** A known destination with no implemented route. Never renders an invented URL. */
+export function UnavailableNavigationItem({ label, icon, reason }: { label: string; icon: ReactNode; reason: string }) {
+  return (
+    <span role="link" aria-disabled="true" tabIndex={0} aria-label={`${label}. ${reason}`} title={reason}
+      className="relative flex min-h-[44px] w-[248px] max-w-full cursor-not-allowed items-center gap-ah-12 rounded-ah-8 px-ah-12 py-ah-8 text-body text-light opacity-70 focus-visible:outline-light">
+      <span aria-hidden="true" className="flex size-ah-24 shrink-0 items-center justify-center">{icon}</span>
+      <span className="min-w-0 [overflow-wrap:anywhere]">{label}</span>
+    </span>
+  );
+}

@@ -1,5 +1,30 @@
 ASSESSMENT HELPER IMPLEMENTATION NOTES
-Updated October 11, 2026
+October 18 integration: shared main layout requires login and supplies user identity
+to AppShell. All /test pages and /auth-test require temporary test:admin permission.
+Access denial redirects to /forbidden. Test APIs retain role-specific probes;
+navigation remains intentionally empty until application routes are added.
+
+Authentication backend branch update (October 14, 2026):
+Development-only Auth.js Credentials/JWT sessions, GET /api/me, and protected
+test pages/APIs are implemented without the database. Explicitly enable with
+AUTH_DEMO_ENABLED=true in development and configure AUTH_SECRET. Reserved
+faculty/ac/admin accounts use password 123. Faculty has Faculty access;
+AC has AC and Faculty access; Admin has Admin, AC and Faculty access.
+Assigned roles remain distinct from inherited effective permissions;
+only these three temporary users are accepted; unknown usernames are rejected.
+Wrong reserved passwords fail. Production demo access is disabled. Final
+permissions and database-backed authentication are not implemented.
+See AUTH_BACKEND.md for the frontend contract, setup, tests, and migration work.
+
+Updated October 14, 2026
+
+October 18, 2026 clarification (overrides older template-version guidance):
+Questions may be edited in an existing observation template. Major changes
+should use a new ObservationTemplate record; explicit version models are not
+required. In-place edits also affect the question text shown for older
+assessments linked to that template.
+Invitation-attempt history is deferred for now; retain the current candidate
+structure while reviewing the schema. This is not an implemented history flow.
 
 1. WEB-BASED ASSESSMENT FORM - CONFIRMED
 Assessments will be completed through a web-based form. Signed assessment
@@ -58,3 +83,89 @@ of missing data before implementation.
 - Overdue Evaluation Count: use the agreed due/overdue eligibility rule.
 Clarify whether any provisional KPIs appear during the cycle; final KPIs are
 expected after the feedback deadline, while operational reports remain live.
+
+October 19, 2026 demo-seed decisions:
+Exclude CourseBook rows without instructor/day/time and date-prefixed days.
+Use the first department encountered among retained rows for each professor.
+Normalize titles before a spaced dash, remove trailing credit labels, and use
+the latest chronological term title. Usernames are firstname_lastname;
+emails are firstname.lastname@fakeutd.edu; initial demo password is 123, hashed.
+Repeatable username hashing assigns about 10% AC and 2% Admin. Everyone has
+Faculty; AC includes Faculty; Admin includes AC and Faculty. Permission grants
+follow that hierarchy: Faculty own-record actions; AC cycle, matching, template,
+approval and reporting actions; Admin account, role, permission and hiring-level
+management. These seed grants do not implement backend authorization.
+See prisma/SEED.md for execution and password hash details.
+
+October 19, 2026 additional demo-seed decisions:
+Create a Fall 2026 cycle using existing term code 26f. Signup deadline is
+October 31, observation deadline November 30, feedback deadline December 7,
+2026, all at 11:59 p.m. America/Chicago, converted to UTC for storage.
+Create one active basic observation template: four required equally weighted
+1-5 ratings for objectives, organization, engagement and understanding, plus
+optional strengths and improvements text. Scale: strongly disagree through
+strongly agree. Preserve AC edits to seeded cycles/templates on reruns.
+Leave downstream participation and assessment records empty.
+
+October 19, 2026 local database setup:
+Run npm run db:setup after configuring .env and starting PostgreSQL yourself
+via docker compose up -d --wait postgres or the Docker app. The script never
+starts Docker or containers. It checks connectivity, deploys committed
+migrations, checks schema drift, then
+runs the demo seed. Existing unmanaged schemas are not automatically reset
+or baselined. Prisma Studio can inspect the resulting database.
+
+October 19, 2026 database login integration (supersedes database-pending notes):
+Auth.js now accepts seeded usernames and verifies stored scrypt hashes.
+Account status and current database role/permission links are checked server-side.
+Reserved mock logins remain opt-in development fixtures only; disabling
+AUTH_DEMO_ENABLED does not disable database logins. The existing login frontend
+is unchanged. /test remains Admin-only until product landing pages exist.
+See AUTH_BACKEND.md for setup, module boundaries and verification commands.
+
+7. FACULTY DASHBOARD PREVIEW - DISPLAY ONLY
+For the Faculty dashboard visual preview, the user authorized the status values,
+recent-activity wording, and semester supplied in the Figma screenshot. Explain
+their preview-only status in the handoff documentation, without an extra visible
+dashboard notice; they do not establish a real cycle or persisted records.
+Do not inject a sample identity, roles, or permissions into the shared shell.
+Keep its missing-user fallback and existing navigation authorization contract.
+Other Faculty screens retain their existing empty states. No backend policy,
+eligibility rule, or persistence behavior changes as part of this visual work.
+
+8. FACULTY NAVIGATION AND SCREEN PURPOSES - FRONTEND HANDOFF
+Keep the five Faculty entries visible. The user's later History-navigation request
+explicitly authorizes a simple read-only frontend at /observations/history,
+superseding the earlier History-page exclusion. Bind History to this route through
+the existing navigation configuration. Use the shared Faculty shell and filters
+for semester, participation role, and status. Show semester, role, course/section,
+other professor, and status/form action for authorized past records. The current
+page receives no records and displays a clear empty state. Do not fabricate data,
+add History APIs, change authentication/database behavior, or expose AC/Admin.
+
+The active Observations list, observation progress/details, confirmed appointment,
+released recommendations, accepted candidates, and incoming requests have distinct
+purposes. Do not offer links that skip signup, release, acceptance, or final pairing
+when the required record is unavailable. Show unavailable prerequisite states.
+Process feedback requires actual cycle participation and an active feedback period;
+without those data, keep its action unavailable. In-app notifications are MVP work;
+automated email remains a stretch goal, not an implemented frontend capability.
+
+Use the current web-form decision and UC5 over older offline signed-upload diagrams.
+Keep one course section per signup form. The attached senior-project notes allow
+multiple observations, while the observee diagram says one course per cycle; no
+global signup cap is added here. Eligibility edge cases, resend cutoffs/retry
+limits, and finalization/AC-review details still require backend policy agreement.
+
+October 19, 2026 faculty/auth merge integration (overrides earlier empty-navigation
+and no-Admin-exposure preview notes): /dashboard is the default page and login
+destination. Restore requireUser in the main layout; pass actual user identity.
+Show all five implemented Faculty destinations subject to effective read grants.
+Only Admin sees Component Tests and Authentication Tests under Admin, and
+direct requests to those pages remain guarded. Dashboard/observation layouts
+enforce read access separately. Keep existing Faculty preview/empty-state content;
+no business records or dashboard queries are introduced by this integration.
+
+October 19, 2026 Admin navigation update: temporarily include direct links to
+all existing component preview pages and Faculty/AC/Admin role probes under
+Admin, including Alert AC. All links require test:admin and retain route guards.

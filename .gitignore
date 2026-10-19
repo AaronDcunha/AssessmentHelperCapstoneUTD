@@ -40,4 +40,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-prisma/demo-accounts.txt
+
+# Locally generated Prisma client and demo login reference
+/src/generated/prisma/
+/prisma/demo-accounts.txt
