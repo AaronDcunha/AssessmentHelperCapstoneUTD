@@ -2,6 +2,8 @@
 
 import { useId, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
+import { signOut } from "next-auth/react";
+import { AccountDropdown } from "./account-dropdown";
 import { Sidebar, type SidebarProps } from "./sidebar";
 import { PageHeader, type PageHeaderProps } from "./page-header";
 import type { NavigationSection } from "./navigation-config";
@@ -47,6 +49,10 @@ export function AppShell({ children, authorizedSections, user, headerUser, notif
         <div className="mx-auto w-full max-w-[1096px]">
           <PageHeader title={header?.title ?? current?.label ?? "Assessment Helper"}
             subtitle={header?.subtitle ?? subtitle} user={headerUser} notificationAction={notificationAction}
+            accountControl={headerUser && !headerUser.action ? (
+              <AccountDropdown name={headerUser.name} initials={headerUser.initials}
+                onLogout={() => signOut({ redirectTo: "/login" })} />
+            ) : undefined}
             className="mb-ah-24" />
           <main>{children}</main>
         </div>

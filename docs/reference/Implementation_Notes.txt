@@ -1,5 +1,22 @@
 ASSESSMENT HELPER IMPLEMENTATION NOTES
-Updated October 11, 2026
+October 18 integration: shared main layout requires login and supplies user identity
+to AppShell. All /test pages and /auth-test require temporary test:admin permission.
+Access denial redirects to /forbidden. Test APIs retain role-specific probes;
+navigation remains intentionally empty until application routes are added.
+
+Authentication backend branch update (October 14, 2026):
+Development-only Auth.js Credentials/JWT sessions, GET /api/me, and protected
+test pages/APIs are implemented without the database. Explicitly enable with
+AUTH_DEMO_ENABLED=true in development and configure AUTH_SECRET. Reserved
+faculty/ac/admin accounts use password 123. Faculty has Faculty access;
+AC has AC and Faculty access; Admin has Admin, AC and Faculty access.
+Assigned roles remain distinct from inherited effective permissions;
+only these three temporary users are accepted; unknown usernames are rejected.
+Wrong reserved passwords fail. Production demo access is disabled. Final
+permissions and database-backed authentication are not implemented.
+See AUTH_BACKEND.md for the frontend contract, setup, tests, and migration work.
+
+Updated October 14, 2026
 
 October 18, 2026 clarification (overrides older template-version guidance):
 Questions may be edited in an existing observation template. Major changes
@@ -97,3 +114,11 @@ starts Docker or containers. It checks connectivity, deploys committed
 migrations, checks schema drift, then
 runs the demo seed. Existing unmanaged schemas are not automatically reset
 or baselined. Prisma Studio can inspect the resulting database.
+
+October 19, 2026 database login integration (supersedes database-pending notes):
+Auth.js now accepts seeded usernames and verifies stored scrypt hashes.
+Account status and current database role/permission links are checked server-side.
+Reserved mock logins remain opt-in development fixtures only; disabling
+AUTH_DEMO_ENABLED does not disable database logins. The existing login frontend
+is unchanged. /test remains Admin-only until product landing pages exist.
+See AUTH_BACKEND.md for setup, module boundaries and verification commands.

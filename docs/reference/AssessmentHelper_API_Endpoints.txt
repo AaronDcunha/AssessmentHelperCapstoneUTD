@@ -6,10 +6,13 @@ Draft for team planning.
 ---------------------------------
 Auth.js-managed routes: /api/auth/*
   Login, logout, session and related Auth.js operations.
-  Temporary Credentials login uses JWT sessions and stored password hashes.
+  Credentials login uses JWT sessions. Database-backed password hashes remain planned.
+  Development-only mock authentication is implemented; see AUTH_BACKEND.md.
 
 GET /api/me
   Current user's profile and effective permissions.
+  Implemented demo response: { id, username, name, roles, permissions }; HTTP 401 without login.
+  GET /api/test/{faculty|ac|admin}: temporary permission probes (200/401/403).
 
 GET /api/me/evaluation-status
   Current professor's last completed evaluation and due/overdue status.
