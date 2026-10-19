@@ -169,3 +169,31 @@ no business records or dashboard queries are introduced by this integration.
 October 19, 2026 Admin navigation update: temporarily include direct links to
 all existing component preview pages and Faculty/AC/Admin role probes under
 Admin, including Alert AC. All links require test:admin and retain route guards.
+
+October 18 local history integration (user-reported meeting direction):
+An authenticated history backend may return dummy data while Haris imports data.
+The initial GET /api/me/observation-history prototype was superseded on
+October 19 by GET /api/me/observations (see alignment note below).
+Database history and submitted forms remain separate from this dummy backend.
+
+October 19 history alignment (local, user-authorized):
+History now uses Aaron's GET /api/me/observations list/filter envelope instead
+of a separate history endpoint. The dummy provider follows Haris PR #49 at
+d3c4587: AppUser and Professor IDs are distinct; ownership is through the
+signup's professor or selected observer. This is not a running Prisma query.
+Unmodeled draft revision/lifecycle fields remain null; section.semester is an
+additive name lookup beyond the API draft's section fields.
+For template reads, Haris's October 18 clarification supersedes the earlier
+version-preservation guidance: current questions may be edited in place and
+older linked assessments may show changed question text. The reader uses
+templateId/responses; the responses Json layout still requires agreement
+with the form writer. No real submitted-form API is implemented here.
+
+October 19 History integration with updated main 33d84e7:
+The user's approved dummy-backend scope supersedes the earlier History-only
+empty-state restriction for this feature. Use /observations/history and the
+existing observations.read.own grant. /history only redirects; preserve the
+five Faculty links, shared layout, current login/database auth, and Admin tools.
+The dummy provider supports current AccountUser shapes, remains explicitly
+opt-in development data, and performs no database reads, writes, migrations,
+or seeding. Existing database/auth/schema/dashboard work is retained from main.

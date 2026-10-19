@@ -19,7 +19,11 @@ export const facultyPageHeaders = {
   [facultyRoutes.evaluation]: { title: "My Evaluation", facultyLayout: true },
   [facultyRoutes.requests]: { title: "Observer Requests", facultyLayout: true },
   [facultyRoutes.observations]: { title: "Observations", facultyLayout: true },
-  [facultyRoutes.history]: { title: "Observation History", facultyLayout: true },
+  [facultyRoutes.history]: {
+    title: "Observation History",
+    subtitle: "Review completed observations and submitted forms.",
+    facultyLayout: true,
+  },
   [facultyRoutes.signup]: { title: "Sign Up for Observation", facultyLayout: true },
   [facultyRoutes.recommendations]: { title: "Recommended Observers", facultyLayout: true },
   [facultyRoutes.confirmed]: { title: "Choose Confirmed Observer", facultyLayout: true },
