@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AssessmentQuestionEditor } from "@/components/ac/assessment-question-editor";
 import { Button } from "@/components/ui/button";
+import { acApi, CURRENT_CYCLE_ID } from "@/lib/ac-api";
 
 type Question = { id: string; value: string };
 
@@ -16,6 +17,24 @@ const initialQuestions: Question[] = [
 
 export function ObservationTemplateEditor() {
   const [questions, setQuestions] = useState(initialQuestions);
+  const [templateId, setTemplateId] = useState<string | null>(null);
+  const [revision, setRevision] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    acApi.getCurrentTemplate(CURRENT_CYCLE_ID).then((template) => {
+      if (!active) return;
+      setTemplateId(template.id);
+      setRevision(template.revision ?? 0);
+      if (template.criteria.length > 0) setQuestions(template.criteria.map((criterion) => ({
+        id: criterion.id,
+        value: criterion.prompt || criterion.questionText || criterion.label || "",
+      })));
+    }).catch(() => { if (active) setMessage("The saved template is currently unavailable. Default questions are shown."); });
+    return () => { active = false; };
+  }, []);
 
   function updateQuestion(id: string, value: string) {
     setQuestions((current) => current.map((question) => question.id === id ? { ...question, value } : question));
@@ -27,6 +46,26 @@ export function ObservationTemplateEditor() {
 
   function addQuestion() {
     setQuestions((current) => [...current, { id: `question-${Date.now()}`, value: "" }]);
+  }
+
+  async function saveTemplate() {
+    setSaving(true);
+    setMessage(null);
+    const weight = questions.length ? 100 / questions.length : 0;
+    const body = {
+      title: "Faculty observation form",
+      criteria: questions.map((question) => ({ id: question.id, prompt: question.value, required: true, weight })),
+      commentPrompts: [], signatureLabels: [],
+    };
+    try {
+      const template = templateId
+        ? await acApi.updateTemplate(templateId, { ...body, expectedRevision: revision })
+        : await acApi.createTemplate(body);
+      setTemplateId(template.id);
+      setRevision(template.revision ?? revision);
+      setMessage("Template saved.");
+    } catch { setMessage("Unable to save the template because the API endpoint is not available yet."); }
+    finally { setSaving(false); }
   }
 
   return (
@@ -65,10 +104,12 @@ export function ObservationTemplateEditor() {
         <p className="text-label text-muted">{questions.length} questions</p>
       </div>
 
+      {message && <p className="mt-ah-16 text-body text-muted" role="status">{message}</p>}
+
       <div className="mt-ah-24 flex h-11 items-center justify-between">
         <button type="button" className="h-11 w-[200px] rounded-ah-8 text-label text-sidebar">Cancel</button>
         <div className="flex gap-ah-12">
-          <Button className="w-[200px]">Save template</Button>
+          <Button className="w-[200px]" onClick={saveTemplate} disabled={saving}>{saving ? "Saving…" : "Save template"}</Button>
           <Button variant="secondary" className="w-[200px]">Next section →</Button>
         </div>
       </div>

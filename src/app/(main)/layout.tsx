@@ -7,6 +7,7 @@ import { facultyPageHeaders, facultyRoutes } from "@/components/observations/fac
 const acPageHeaders = {
   "/ac": { title: "AC Dashboard", subtitle: "Fall 2026", facultyLayout: true },
   "/ac/cycles": { title: "Evaluation Cycles", subtitle: "Fall 2026", facultyLayout: true },
+  "/ac/cycles/new": { title: "Create Evaluation Cycle", subtitle: "Fall 2026", facultyLayout: true },
   "/ac/faculty": { title: "Faculty Due / Overdue", subtitle: "Fall 2026", facultyLayout: true },
   "/ac/observations": { title: "Observation Progress", subtitle: "Fall 2026", facultyLayout: true },
   "/ac/template": { title: "Observation Template", subtitle: "Fall 2026", facultyLayout: true },
