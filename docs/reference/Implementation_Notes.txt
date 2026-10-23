@@ -175,7 +175,7 @@ October 23, 2026 Admin Dashboard frontend (Issue #50, Dashboard only):
 uses the same effective grant; role labels and test:admin alone do not grant
 product access. Administration links and sidebar entries point to /admin/users,
 /admin/roles, and /admin/hiring-levels, filtered by their respective read grants.
-Those destination pages are not implemented yet. Existing Faculty navigation and
+Destination-page implementations are described below. Existing Faculty navigation and
 Admin test shortcuts remain. The Dashboard has no business API call or invented
 semester/identity data. Its spacious layout and plain Section follow Figma PDF 26.
 
@@ -242,3 +242,38 @@ against localhost development server and isolated headless Chrome/Edge CDP port
 sample grants or database writes are introduced. Local business APIs remain missing.
 Inheritance/admin safeguards remain backend policy; no local role-name rules are
 invented. Header subtitle/bell differences are intentionally deferred by the team.
+
+October 23, 2026 Hiring Levels & Frequency frontend (Issue #50, PDF 30):
+/admin/hiring-levels requires hiring-levels.read server-side; Add/Edit/Remove
+controls require the effective hiring-levels.manage grant. The shared Admin shell,
+Section, fields, Button, TableCell, TextAction and JSON transport are reused.
+The Figma three-column layout retains 80px rows and quiet Edit/Remove actions;
+the documented active boolean is displayed below the hiring-level name.
+GET /api/hiring-levels accepts its explicit {items:HiringLevel[]} response and
+follows global cursor pagination if pageInfo is supplied. Full resources require
+name, positive integer evaluationIntervalYears, active boolean and a usable revision.
+POST sends only name/evaluationIntervalYears; active has no invented create default.
+PATCH sends changed name/evaluationIntervalYears/active fields and expectedRevision
+from the loaded resource. Edit supports active/inactive through that boolean;
+status changes never substitute for DELETE. Remove requires confirmation and a
+verified HTTP 204. In-use/retention conflicts retain the level; no automatic reset,
+reassignment or deactivation is attempted. The DELETE contract defines no revision
+payload, so none is invented. Reloads use the documented list, not a new detail API.
+Validation accepts positive whole years without hardcoding ranks/intervals. The
+backend must decide supported interval ranges and reference/history retention.
+Recoverable failures preserve dialog values. Stale reads are cancelled/ignored,
+writes are serialized and never retried automatically, and 401/403 disable writes.
+Conflicts and uncertain edit/remove outcomes require explicit reload and review
+with the latest revision; unchanged fields adopt concurrent changes while local
+edits are retained. A missing record after an ambiguous deletion is shown as
+unconfirmed, never as a successful deletion. Ambiguous adds retain input and block
+another add in that page session; inspect the reloaded list before creating again
+on a fresh page. Without an idempotency/operation lookup contract, the client cannot
+automatically prove whether an unacknowledged creation committed.
+Unit tests cover API payloads, validation, stale responses, duplicate suppression,
+revision rebasing, in-use/uncertain removal and route/control permissions.
+Optional node tests/e2e/admin-hiring-levels.mjs uses localhost development server
+and isolated headless Chrome/Edge CDP port 9223. Its browser fixtures intercept all
+business API calls; real seeded logins only read account data. No backend handlers,
+schema, seeds, environment or dependencies changed. Live persistence awaits the
+documented backend endpoints. Global subtitle/bell corrections remain deferred.

@@ -49,6 +49,7 @@ const UsersPage = load("src/app/(main)/admin/users/page.tsx").default;
 const CreateUserPage = load("src/app/(main)/admin/users/new/page.tsx").default;
 const EditUserPage = load("src/app/(main)/admin/users/[userId]/page.tsx").default;
 const RolesPage = load("src/app/(main)/admin/roles/page.tsx").default;
+const HiringLevelsPage = load("src/app/(main)/admin/hiring-levels/page.tsx").default;
 const MainLayout = load("src/app/(main)/layout.tsx").default;
 const { Section } = load("src/components/ui/section.tsx");
 const { adminTestPages } = load("src/components/layout/navigation-config.ts");
@@ -173,4 +174,21 @@ test("Roles route requires roles.read and only the specific permission-managemen
   assert.match(html, /<a(?=[^>]*href="\/admin\/roles")(?=[^>]*aria-current="page")[^>]*>/);
   assert.equal((html.match(/aria-current="page"/g) || []).length, 1);
   assert.match(html, /Loading roles and permissions/);
+});
+
+test("Hiring levels require the read grant; management controls use the effective write grant and navigation remains active", async () => {
+  currentUser = null; await assert.rejects(HiringLevelsPage(), error => error.destination === "/login");
+  for (const permissions of [rolePermissions.Faculty, rolePermissions.AC, ["hiring-levels.manage"], ["test:admin"]]) {
+    currentUser = { ...admin, permissions }; await assert.rejects(HiringLevelsPage(), error => error.destination === "/forbidden");
+  }
+  currentUser = { ...admin, permissions: ["hiring-levels.read"] };
+  assert.equal((await HiringLevelsPage()).props.canManage, false);
+  assert.doesNotMatch(renderToStaticMarkup(await HiringLevelsPage()), />Add Hiring Level<\/button>/);
+  currentUser = { ...admin, roles: ["Custom"], permissions: ["hiring-levels.read", "hiring-levels.manage"] };
+  const page = await HiringLevelsPage(); assert.equal(page.props.canManage, true); pathname = "/admin/hiring-levels";
+  const html = renderToStaticMarkup(await MainLayout({ children: page }));
+  assert.match(html, /<h1[^>]*>Hiring Levels &amp; Frequency<\/h1>/);
+  assert.match(html, /<a(?=[^>]*href="\/admin\/hiring-levels")(?=[^>]*aria-current="page")[^>]*>/);
+  assert.equal((html.match(/aria-current="page"/g) || []).length, 1);
+  assert.match(html, /Loading hiring levels/);
 });
