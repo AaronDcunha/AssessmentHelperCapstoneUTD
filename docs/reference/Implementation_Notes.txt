@@ -185,5 +185,32 @@ and cursor pagination. Missing endpoints show explicit errors, without sample
 users. Role options use paginated GET /api/roles when roles.read is granted, with
 loaded-user roles as a fallback. Account-status suggestions use returned values;
 the filter also accepts an exact API value because the draft defines no enum.
-Create/Edit links require users.manage and target future, unimplemented pages.
+Create/Edit links require users.manage; their implementation is described below.
 Search is debounced; old requests are cancelled and cannot replace newer results.
+
+October 23, 2026 Create/Edit User frontend (Issue #50, PDF 28):
+/admin/users/new and /admin/users/[userId] require users.manage server-side and
+share one form. GET/POST/PATCH/DELETE /api/users and PUT /api/users/{id}/roles
+use the draft contract; no backend handlers, account provisioning, schema or
+seed changes are included. Role replacement preserves the entire selected set.
+Detail PATCH and role PUT are separate: use each returned revision, report partial
+success, and retain pending edits for retry. Network/ambiguous successful-write
+responses pause further writes until an explicit edit reload; uncertain creates
+require checking the Users list to avoid duplicate creation. Deletion requires
+confirmation and a verified 204. Backend retention/self/last-admin policy is pending.
+Role and department catalogs follow cursor pagination. Hiring levels use the
+documented {items} response. Account-status strings/transition rules have no agreed
+enum; Prisma's isActive boolean is not mapped to invented API strings. Offer only
+exact statuses observed in the first users-list page plus the current edit value.
+Create cannot submit without an API-provided status. Faculty profiles are optional;
+supplied profiles require department/hiring level. No role-to-profile inference or
+automatic role removal is implemented. Hire date is optional; clearing an existing
+date/profile awaits a nullable API contract. Revision strings and safe nonnegative
+integers are accepted as opaque tokens; missing revisions block edit writes.
+Business endpoints remain unavailable locally, so populated CRUD verification uses
+test-only browser interception, never fake production responses or database writes.
+Run node --test tests/unit/*.test.mjs for API, revision, partial-save and guard tests.
+Optional browser regression: start npm run dev -- --hostname localhost and an
+isolated headless Chrome/Edge with --remote-debugging-port=9223, then run
+node tests/e2e/admin-user-form.mjs. It uses ignored seeded credentials privately,
+intercepts business APIs in one browser target, and writes screenshots to OS temp.

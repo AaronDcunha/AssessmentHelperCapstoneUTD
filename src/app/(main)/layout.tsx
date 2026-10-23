@@ -24,6 +24,8 @@ export default async function MainLayout({ children }: { children: ReactNode }) 
         ...facultyPageHeaders,
         [adminRoutes.dashboard]: { title: "Admin Dashboard", contentSpacing: "spacious" },
         [adminRoutes.users]: { title: "Users", contentSpacing: "spacious" },
+        [`${adminRoutes.users}/new`]: { title: "Create User", contentSpacing: "spacious" },
+        [`${adminRoutes.users}/[userId]`]: { title: "Edit User", contentSpacing: "spacious" },
       }}
     >
       {children}

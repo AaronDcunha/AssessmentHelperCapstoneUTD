@@ -27,7 +27,13 @@ export function AppShell({ children, authorizedSections, user, headerUser, notif
   const current = authorizedSections.flatMap((section) => section.items.map((item) => ({ ...item, sectionId: section.id })))
     .filter((item) => typeof item.href === "string" && (pathname === item.href || pathname.startsWith(`${item.href}/`)))
     .sort((a, b) => String(b.href).length - String(a.href).length)[0];
-  const header = pageHeaders?.[pathname];
+  // Exact entries take precedence over App Router-style dynamic route patterns.
+  const pathSegments = pathname.split("/");
+  const header = pageHeaders?.[pathname] ?? Object.entries(pageHeaders ?? {}).find(([route]) => {
+    const segments = route.split("/");
+    return segments.length === pathSegments.length && segments.every((segment, i) =>
+      segment === pathSegments[i] || (/^\[[^\]]+\]$/.test(segment) && pathSegments[i] !== ""));
+  })?.[1];
   const facultyLayout = header?.facultyLayout === true;
   const spaciousContent = facultyLayout || header?.contentSpacing === "spacious";
   const expandedSections = Object.fromEntries(authorizedSections.map((section) => [

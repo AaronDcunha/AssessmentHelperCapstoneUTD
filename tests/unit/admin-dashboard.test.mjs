@@ -29,6 +29,7 @@ function load(filename) {
     }
     if (name === "next/navigation") return {
       usePathname: () => pathname,
+      useRouter: () => ({ push() {}, refresh() {} }),
       redirect: destination => { throw Object.assign(new Error("Redirect"), { destination }); },
     };
     if (!name.startsWith("@/") && !name.startsWith(".")) return require(name);
@@ -45,6 +46,8 @@ function load(filename) {
 
 const Dashboard = load("src/app/(main)/admin/page.tsx").default;
 const UsersPage = load("src/app/(main)/admin/users/page.tsx").default;
+const CreateUserPage = load("src/app/(main)/admin/users/new/page.tsx").default;
+const EditUserPage = load("src/app/(main)/admin/users/[userId]/page.tsx").default;
 const MainLayout = load("src/app/(main)/layout.tsx").default;
 const { Section } = load("src/components/ui/section.tsx");
 const { adminTestPages } = load("src/components/layout/navigation-config.ts");
@@ -126,4 +129,26 @@ test("Users route enforces users.read and the shared shell marks Users active", 
   assert.match(html, /Loading users/);
   currentUser = { ...admin, permissions: ["users.read"] };
   assert.equal((await UsersPage()).props.canManageUsers, false);
+});
+
+test("Create/Edit routes enforce users.manage and share the active Users navigation and mode header", async () => {
+  for (const identity of [null, { ...admin, permissions: ["users.read"] }, { ...admin, permissions: rolePermissions.AC }]) {
+    currentUser = identity;
+    const destination = identity ? "/forbidden" : "/login";
+    await assert.rejects(CreateUserPage(), error => error.destination === destination);
+    await assert.rejects(EditUserPage({ params: Promise.resolve({ userId: "user-id" }) }), error => error.destination === destination);
+  }
+  currentUser = admin;
+  for (const [path, page, title] of [
+    ["/admin/users/new", await CreateUserPage(), "Create User"],
+    ["/admin/users/user-id", await EditUserPage({ params: Promise.resolve({ userId: "user-id" }) }), "Edit User"],
+  ]) {
+    pathname = path;
+    const html = renderToStaticMarkup(await MainLayout({ children: page }));
+    assert.match(html, new RegExp(`<h1[^>]*>${title}</h1>`));
+    assert.match(html, /<a(?=[^>]*href="\/admin\/users")(?=[^>]*aria-current="page")[^>]*>/);
+    assert.equal((html.match(/aria-current="page"/g) || []).length, 1);
+    assert.equal(html.includes(">Delete User</button>"), title === "Edit User");
+    assert.match(html, /<form[^>]*method="post"/);
+  }
 });

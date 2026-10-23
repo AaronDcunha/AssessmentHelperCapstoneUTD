@@ -31,7 +31,7 @@ function malformed() {
   return new UsersApiError("malformed", "The service returned an unexpected response. Please try again.");
 }
 
-async function readList<T>(url: string, isItem: (value: unknown) => value is T, signal: AbortSignal): Promise<ListPage<T>> {
+export async function readList<T>(url: string, isItem: (value: unknown) => value is T, signal: AbortSignal): Promise<ListPage<T>> {
   let response: Response;
   try {
     response = await fetch(url, { signal, credentials: "same-origin", cache: "no-store", headers: { Accept: "application/json" } });
