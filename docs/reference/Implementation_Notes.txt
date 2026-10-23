@@ -177,7 +177,8 @@ product access. Administration links and sidebar entries point to /admin/users,
 /admin/roles, and /admin/hiring-levels, filtered by their respective read grants.
 Destination-page implementations are described below. Existing Faculty navigation and
 Admin test shortcuts remain. The Dashboard has no business API call or invented
-semester/identity data. Its spacious layout and plain Section follow Figma PDF 26.
+identity data. Its spacious layout and plain Section follow Figma PDF 26. The
+shared Figma semester display was added in the final fidelity cleanup below.
 
 October 23, 2026 Users list frontend (Issue #50, list only):
 /admin/users requires users.read and calls GET /api/users with the draft filters
@@ -241,7 +242,7 @@ against localhost development server and isolated headless Chrome/Edge CDP port
 9223. Browser fixtures intercept business APIs only in that target; no production
 sample grants or database writes are introduced. Local business APIs remain missing.
 Inheritance/admin safeguards remain backend policy; no local role-name rules are
-invented. Header subtitle/bell differences are intentionally deferred by the team.
+invented. Header subtitle/bell differences were resolved in the final cleanup below.
 
 October 23, 2026 Hiring Levels & Frequency frontend (Issue #50, PDF 30):
 /admin/hiring-levels requires hiring-levels.read server-side; Add/Edit/Remove
@@ -276,4 +277,26 @@ Optional node tests/e2e/admin-hiring-levels.mjs uses localhost development serve
 and isolated headless Chrome/Edge CDP port 9223. Its browser fixtures intercept all
 business API calls; real seeded logins only read account data. No backend handlers,
 schema, seeds, environment or dependencies changed. Live persistence awaits the
-documented backend endpoints. Global subtitle/bell corrections remain deferred.
+documented backend endpoints. Global subtitle/bell corrections are described below.
+
+October 23, 2026 Admin final Figma fidelity cleanup (Issue #50):
+All six Admin routes (five designs, shared Create/Edit form) use the existing
+Faculty Dashboard semester label, Fall 2026, through shared Admin header metadata.
+This is the established Figma display context, not an API-backed current semester.
+The existing PageHeader bell appears beside the real account avatar and is labelled
+Notifications unavailable; no notification destination or behavior is invented.
+The shell's per-header option preserves Faculty defaults and existing test pages.
+All Faculty/Admin navigation and test/demo links remain intact. No AC product-page
+bindings exist yet; the existing AC access probe is preserved and checked.
+Exact Figma frames 16:2649, 16:2745, 16:2888, 16:3006 and 16:3149 were compared.
+Functional differences remain intentional: user filters/pagination, optional faculty
+fields and complete role assignments, editable direct-grant checkboxes and per-role
+save controls, hiring-level status/actions, API errors/Retry, and responsive wrapping
+or table scrolling. No illustrative identity, status, grants or production data is
+substituted for backend resources. Test/demo navigation makes the sidebar longer
+than the Figma illustration. Create and Edit retain separate descriptive titles.
+Optional node tests/e2e/admin-final-review.mjs checks desktop/mobile populated
+fixtures, real unavailable endpoints, navigation, header/row/control dimensions,
+and Faculty/AC probe regressions using the same isolated browser setup above.
+All business writes are blocked in this read-only review fixture. Existing form,
+role and hiring-level browser tests exercise mutations only through interception.

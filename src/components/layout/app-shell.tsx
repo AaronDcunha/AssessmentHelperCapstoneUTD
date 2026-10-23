@@ -16,7 +16,7 @@ export type AppShellProps = {
   headerUser?: PageHeaderProps["user"];
   notificationAction?: PageHeaderProps["notificationAction"];
   subtitle?: string;
-  pageHeaders?: Record<string, { title: string; subtitle?: string; facultyLayout?: boolean; contentSpacing?: "default" | "spacious" }>;
+  pageHeaders?: Record<string, { title: string; subtitle?: string; facultyLayout?: boolean; contentSpacing?: "default" | "spacious"; showUnavailableControls?: boolean }>;
 };
 
 export function AppShell({ children, authorizedSections, user, headerUser, notificationAction, subtitle, pageHeaders }: AppShellProps) {
@@ -62,7 +62,7 @@ export function AppShell({ children, authorizedSections, user, headerUser, notif
               <AccountDropdown name={headerUser.name} initials={headerUser.initials}
                 onLogout={() => signOut({ redirectTo: "/login" })} />
             ) : undefined}
-            showUnavailableControls={facultyLayout}
+            showUnavailableControls={header?.showUnavailableControls ?? facultyLayout}
             className={spaciousContent ? "mb-ah-32" : "mb-ah-24"} />
           <main>{children}</main>
         </div>

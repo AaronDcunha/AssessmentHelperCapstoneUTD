@@ -4,6 +4,13 @@ import { requireUser } from "@/server/permissions";
 import { adminNavigationBindings, adminRoutes, adminTestBindings, createNavigationConfig, filterNavigation } from "@/components/layout/navigation-config";
 import { facultyPageHeaders, facultyRoutes } from "@/components/observations/faculty-routes";
 
+// Reuse the existing Figma semester label; it is display context, not live cycle data.
+const adminHeader = {
+  subtitle: facultyPageHeaders[facultyRoutes.dashboard].subtitle,
+  showUnavailableControls: true,
+  contentSpacing: "spacious" as const,
+};
+
 export default async function MainLayout({ children }: { children: ReactNode }) {
   const user = await requireUser();
   const sections = createNavigationConfig({
@@ -22,12 +29,12 @@ export default async function MainLayout({ children }: { children: ReactNode }) 
       headerUser={{ name: user.name, initials: user.name }}
       pageHeaders={{
         ...facultyPageHeaders,
-        [adminRoutes.dashboard]: { title: "Admin Dashboard", contentSpacing: "spacious" },
-        [adminRoutes.users]: { title: "Users", contentSpacing: "spacious" },
-        [adminRoutes.roles]: { title: "Roles & Permissions", contentSpacing: "spacious" },
-        [adminRoutes.hiringLevels]: { title: "Hiring Levels & Frequency", contentSpacing: "spacious" },
-        [`${adminRoutes.users}/new`]: { title: "Create User", contentSpacing: "spacious" },
-        [`${adminRoutes.users}/[userId]`]: { title: "Edit User", contentSpacing: "spacious" },
+        [adminRoutes.dashboard]: { ...adminHeader, title: "Admin Dashboard" },
+        [adminRoutes.users]: { ...adminHeader, title: "Users" },
+        [adminRoutes.roles]: { ...adminHeader, title: "Roles & Permissions" },
+        [adminRoutes.hiringLevels]: { ...adminHeader, title: "Hiring Levels & Frequency" },
+        [`${adminRoutes.users}/new`]: { ...adminHeader, title: "Create User" },
+        [`${adminRoutes.users}/[userId]`]: { ...adminHeader, title: "Edit User" },
       }}
     >
       {children}

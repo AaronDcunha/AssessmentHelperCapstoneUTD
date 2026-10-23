@@ -93,7 +93,8 @@ test("The shared shell marks /admin active, retains Faculty/test links and uses 
   assert.match(html, /<h1[^>]*>Admin Dashboard<\/h1>/);
   assert.equal((html.match(/<h1\b/g) || []).length, 1);
   assert.match(html, /Admin Account/);
-  assert.doesNotMatch(html, /Jordan Davis|Fall 2026/);
+  assert.doesNotMatch(html, /Jordan Davis/);
+  assert.match(html, /Fall 2026/);
   assert.match(html, /md:p-ah-48/);
 });
 
@@ -191,4 +192,27 @@ test("Hiring levels require the read grant; management controls use the effectiv
   assert.match(html, /<a(?=[^>]*href="\/admin\/hiring-levels")(?=[^>]*aria-current="page")[^>]*>/);
   assert.equal((html.match(/aria-current="page"/g) || []).length, 1);
   assert.match(html, /Loading hiring levels/);
+});
+
+test("All Admin headers reuse the semester context and unavailable bell, including both user form routes", async () => {
+  const { facultyPageHeaders, facultyRoutes } = load("src/components/observations/faculty-routes.ts");
+  const expectedSubtitle = facultyPageHeaders[facultyRoutes.dashboard].subtitle;
+  for (const path of ["/admin", "/admin/users", "/admin/users/new", "/admin/users/user-id", "/admin/roles", "/admin/hiring-levels"]) {
+    pathname = path;
+    const html = renderToStaticMarkup(await MainLayout({ children: null }));
+    assert.match(html, new RegExp(`<p[^>]*>${expectedSubtitle}</p>`));
+    assert.match(html, /role="img" aria-label="Notifications unavailable"/);
+    assert.equal((html.match(/aria-label="Notifications unavailable"/g) || []).length, 1);
+    assert.match(html, /aria-label="Account options for Admin Account"/);
+    assert.equal((html.match(/aria-current="page"/g) || []).length, 1);
+  }
+});
+
+test("Admin header options preserve Faculty headers and existing AC test-page defaults", async () => {
+  for (const [path, hasSemester, hasBell] of [["/dashboard", true, true], ["/dashboard/evaluation", false, true], ["/observations", false, true], ["/test/ac", false, false]]) {
+    pathname = path;
+    const html = renderToStaticMarkup(await MainLayout({ children: null }));
+    assert.equal(html.includes("Fall 2026"), hasSemester);
+    assert.equal(html.includes('aria-label="Notifications unavailable"'), hasBell);
+  }
 });
