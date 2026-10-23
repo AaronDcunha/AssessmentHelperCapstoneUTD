@@ -44,6 +44,7 @@ function load(filename) {
 }
 
 const Dashboard = load("src/app/(main)/admin/page.tsx").default;
+const UsersPage = load("src/app/(main)/admin/users/page.tsx").default;
 const MainLayout = load("src/app/(main)/layout.tsx").default;
 const { Section } = load("src/components/ui/section.tsx");
 const { adminTestPages } = load("src/components/layout/navigation-config.ts");
@@ -107,4 +108,22 @@ test("The plain Section keeps its accessible heading while the default retains c
   assert.match(plain, /<section aria-labelledby="([^"]+)"[^>]*>.*<h2 id="\1"/);
   assert.doesNotMatch(plain, /bg-surface|border-border|p-ah-24/);
   assert.match(card, /rounded-ah-12 border border-border bg-surface p-ah-24/);
+});
+
+test("Users route enforces users.read and the shared shell marks Users active", async () => {
+  currentUser = null;
+  await assert.rejects(UsersPage(), error => error.destination === "/login");
+  currentUser = { ...admin, permissions: rolePermissions.AC };
+  await assert.rejects(UsersPage(), error => error.destination === "/forbidden");
+  currentUser = admin;
+  pathname = "/admin/users";
+  const shell = await MainLayout({ children: await UsersPage() });
+  const html = renderToStaticMarkup(shell);
+  assert.match(html, /<h1[^>]*>Users<\/h1>/);
+  assert.match(html, /<a(?=[^>]*href="\/admin\/users")(?=[^>]*aria-current="page")[^>]*>/);
+  assert.equal((html.match(/aria-current="page"/g) || []).length, 1);
+  assert.match(html, /href="\/admin\/users\/new"/);
+  assert.match(html, /Loading users/);
+  currentUser = { ...admin, permissions: ["users.read"] };
+  assert.equal((await UsersPage()).props.canManageUsers, false);
 });
