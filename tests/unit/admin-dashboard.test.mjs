@@ -48,6 +48,7 @@ const Dashboard = load("src/app/(main)/admin/page.tsx").default;
 const UsersPage = load("src/app/(main)/admin/users/page.tsx").default;
 const CreateUserPage = load("src/app/(main)/admin/users/new/page.tsx").default;
 const EditUserPage = load("src/app/(main)/admin/users/[userId]/page.tsx").default;
+const RolesPage = load("src/app/(main)/admin/roles/page.tsx").default;
 const MainLayout = load("src/app/(main)/layout.tsx").default;
 const { Section } = load("src/components/ui/section.tsx");
 const { adminTestPages } = load("src/components/layout/navigation-config.ts");
@@ -151,4 +152,25 @@ test("Create/Edit routes enforce users.manage and share the active Users navigat
     assert.equal(html.includes(">Delete User</button>"), title === "Edit User");
     assert.match(html, /<form[^>]*method="post"/);
   }
+});
+
+test("Roles route requires roles.read and only the specific permission-management grant enables editing", async () => {
+  currentUser = null;
+  await assert.rejects(RolesPage(), error => error.destination === "/login");
+  for (const permissions of [rolePermissions.Faculty, rolePermissions.AC, ["role-permissions.manage"], ["test:admin"]]) {
+    currentUser = { ...admin, permissions };
+    await assert.rejects(RolesPage(), error => error.destination === "/forbidden");
+  }
+  for (const permissions of [["roles.read"], ["roles.read", "roles.manage"], ["roles.read", "permissions.read"]]) {
+    currentUser = { ...admin, permissions };
+    assert.equal((await RolesPage()).props.canManage, false);
+  }
+  currentUser = { ...admin, roles: ["Custom"], permissions: ["roles.read", "permissions.read", "role-permissions.manage"] };
+  const page = await RolesPage(); assert.equal(page.props.canManage, true);
+  pathname = "/admin/roles";
+  const html = renderToStaticMarkup(await MainLayout({ children: page }));
+  assert.match(html, /<h1[^>]*>Roles &amp; Permissions<\/h1>/);
+  assert.match(html, /<a(?=[^>]*href="\/admin\/roles")(?=[^>]*aria-current="page")[^>]*>/);
+  assert.equal((html.match(/aria-current="page"/g) || []).length, 1);
+  assert.match(html, /Loading roles and permissions/);
 });

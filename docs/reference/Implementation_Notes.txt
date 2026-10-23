@@ -214,3 +214,31 @@ Optional browser regression: start npm run dev -- --hostname localhost and an
 isolated headless Chrome/Edge with --remote-debugging-port=9223, then run
 node tests/e2e/admin-user-form.mjs. It uses ignored seeded credentials privately,
 intercepts business APIs in one browser target, and writes screenshots to OS temp.
+
+October 23, 2026 Roles & Permissions frontend (Issue #50, PDF 29):
+/admin/roles requires roles.read server-side. Write controls require the effective
+role-permissions.manage grant, not roles.manage or an Admin display name. Backend
+API authorization remains mandatory, including permissions.read for the catalog
+where required. No auth, business API handlers, schema or seed changes are included.
+GET /api/roles follows cursor pagination and retains complete permissionKeys and
+API-provided revisions. GET /api/permissions uses its documented {items} catalog.
+The Figma matrix uses returned names/keys; illustrative labels and Shared/TBD cells
+do not establish grants. Cells show direct assignments, not inferred inherited access.
+Per-role Save sends only PUT /api/roles/{roleId}/permissions with the full selected
+permissionKeys and expectedRevision. Other roles' pending edits remain untouched.
+Unknown existing assignments stay visible/read-only and are retained on writes.
+Cancel affects only its role. Saves are serialized, never automatically retried,
+and never claim atomic updates across roles. PUT effectivePermissionKeys are shown
+separately as returned by the server, not copied into direct grants or other roles.
+Conflicts/uncertain writes require explicit reload of that role. Reload merges
+local additions/removals with current direct grants and revision, preserving
+concurrent additions and other pending roles. Removed/unverifiable roles stay
+blocked with their edits retained. 401/403 disable all further writes on the page.
+Shared Admin JSON transport was extracted from the user form without changing its
+public imports; existing Create/Edit unit/browser checks cover the shared behavior.
+Run node --test tests/unit/*.test.mjs and optional node tests/e2e/admin-roles.mjs
+against localhost development server and isolated headless Chrome/Edge CDP port
+9223. Browser fixtures intercept business APIs only in that target; no production
+sample grants or database writes are introduced. Local business APIs remain missing.
+Inheritance/admin safeguards remain backend policy; no local role-name rules are
+invented. Header subtitle/bell differences are intentionally deferred by the team.
