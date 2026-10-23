@@ -169,3 +169,12 @@ no business records or dashboard queries are introduced by this integration.
 October 19, 2026 Admin navigation update: temporarily include direct links to
 all existing component preview pages and Faculty/AC/Admin role probes under
 Admin, including Alert AC. All links require test:admin and retain route guards.
+
+October 23, 2026 Admin Dashboard frontend (Issue #50, Dashboard only):
+/admin uses the shared shell and requires users.read on the server. Navigation
+uses the same effective grant; role labels and test:admin alone do not grant
+product access. Administration links and sidebar entries point to /admin/users,
+/admin/roles, and /admin/hiring-levels, filtered by their respective read grants.
+Those destination pages are not implemented yet. Existing Faculty navigation and
+Admin test shortcuts remain. The Dashboard has no business API call or invented
+semester/identity data. Its spacious layout and plain Section follow Figma PDF 26.

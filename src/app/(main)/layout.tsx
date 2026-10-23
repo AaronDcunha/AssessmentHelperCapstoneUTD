@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { AppShell } from "@/components/layout/app-shell";
 import { requireUser } from "@/server/permissions";
-import { adminTestBindings, createNavigationConfig, filterNavigation } from "@/components/layout/navigation-config";
+import { adminNavigationBindings, adminRoutes, adminTestBindings, createNavigationConfig, filterNavigation } from "@/components/layout/navigation-config";
 import { facultyPageHeaders, facultyRoutes } from "@/components/observations/faculty-routes";
 
 export default async function MainLayout({ children }: { children: ReactNode }) {
@@ -12,6 +12,7 @@ export default async function MainLayout({ children }: { children: ReactNode }) 
     "faculty.requests": { href: facultyRoutes.requests, permission: "observations.read.own" },
     "faculty.observations": { href: facultyRoutes.observations, permission: "observations.read.own" },
     "faculty.history": { href: facultyRoutes.history, permission: "observations.read.own" },
+    ...adminNavigationBindings,
     ...adminTestBindings,
   });
   return (
@@ -19,7 +20,10 @@ export default async function MainLayout({ children }: { children: ReactNode }) 
       authorizedSections={filterNavigation(sections, item => !!item.permission && user.permissions.includes(item.permission))}
       user={{ name: user.name, initials: user.name, description: user.roles.join(" · ") }}
       headerUser={{ name: user.name, initials: user.name }}
-      pageHeaders={facultyPageHeaders}
+      pageHeaders={{
+        ...facultyPageHeaders,
+        [adminRoutes.dashboard]: { title: "Admin Dashboard", contentSpacing: "spacious" },
+      }}
     >
       {children}
     </AppShell>

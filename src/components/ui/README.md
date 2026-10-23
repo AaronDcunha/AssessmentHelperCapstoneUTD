@@ -22,6 +22,10 @@ import { Button } from "@/components/ui/button";
 `Section` also accepts an optional `eyebrow` for text above its title, such as
 `<Section eyebrow="Assessment Helper" title="Login" headingLevel={1}>`.
 
+Use `variant="plain"` for an unboxed section, such as the Admin Dashboard's
+Administration links. It retains the accessible heading and heading/content gap
+without the card background, border, radius, or padding. The default is `"card"`.
+
 ## Buttons and form fields
 
 Import `Button` / `ButtonLink` from `@/components/ui/button` and `Input`, `Textarea`, `Select` from `@/components/ui/form-fields`.

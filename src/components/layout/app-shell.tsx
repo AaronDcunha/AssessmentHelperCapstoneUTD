@@ -16,7 +16,7 @@ export type AppShellProps = {
   headerUser?: PageHeaderProps["user"];
   notificationAction?: PageHeaderProps["notificationAction"];
   subtitle?: string;
-  pageHeaders?: Record<string, { title: string; subtitle?: string; facultyLayout?: boolean }>;
+  pageHeaders?: Record<string, { title: string; subtitle?: string; facultyLayout?: boolean; contentSpacing?: "default" | "spacious" }>;
 };
 
 export function AppShell({ children, authorizedSections, user, headerUser, notificationAction, subtitle, pageHeaders }: AppShellProps) {
@@ -29,6 +29,7 @@ export function AppShell({ children, authorizedSections, user, headerUser, notif
     .sort((a, b) => String(b.href).length - String(a.href).length)[0];
   const header = pageHeaders?.[pathname];
   const facultyLayout = header?.facultyLayout === true;
+  const spaciousContent = facultyLayout || header?.contentSpacing === "spacious";
   const expandedSections = Object.fromEntries(authorizedSections.map((section) => [
     section.id, expanded[section.id] ?? (section.id === current?.sectionId || authorizedSections.length === 1),
   ]));
@@ -47,7 +48,7 @@ export function AppShell({ children, authorizedSections, user, headerUser, notif
           centerProfileText={facultyLayout}
           className="h-full w-full lg:w-[288px]" style={{ minHeight: "100%" }} />
       </div>
-      <div className={`min-w-0 flex-1 p-ah-24 ${facultyLayout ? "md:p-ah-48" : "md:p-ah-32"}`}>
+      <div className={`min-w-0 flex-1 p-ah-24 ${spaciousContent ? "md:p-ah-48" : "md:p-ah-32"}`}>
         <div className="mx-auto w-full max-w-[1096px]">
           <PageHeader title={header?.title ?? current?.label ?? "Assessment Helper"}
             subtitle={header?.subtitle ?? subtitle} user={headerUser} notificationAction={notificationAction}
@@ -56,7 +57,7 @@ export function AppShell({ children, authorizedSections, user, headerUser, notif
                 onLogout={() => signOut({ redirectTo: "/login" })} />
             ) : undefined}
             showUnavailableControls={facultyLayout}
-            className={facultyLayout ? "mb-ah-32" : "mb-ah-24"} />
+            className={spaciousContent ? "mb-ah-32" : "mb-ah-24"} />
           <main>{children}</main>
         </div>
       </div>
