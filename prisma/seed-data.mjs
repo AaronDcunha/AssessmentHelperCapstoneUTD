@@ -123,6 +123,8 @@ export function buildSeed() {
     template_name: 'Basic Classroom Observation',
     description: 'Rate each statement: 1 = strongly disagree, 2 = disagree, 3 = neither agree nor disagree, 4 = agree, 5 = strongly agree. All rating questions have equal weight. Written comments are optional.',
     is_active: true,
+    status: 'published',
+    published_at: '2026-10-19T00:00:00.000Z',
   }];
   rows.template_criterion = [
     ['objectives', 'The instructor communicated clear learning objectives.', 'RATING', true],
@@ -133,6 +135,11 @@ export function buildSeed() {
     ['improvements', 'What improvements would you suggest?', 'TEXT', false],
   ].map(([key, text, type, required], index) => ({
     criterion_id: stableId(`criterion:basic-classroom-observation-v1:${key}`),
+    criterion_key: key,
+    options: type === 'RATING' ? JSON.stringify([
+      {value:1,label:'Strongly disagree'}, {value:2,label:'Disagree'},
+      {value:3,label:'Neither agree nor disagree'}, {value:4,label:'Agree'}, {value:5,label:'Strongly agree'},
+    ]) : null,
     template_id: templateId,
     criterion_text: text,
     question_type: type,

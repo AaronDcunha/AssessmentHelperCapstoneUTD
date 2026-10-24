@@ -1,4 +1,35 @@
 ASSESSMENT HELPER IMPLEMENTATION NOTES
+October 24, 2026 configuration/frontend integration:
+The configuration backend and AC/Admin frontends coexist in this branch.
+Configuration endpoints marked COMPLETED in the API draft are implemented;
+monitoring, assessment and Admin business handlers remain pending. Earlier
+frontend-only statements about missing configuration APIs describe their original
+branch scope, not the combined branch. The confirmed faculty-status semester
+response and boolean accountStatus contract are retained. Configuration template
+IDs identify editable records; no separate version model is introduced.
+
+October 23, 2026 persistence clarification:
+Use generated Prisma Client model APIs and Prisma transactions for configuration
+queries and mutations, not hand-written SQL or raw-query escape hatches. The
+existing authentication/seed implementation is outside this refactor. Generate
+the client with npm run db:generate; dev/build pre-scripts also generate it.
+
+October 23, 2026 AC Configuration backend (supersedes relevant draft proposals):
+Configuration permissions apply university-wide, without department filtering.
+Implement the listed cycle/semester-settings/template endpoints and the draft
+template publish endpoint. One cycle per semester is required; AC may edit passed
+deadlines and reopen periods. Enforce signup < observation < feedback. Semester
+boundaries/timezone and optimistic revisions are persisted; imported boundaries
+remain null until configured. Settings save semester and cycle atomically.
+Keep draft/publish templates, but allow in-place question edits to published
+templates per October 18. New templates begin as drafts; publish activates them.
+Current template is the most recently published active record, university-wide.
+Do not implement separate versions. Preserve criterion IDs and stored answers;
+block criterion removal once assessments reference the template. Faculty can read
+published templates and relevant cycles; management requires current database
+cycles.manage/templates.manage grants. See AC_CONFIGURATION_BACKEND.md for the
+implemented contracts, filters, security, revisions, migration and checks.
+
 October 23, 2026 observation tracking detail follow-up:
 Render the existing GET /api/observations/{observationId} contract's progress array,
 observation.scheduledMeeting and proposedMeetings in the read-only detail page.

@@ -3,32 +3,41 @@ October 18, 2026 | Reviewed against Faculty, AC, Admin and Shared Figma screens.
 
 STATUS
 ======
+October 23 AC Configuration update: the cycle, semester lookup/settings and
+template operations in sections 2 and 6 are implemented as described below.
+See AC_CONFIGURATION_BACKEND.md for the finalized integration contract and tests.
+Other sections retain their proposal status unless separately marked completed.
+
 October 23, 2026 faculty-status response update: lastEvaluation now contains
 semester:{id,name} instead of semesterId. See section 8 and Implementation_Notes.
 The AC frontend consumes this shape; the backend handler is still pending here.
 
-Proposed contracts, not implemented business APIs or approved database models.
+Endpoints marked COMPLETED are implemented for their stated scope. Unmarked
+endpoints remain proposals; frontend consumers alone do not implement an API.
 Implementation_Notes.txt and current team decisions take priority over this draft.
 The original AssessmentHelper_API_Endpoints.txt remains unchanged as a backup.
 
 Progress labels: (COMPLETED) = implemented for the stated scope; (INCOMPLETE) =
 partially implemented with remaining work noted. Unmarked endpoints are planned.
 
-Already implemented: Auth.js login/sessions/logout, custom /login, session-aware
-redirects, demo GET /api/me, role helpers and test APIs. All test pages are Admin-only.
-Pending auth work: demo professor-name lookup, account status/database grants, and
-eventual UTD SSO integration. No stored username or production local-password system
-is required by the agreed login plan.
-Other endpoints below remain planned. Reuse existing auth; do not build another system.
+Already implemented: Auth.js credentials/JWT login, stored username/password-hash
+verification, active-account checks, current database role/permission resolution,
+GET /api/me, route guards, and the configuration endpoints marked COMPLETED below.
+Reserved mock identities remain development-only opt-in fixtures. UTD SSO is pending.
+Faculty, AC monitoring and Admin frontends exist; their other business handlers
+remain pending unless explicitly marked completed. See AUTH_BACKEND.md,
+AC_CONFIGURATION_BACKEND.md and AC_MONITORING_FRONTEND.md for scope details.
 
 CONVENTIONS
 ===========
 Q = query; B = JSON body; R = response. ? = optional. {id} = opaque path ID.
-Fields/enums below are proposals. Typed shapes describe data, not executable JSON.
+Fields/enums for completed endpoints follow their implementation notes; other
+shapes are proposals. Typed shapes describe data, not executable JSON.
 List<T> = {items:T[],pageInfo:{nextCursor:string|null,hasMore:boolean}}.
 All lists accept cursor?/limit?; proposed default 20, maximum 100. Counts cover all
 matching records, not just the current page. Dates: YYYY-MM-DD; timestamps: UTC ISO
-8601. Include IANA timeZone with schedules. Exact deadline boundaries remain TBD.
+8601. Include IANA timeZone with schedules. Configuration cycle status includes
+each deadline instant; other workflow deadline cutoffs remain TBD.
 
 Standard errors: {error:{code,message,fieldErrors?,requestId?}}.
 400 invalid request; 401 logged out/inactive; 403 forbidden; 404 unavailable record;
@@ -42,12 +51,14 @@ scope and record ownership. Derive actor from session. Validate/allow-list input
 never trust browser ownership, roles, timestamps or completion states. Use revisions
 for concurrent edits and idempotent transactions for retried workflow mutations.
 Admin inherits AC + Faculty access; AC inherits Faculty access. /me remains personal.
-Final permission keys, AC scope, revision/idempotency details require agreement.
+Configuration grants, university-wide scope and integer revisions are specified
+in AC_CONFIGURATION_BACKEND.md. Other workflow scopes/idempotency remain pending.
 
 COMMON RESPONSE SHAPES
 ======================
 User = {id,name,email?}; return email only when needed.
 Semester = {id,name,year,season,startsOn,endsOn,timeZone,revision}.
+  startsOn/endsOn may be null for imported semesters until AC configures them.
 Cycle = {id,semester:Semester,signupDeadline,observationDeadline,feedbackDeadline,
   status,revision,allowedActions: string[]}.
 Section = {id,course:{id,code,title,departmentId,level},sectionNumber,semesterId,
@@ -61,7 +72,7 @@ Attempt = {id,candidateId,sequence,sentAt,expiresAt,responseStatus,respondedAt,
 Candidate = {id,observationId,professor:User,availableMeetingOptionIds:string[],
   responseStatus,outcome,acceptedMeetingOptionId,activeAttempt:Attempt|null}.
 Criterion = {id?,key,prompt,type,required,order,options?:[{value:number,label}],weight?}.
-Template = {id,version,title,status,publishedAt,revision,criteria:Criterion[],
+Template = {id,title,status,publishedAt,revision,criteria:Criterion[],
   commentPrompts:[{id?,prompt,required,order}],signatureLabels:{observer,observee}}.
 Assessment = {id,observationId,templateVersionId,status,revision,
   answers:[{criterionId,value:number|string|null}],comments:[{promptId,text}],
@@ -82,7 +93,8 @@ Checked AssessmentHelper_Relational_Schema.drawio. API camelCase can map to its
 snake_case fields; nested responses are authorized joins, not extra tables.
 - User.id -> app_user.user_id. Professor uses that same ID through professor.user_id;
   teaches.professor_id and signup/candidate/feedback professor references identify it.
-  No username column exists or is needed. app_user.email is unique; name is not.
+  Current Prisma AppUser stores a unique username for database login and a unique
+  email; fullName is not unique. The older diagram is not the executable schema.
 - Roles/grants -> role, user_role, permission, role_permission. permissions uses
   permission_key. role.key/description are proposed additions, not current fields;
   use role_id/name or agree stable keys. Inheritance needs application/schema support.
@@ -98,18 +110,19 @@ snake_case fields; nested responses are authorized joins, not extra tables.
   candidate acceptance must reference one of those persisted options.
 - Candidate -> observation_candidate. Its current fields track only one send/response;
   attempts, compatible dates and acceptedMeetingOptionId require additional relations.
-- Template -> observation_template.template_version_id. Criterion ->
-  template_criterion. type maps to question_type; options expand rating_range only
-  after its representation is agreed. key/order, scale labels, comment/signature
-  configuration and publication applicability are proposed extensions.
+- Template -> observation_template.template_id; no separate version model. Criterion
+  -> template_criterion. The configuration migration implements criterion_key,
+  options JSON, publication status/time, comment prompts, signature labels and
+  revisions. question_type stores RATING/TEXT; API type uses rating/text.
 - Feedback -> process_feedback. process_rating/difficulties/suggestions exist;
   generic answers, survey version and multiple attachments need extensions. Its
   participant_role column does not resolve dual-role submission/counting policy.
 - Notification -> notification. target can derive from observation_id/cycle_id;
   title can derive from type. Other target kinds require an agreed extension.
 - evaluation_interval_years -> evaluationIntervalYears; app_user.is_active -> accountStatus.
-  Semester name derives from year/season. Semester dates/timezone, hiringLevel.active,
-  revisions, async operations and idempotency records are not in the current diagram.
+  Semester name maps from termName; year/season derive from termCode. Configuration
+  migration adds semester dates/timezone and semester/cycle/template revisions.
+  hiringLevel.active, async operations and idempotency records remain proposals.
 
 Required schema updates: web assessment/answer/history records replacing the old
 signed_assessment.signed_file_reference flow; invitation attempts; accepted/final
@@ -126,13 +139,12 @@ This cross-check does not change the diagram or the teammate's Prisma schema.
 ===================================
 (INCOMPLETE)
 /api/auth/* -- EXISTING Auth.js routes. Use library helpers:
-  signIn('credentials',{username,password,redirect:false,redirectTo:'/test'})
+  signIn('credentials',{username,password,redirect:false,redirectTo:'/dashboard'})
   signOut({redirectTo:'/login'})
   Auth.js handles session cookies and its CSRF flow; no manual token storage.
-  /login redirects active users to /test. Non-admins then see /forbidden for now.
-  Demo intent: look up the professor by name. The existing request key 'username'
-  is only a compatibility label, not a stored username. Current fixtures still use
-  faculty/ac/admin; database-backed name lookup is pending. Production uses UTD SSO.
+  /login redirects active users to /dashboard. Credentials use the stored unique
+  username and verify the password hash. Reserved faculty/ac/admin mock logins
+  require development mode and AUTH_DEMO_ENABLED=true. UTD SSO is future work.
   Professor names are not identity proof or necessarily unique: use internal user
   IDs for records, reject ambiguous demo matches, and later link verified SSO identity
   to those IDs. The exact UTD SSO protocol/claim mapping is not established here.
@@ -148,15 +160,16 @@ POST /api/auth/signout -- Auth.js logout, used by the shared profile dropdown.
 (COMPLETED)
 Login UI and route guards -- /login form, active-session redirect, shared login
   check, Admin-only test pages, and /forbidden sign-out action.
-  These work with demo identities; production identity/permission data is pending.
+  Database logins reload active-account status and effective grants server-side.
+  Production UTD SSO identity integration remains pending.
 
 (INCOMPLETE)
-GET /api/me -- EXISTING demo; permanent version belongs to the auth task.
+GET /api/me -- EXISTING database-backed identity; extended profile shape is proposed.
   R: {id,name,email?,roles:string[],permissions:string[],professor?:
     {departmentId,hiringLevelId,hireDate?},roleDetails?:Role[]}.
-  Preserve roles/permissions string arrays; never return credentials. Existing demo
-  'username' output is temporary and is not a proposed database/profile requirement.
-  Remaining: database profile lookup, active-account checks and effective DB grants.
+  Preserve roles/permissions string arrays; never return credentials. Current
+  active-account checks and effective database grants are implemented. Extended
+  professor/roleDetails fields remain proposals; see AUTH_BACKEND.md for actual output.
 
 (COMPLETED)
 GET /api/test/{area} -- temporary role-permission probes, not production endpoints.
@@ -169,25 +182,30 @@ server pages/APIs must still authorize independently.
 
 2. SEMESTERS, CYCLES AND ELIGIBILITY
 ===================================
-GET /api/evaluation-cycles
+GET /api/evaluation-cycles (COMPLETED)
   Q: semesterId?,status?. R: List<Cycle>. Faculty: relevant cycles; AC/Admin: scope.
-  Agree current-cycle selection and behavior when several cycles are active.
-GET /api/evaluation-cycles/{cycleId}
+  Status is derived: signup, observation, feedback, closed. A deadline is inclusive.
+  One cycle per semester; list does not select a single current cycle.
+GET /api/evaluation-cycles/{cycleId} (COMPLETED)
   R: Cycle. Authorized faculty may read relevant semester/deadline information.
-POST /api/evaluation-cycles -- scoped AC/Admin.
+POST /api/evaluation-cycles (COMPLETED) -- cycles.manage, university-wide.
   B: {semesterId,signupDeadline,observationDeadline,feedbackDeadline}. R: Cycle.
-PATCH /api/evaluation-cycles/{cycleId} -- scoped AC/Admin.
+PATCH /api/evaluation-cycles/{cycleId} (COMPLETED) -- cycles.manage, university-wide.
   B: {expectedRevision,signupDeadline?,observationDeadline?,feedbackDeadline?}. R: Cycle.
-  Validate dates; agree duplicate-cycle, past-deadline edit and reopening policies.
-GET /api/semesters -- authorized lookup for filters and cycle setup.
+  Signup < observation < feedback; AC may edit passed deadlines, reopening periods.
+GET /api/semesters (COMPLETED) -- authorized lookup for filters and cycle setup.
   Q: year?,season?. R: List<Semester>.
-PATCH /api/semesters/{semesterId} -- scoped AC/Admin; authority to confirm.
-  B: {expectedRevision,startsOn?,endsOn?,timeZone?}. R: Semester.
-  Semester Settings edits semester boundaries AND cycle deadlines. OPTIONAL atomic
-  PUT /api/evaluation-cycles/{cycleId}/settings can save both transactionally:
-  B: {expectedCycleRevision,expectedSemesterRevision,semester:{startsOn,endsOn},
+  season filter: Spring|Summer|Fall. Names map from stored termName.
+PUT /api/evaluation-cycles/{cycleId}/settings (COMPLETED) -- cycles.manage.
+  Chosen atomic settings save; no standalone semester PATCH is implemented.
+  B: {expectedCycleRevision,expectedSemesterRevision,semester:{startsOn,endsOn,timeZone?},
     deadlines:{signupDeadline,observationDeadline,feedbackDeadline}}.
-  R: {semester:Semester,cycle:Cycle}. Choose one save contract before integration.
+  R: {semester:Semester,cycle:Cycle}. Both revisions increment in one transaction.
+  Boundaries are valid dates with startsOn <= endsOn. timeZone is an IANA zone.
+  Deadlines are UTC timestamps; they need not fall inside semester boundaries.
+  Reads: cycles.read/manage sees all; faculty own-record grants see semesters/cycles
+  where they teach, signed up, observe, or are an observer candidate (semester
+  lookup itself uses teaching assignments). Unknown/out-of-scope detail returns 404.
 GET /api/me/evaluation-status
   Q: cycleId?; omission requires agreed current-cycle rule.
   R: {cycle:Cycle|null,hiringLevel:HiringLevel|null,lastCompletedEvaluation:
@@ -303,23 +321,29 @@ PATCH /api/alerts/{alertId} -- CONDITIONAL resolution flow; scoped AC/Admin.
 
 6. TEMPLATES AND WEB ASSESSMENTS
 ================================
-GET /api/observation-templates
+GET /api/observation-templates (COMPLETED)
   Q: status?. R: List<Template summary>. AC: authorized drafts; faculty: published only.
-GET /api/observation-templates/{templateId}
-  R: Template. Here templateId identifies a version; align naming with final schema.
-GET /api/observation-templates/current
-  Q: cycleId? if applicability is cycle-specific. R: Template; 404 if none applies.
-POST /api/observation-templates -- scoped AC/Admin.
+GET /api/observation-templates/{templateId} (COMPLETED)
+  R: Template. templateId identifies an editable template record, not a version.
+GET /api/observation-templates/current (COMPLETED)
+  R: most recently published active Template; 404 if none applies.
+  Applicability is university-wide; cycleId is not supported (422).
+POST /api/observation-templates (COMPLETED) -- templates.manage, university-wide.
   B: {title,criteria:Criterion[],commentPrompts,signatureLabels}. R: draft Template.
-PATCH /api/observation-templates/{templateId} -- draft only; scoped AC/Admin.
+PATCH /api/observation-templates/{templateId} (COMPLETED) -- templates.manage.
   B: {expectedRevision,title?,criteria?:Criterion[],commentPrompts?,signatureLabels?}.
   R: Template. Proposed arrays replace supplied sections; omitted sections unchanged.
-  Validate IDs/order/options; agree deletion semantics. Published versions immutable.
-POST /api/observation-templates/{templateId}/versions -- scoped AC/Admin.
-  B: {title?}. R: new cloned draft Template; preserve previous versions/answers.
-POST /api/observation-templates/{templateId}/publish -- NEW; scoped AC/Admin.
-  B: {expectedRevision,cycleId?}. R: published Template. Validate completeness;
-  agree applicability and when observations get assigned a version.
+  Draft and published templates may be edited per October 18 clarification.
+  In-place question edits affect older linked assessments. Preserve criterion IDs
+  when editing existing questions. Cannot remove criteria once assessments exist;
+  use a new template for major changes. Existing answer JSON is never modified.
+  Types: rating|text. Ratings require 2-20 uniquely valued integer options with labels.
+  No separate version model or /versions endpoint is implemented.
+POST /api/observation-templates/{templateId}/publish (COMPLETED) -- templates.manage.
+  B: {expectedRevision}. R: published Template. Only drafts may publish.
+  New templates are inactive drafts. Publication activates them and records time.
+  templates.read/manage can read drafts and published templates; assessment.read.own
+  may read published templates only. Publication does not reassign old assessments.
 GET /api/observations/{observationId}/template
   R: exact assigned Template, not latest. Authorized participants/reviewers only.
 GET /api/observations/{observationId}/assessment

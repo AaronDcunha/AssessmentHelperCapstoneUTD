@@ -14,16 +14,18 @@ The original documents are preserved as supplied. They contain outdated requirem
 
 ## Files
 
-Authentication backend: see `AUTH_BACKEND.md` for the implemented development-only mock login, frontend integration contract, permission probes, and remaining database work.
+Authentication backend: see `AUTH_BACKEND.md` for database-backed login, development-only mock fixtures, current grants, and the frontend integration contract.
 
 | File | Use |
 | --- | --- |
 | `Implementation_Notes.txt` | Current decisions and remaining implementation questions |
+| `AC_CONFIGURATION_BACKEND.md` | Implemented configuration endpoints, access rules, migrations, and verification |
+
 | `AC_MONITORING_FRONTEND.md` | AC list/cycle integration, business page guards, deferred work and verification |
 | `PROJECT_STRUCTURE.md` | Proposed directories and responsibilities |
 | `Expanded Use Cases.docx` / `.txt` | UC1–UC13 workflow descriptions; TXT is a paragraph-text extraction for AI/search |
 | `process_explanation_to_all.docx` / `.txt` | Faculty/AC process and draft KPI definitions |
-| `AssessmentHelper_API_Contract_Draft_v2.txt` | New Figma-reviewed API proposal with parameters, return shapes, access rules, screen coverage, and unresolved decisions; not implemented/approved contracts |
+| `AssessmentHelper_API_Contract_Draft_v2.txt` | API contracts and proposals; configuration endpoints marked COMPLETED are implemented, while unmarked endpoints remain planned |
 | `AssessmentHelper_API_Endpoints.txt` | Preserved earlier endpoint draft/backup; includes outdated assessment-upload routes |
 | `AssessmentHelper_Relational_Schema.drawio` | Proposed relational model; assessment answers, invitation attempts/approvals, and relevant constraints need revision |
 
@@ -34,7 +36,7 @@ The TXT extracts aid reading; use the Word originals when table structure or for
 - Professors can act as observees and observers in the same cycle. Signups enter the observer pool.
 - AC manages cycle deadlines, generates and releases recommendations, monitors progress, sends reminders, and reviews reports.
 - Admin manages users, roles, permissions, and hiring levels. Enforce permissions and ownership on the server.
-- Assessments use a web-based form with versioned criteria and stored answers. Define acknowledgement/finalization details before implementing them; do not build signed-document upload routes.
+- Assessments use a web-based form with stored answers linked to template records. In-place question edits are supported; major changes use a new template record. Define acknowledgement/finalization details before implementing them; do not build signed-document upload routes.
 - Assistant professors require evaluation every year; associate/full professors every two years. Faculty due in a semester must sign up by that cycle's signup deadline. Signup is separate from observation completion.
 - Automatic invitation resends and AC approval for accepting expired invitations are required work. Retry limits, approval-window behavior, and deadline cutoffs still need definition.
 - Manual observer replacement and Department Head functionality are stretch goals; include them only when the task calls for them.
