@@ -80,7 +80,7 @@ async function value(name, next) {
 async function click(text) { assert.ok(await evaluate(`(() => { const e = [...document.querySelectorAll('button')].find(e => e.textContent === ${JSON.stringify(text)}); if (!e || e.disabled) return false; e.click(); return true; })()`), "Expected an enabled button."); }
 const list = items => ({ items, pageInfo: { nextCursor: null, hasMore: false } });
 const roles = [{ id: "r1", name: "Role One" }, { id: "r2", name: "Role Two" }, { id: "r3", name: "Role Three" }];
-const initial = { id: "fixture-user", name: "Fixture Person", email: "fixture@example.test", accountStatus: "api-status",
+const initial = { id: "fixture-user", name: "Fixture Person", email: "fixture@example.test", accountStatus: true,
   roleIds: ["r1", "r2"], professor: { departmentId: "d1", hiringLevelId: "h1", hireDate: "2025-01-15" }, revision: 1 };
 let record = structuredClone(initial), mode = "normal", requests = [], fixtureFailure;
 handlers.set("Fetch.requestPaused", async event => {
@@ -122,7 +122,7 @@ try {
   await send("Fetch.enable", { patterns: ["users", "roles", "departments", "hiring-levels"].map(path => ({ urlPattern: `${base}/api/${path}*` })) });
 
   await navigate("/admin/users/new");
-  await wait(`document.querySelector('[name="accountStatus"]')?.options.length === 2`);
+  await wait(`document.querySelector('[name="accountStatus"]')?.options.length === 3`);
   assert.equal(await evaluate(`document.querySelector('h1').textContent`), "Create User");
   assert.equal(await evaluate(`[...document.querySelectorAll('button')].some(e => e.textContent === 'Delete User')`), false);
   await click("Save Changes"); await wait(`document.querySelectorAll('[aria-invalid="true"]').length >= 3`);
@@ -131,7 +131,7 @@ try {
   await value("hiringLevelId", "");
   assert.equal(await evaluate(`!!document.querySelector('[name="departmentId"]')`), false);
   await value("hiringLevelId", "h1"); await value("departmentId", "d1");
-  await value("accountStatus", "api-status");
+  await value("accountStatus", "true");
   const geometry = await evaluate(`(() => {const a=document.querySelector('[name="name"]').getBoundingClientRect(), b=document.querySelector('[name="email"]').getBoundingClientRect(); return {width:a.width, gap:b.x-a.right, sameRow:a.y===b.y};})()`);
   assert.equal(geometry.width, 480); assert.equal(geometry.gap, 24); assert.equal(geometry.sameRow, true);
   await click("Save Changes");
@@ -170,8 +170,8 @@ try {
   await wait(`location.pathname === '/admin/users'`); assert.equal(requests.at(-1).method, "DELETE");
 
   mode = "unavailable"; await navigate("/admin/users/new");
-  await wait(`document.querySelector('main').textContent.includes('No valid account statuses')`);
-  assert.equal(await evaluate(`[...document.querySelectorAll('button')].find(e => e.textContent === 'Save Changes').disabled`), true);
+  await wait(`document.querySelector('main').textContent.includes('Roles:')`);
+  assert.equal(await evaluate(`[...document.querySelectorAll('button')].find(e => e.textContent === 'Save Changes').disabled`), false);
   await navigate("/admin/users/fixture-user"); await wait(`document.querySelector('main').textContent.includes('record or API endpoint is unavailable')`);
   mode = "malformed"; await click("Retry loading user"); await wait(`document.querySelector('main').textContent.includes('no usable revision')`);
   if (fixtureFailure) throw fixtureFailure;

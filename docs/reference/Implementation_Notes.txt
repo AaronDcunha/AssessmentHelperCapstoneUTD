@@ -300,3 +300,11 @@ fixtures, real unavailable endpoints, navigation, header/row/control dimensions,
 and Faculty/AC probe regressions using the same isolated browser setup above.
 All business writes are blocked in this read-only review fixture. Existing form,
 role and hiring-level browser tests exercise mutations only through interception.
+
+October 24, 2026 account-status contract correction (supersedes string/status-lookup notes):
+accountStatus is a JSON boolean mapped directly to AppUser.isActive. true displays
+as Active and false as Inactive. Create/Edit always offer both choices, independent
+of existing users, pagination or lookup failures. Create requires an explicit choice.
+POST/PATCH send actual booleans, including false. The Users filter offers All, Active
+and Inactive; its query serializes true/false and omits the parameter for All.
+API response validators reject status strings. No schema or backend handlers changed.

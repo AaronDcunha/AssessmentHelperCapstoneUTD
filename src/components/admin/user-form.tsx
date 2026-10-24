@@ -8,7 +8,7 @@ import { Section } from "@/components/ui/section";
 import { adminRoutes } from "@/components/layout/navigation-config";
 import type { UserRole } from "./users-api";
 import {
-  deleteUser, fetchUserRoles, getAccountStatuses, getDepartments, getHiringLevels, getUser,
+  deleteUser, fetchUserRoles, getDepartments, getHiringLevels, getUser,
   UserFormApiError, type Department, type FieldErrors, type HiringLevel, type UserRecord,
 } from "./user-form-api";
 import { draftFromUser, emptyUserDraft, rebaseDraft, saveUserDraft, validateUserDraft, type UserDraft } from "./user-form-model";
@@ -26,7 +26,6 @@ export function UserForm({ userId }: { userId?: string }) {
   const [roles, setRoles] = useState(emptyOptions<UserRole>);
   const [departments, setDepartments] = useState(emptyOptions<Department>);
   const [levels, setLevels] = useState(emptyOptions<HiringLevel>);
-  const [statuses, setStatuses] = useState(emptyOptions<string>);
   const [optionRetry, setOptionRetry] = useState(0);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [error, setError] = useState<UserFormApiError | null>(null);
@@ -61,17 +60,15 @@ export function UserForm({ userId }: { userId?: string }) {
     load(fetchUserRoles, setRoles);
     load(getDepartments, setDepartments);
     load(getHiringLevels, setLevels);
-    load(getAccountStatuses, setStatuses);
     return () => controller.abort();
   }, [optionRetry]);
 
   const roleOptions = [...roles.items];
   for (const id of baseline?.roleIds ?? []) if (!roleOptions.some(role => role.id === id)) roleOptions.push({ id, name: `Assigned role (${id})` });
-  const statusOptions = [...new Set([...(baseline ? [baseline.accountStatus] : []), ...statuses.items])];
   const disabled = busy || !!createdId || recordState !== "ready";
   const faculty = !!baseline?.professor || !!draft.hiringLevelId || !!draft.departmentId || !!draft.hireDate;
   const primaryRole = draft.roleIds[0] ?? "";
-  const lookupErrors = [["Roles", roles], ["Hiring levels", levels], ["Departments", departments], ["Account statuses", statuses]] as const;
+  const lookupErrors = [["Roles", roles], ["Hiring levels", levels], ["Departments", departments]] as const;
   const fieldError = (key: string) => fieldErrors[key] ?? fieldErrors[key.replace("professor.", "")];
   const change = <K extends keyof UserDraft>(key: K, value: UserDraft[K]) => {
     if (disabled) return;
@@ -104,7 +101,7 @@ export function UserForm({ userId }: { userId?: string }) {
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (disabled || blocked || !lock()) return;
-    const errors = validateUserDraft(draft, baseline, roles.items.map(role => role.id), statusOptions);
+    const errors = validateUserDraft(draft, baseline, roles.items.map(role => role.id));
     setFieldErrors(errors); setError(null); setNotice("");
     if (Object.keys(errors).length) {
       unlock();
@@ -141,7 +138,6 @@ export function UserForm({ userId }: { userId?: string }) {
     setRoles(previous => ({ ...previous, loading: true, error: null }));
     setDepartments(previous => ({ ...previous, loading: true, error: null }));
     setLevels(previous => ({ ...previous, loading: true, error: null }));
-    setStatuses(previous => ({ ...previous, loading: true, error: null }));
     setOptionRetry(value => value + 1);
   }
 
@@ -193,8 +189,9 @@ export function UserForm({ userId }: { userId?: string }) {
           <Select label="Account Status" name="accountStatus" value={draft.accountStatus} required error={fieldError("accountStatus")}
             onChange={event => change("accountStatus", event.target.value)} wrapperClassName="min-h-control-88 min-w-0"
             className="h-[58px] px-ah-16 py-ah-16 enabled:bg-surface!">
-            <option value="" disabled>{statuses.loading ? "Loading statuses…" : statusOptions.length ? "Select account status" : "Status options unavailable"}</option>
-            {statusOptions.map(status => <option key={status} value={status}>{status}</option>)}
+            <option value="" disabled>Select account status</option>
+            <option value="true">Active</option>
+            <option value="false">Inactive</option>
           </Select>
           {faculty && <>
             <Select label="Department" name="departmentId" value={draft.departmentId} required error={fieldError("professor.departmentId")}
@@ -213,13 +210,11 @@ export function UserForm({ userId }: { userId?: string }) {
       </Section>
       <div className="space-y-ah-8 text-caption text-muted">
         <p>Faculty profiles are optional. Selecting a hiring level requires a department. Existing faculty profiles are preserved.</p>
-        <p>Only existing account statuses are available.</p>
         {lookupErrors.some(([, options]) => options.loading) && <p role="status">Loading form options…</p>}
         {lookupErrors.filter(([, options]) => options.error).map(([label, options]) => <p key={label} role="alert" className="text-danger">{label}: {options.error}</p>)}
         {!roles.loading && !roles.error && !roles.items.length && <p role="status">No assignable roles are available. Existing assignments are preserved.</p>}
         {faculty && !departments.loading && !departments.error && !departments.items.length && <p role="status">No department options are available. An existing department can be retained.</p>}
-        {!statuses.loading && !statusOptions.length && <p role="alert" className="text-danger">No valid account statuses are available. Saving is disabled until the API supplies a status.</p>}
-        {(lookupErrors.some(([, options]) => options.error) || (!statuses.loading && !statusOptions.length)
+        {(lookupErrors.some(([, options]) => options.error)
           || (!roles.loading && !roles.items.length)) && <Button variant="secondary" disabled={busy} onClick={retryOptions}>Retry form options</Button>}
       </div>
       <div ref={feedback} tabIndex={-1} className="space-y-ah-12">
@@ -239,7 +234,7 @@ export function UserForm({ userId }: { userId?: string }) {
           <Button variant="secondary" className="h-11 w-[260px] max-w-full py-ah-0! text-sidebar" disabled={busy} onClick={() => router.push(adminRoutes.users)}>
             {createdId ? "Back to Users" : "Cancel"}
           </Button>
-          {!createdId && <Button type="submit" className="h-11 w-[260px] max-w-full py-ah-0!" disabled={disabled || blocked || !statusOptions.length}>
+          {!createdId && <Button type="submit" className="h-11 w-[260px] max-w-full py-ah-0!" disabled={disabled || blocked}>
             {busy ? "Saving…" : "Save Changes"}
           </Button>}
         </div>

@@ -84,7 +84,7 @@ const levels = [
   { id: "full-fixture", name: "Full Professor", evaluationIntervalYears: 2, active: true, revision: 1 },
 ];
 const users = [1, 2, 3].map((n) => ({ id: n === 1 ? "fixture-user" : "fixture-user-" + n,
-  name: "Professor " + n, email: "professor" + n + "@university.test", accountStatus: "Active", roles: [roles[0]] }));
+  name: "Professor " + n, email: "professor" + n + "@university.test", accountStatus: true, roles: [roles[0]] }));
 const paths = [
   ["/admin", "Admin Dashboard", "/admin"], ["/admin/users", "Users", "/admin/users"],
   ["/admin/users/new", "Create User", "/admin/users"], ["/admin/users/fixture-user", "Edit User", "/admin/users"],
@@ -126,7 +126,7 @@ async function go(path) {
 }
 async function ready(path) {
   if (path === "/admin/users") await wait("document.querySelectorAll('tbody tr').length === 3");
-  if (path === "/admin/users/new" || path === "/admin/users/fixture-user") await wait("document.querySelector('[name=\"accountStatus\"]')?.options.length === 2 && !document.querySelector('fieldset')?.disabled");
+  if (path === "/admin/users/new" || path === "/admin/users/fixture-user") await wait("document.querySelector('[name=\"accountStatus\"]')?.options.length === 3 && !document.querySelector('fieldset')?.disabled");
   if (path === "/admin/roles") await wait("document.querySelectorAll('tbody tr').length === 5");
   if (path === "/admin/hiring-levels") await wait("document.querySelectorAll('tbody tr').length === 3");
 }

@@ -24,7 +24,7 @@ function load(filename) {
 const api = load("src/components/admin/user-form-api.ts");
 const model = load("src/components/admin/user-form-model.ts");
 // Fixtures live only in tests. No production endpoint or successful response is mocked by the app.
-const user = { id: "user/1", name: "Test User", email: "user@example.test", accountStatus: "backend-status",
+const user = { id: "user/1", name: "Test User", email: "user@example.test", accountStatus: true,
   roleIds: ["role-1", "role-2"], professor: null, revision: "revision-A" };
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json" } });
 const list = (items, nextCursor = null) => ({ items, pageInfo: { nextCursor, hasMore: nextCursor !== null } });
@@ -134,19 +134,16 @@ test("Lookup shapes respect departments pagination and the hiring-level items-on
   assert.equal((await api.getDepartments(new AbortController().signal)).length, 2);
   assert.match(calls[1], /cursor=next/);
   assert.equal((await api.getHiringLevels(new AbortController().signal)).length, 1);
-  assert.deepEqual(await api.getAccountStatuses(new AbortController().signal), ["backend-status"]);
-  globalThis.fetch = async () => json(list([]));
-  assert.deepEqual(await api.getAccountStatuses(new AbortController().signal), []);
 });
 
-test("Validation invents no status/role values and validates only supplied faculty profiles", () => {
+test("Validation accepts only boolean status selections and available roles and validates only supplied faculty profiles", () => {
   const draft = model.draftFromUser(user);
-  assert.deepEqual(model.validateUserDraft(draft, user, [], [user.accountStatus]), {});
+  assert.deepEqual(model.validateUserDraft(draft, user, []), {});
   const errors = model.validateUserDraft({ ...draft, name: " ", email: "invalid", roleIds: [], accountStatus: "invented",
-    hiringLevelId: "level", hireDate: "2026-02-30" }, null, [], []);
+    hiringLevelId: "level", hireDate: "2026-02-30" }, null, []);
   for (const key of ["name", "email", "roleIds", "accountStatus", "professor.departmentId", "professor.hireDate"]) assert.ok(errors[key]);
   const faculty = { ...user, professor: { departmentId: "d", hiringLevelId: "h", hireDate: "2025-01-15" } };
-  assert.ok(model.validateUserDraft({ ...model.draftFromUser(faculty), hireDate: "" }, faculty, [], [user.accountStatus])["professor.hireDate"]);
+  assert.ok(model.validateUserDraft({ ...model.draftFromUser(faculty), hireDate: "" }, faculty, [])["professor.hireDate"]);
 });
 
 test("Explicit reload preserves local changes and concurrent role additions without losing untouched updates", () => {
@@ -164,4 +161,36 @@ test("Delete uses only the documented endpoint and requires a confirmed 204", as
   await api.deleteUser(user.id);
   globalThis.fetch = async () => json({});
   await assert.rejects(api.deleteUser(user.id), e => e.uncertain);
+});
+
+
+test("Both status choices work without existing users; false remains a boolean on create and edit", async () => {
+  for (const active of [true, false]) {
+    const draft = { ...model.draftFromUser(user), accountStatus: String(active) };
+    assert.deepEqual(model.validateUserDraft(draft, null, user.roleIds), {});
+    globalThis.fetch = async (path, options) => {
+      assert.equal(path, "/api/users");
+      assert.equal(options.method, "POST");
+      assert.equal(JSON.parse(options.body).accountStatus, active);
+      return json({ ...user, accountStatus: active }, 201);
+    };
+    assert.equal((await model.saveUserDraft(draft, null)).current.accountStatus, active);
+    const baseline = { ...user, accountStatus: !active };
+    globalThis.fetch = async (path, options) => {
+      assert.equal(options.method, "PATCH");
+      assert.deepEqual(JSON.parse(options.body), { expectedRevision: user.revision, accountStatus: active });
+      return json({ ...user, accountStatus: active, revision: "next" });
+    };
+    assert.equal((await model.saveUserDraft(draft, baseline)).current.accountStatus, active);
+  }
+  assert.ok(model.validateUserDraft({ ...model.draftFromUser(user), accountStatus: "" }, null, user.roleIds).accountStatus);
+});
+
+test("User detail requires an actual boolean status and retains inactive records", async () => {
+  globalThis.fetch = async () => json({ ...user, accountStatus: false });
+  assert.equal((await api.getUser(user.id)).accountStatus, false);
+  for (const invalid of ["true", "false", "Active", null, 0]) {
+    globalThis.fetch = async () => json({ ...user, accountStatus: invalid });
+    await assert.rejects(api.getUser(user.id), /incomplete/);
+  }
 });

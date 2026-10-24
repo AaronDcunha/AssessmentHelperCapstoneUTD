@@ -3,7 +3,7 @@ export type ListedUser = {
   id: string;
   name: string;
   email: string;
-  accountStatus: string;
+  accountStatus: boolean;
   roles: UserRole[];
 };
 export type PageInfo = { nextCursor: string | null; hasMore: boolean };
@@ -25,7 +25,7 @@ const nonempty = (value: unknown): value is string => typeof value === "string" 
 const isRole = (value: unknown): value is UserRole => object(value) && nonempty(value.id) && nonempty(value.name);
 const isUser = (value: unknown): value is ListedUser => object(value)
   && nonempty(value.id) && nonempty(value.name) && typeof value.email === "string"
-  && nonempty(value.accountStatus) && Array.isArray(value.roles) && value.roles.every(isRole);
+  && typeof value.accountStatus === "boolean" && Array.isArray(value.roles) && value.roles.every(isRole);
 
 function malformed() {
   return new UsersApiError("malformed", "The service returned an unexpected response. Please try again.");

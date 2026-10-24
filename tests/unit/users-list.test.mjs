@@ -25,7 +25,7 @@ const { fetchUsers, fetchUserRoles, UsersApiError } = load("src/components/admin
 const { createUsersListLoader, userFiltersKey } = load("src/components/admin/users-list-state.ts");
 const filters = { q: "", roleId: "", accountStatus: "" };
 const role = { id: "faculty-id", name: "Faculty" };
-const user = { id: "user-id", name: "Test Faculty", email: "test@example.test", accountStatus: "active", roles: [role] };
+const user = { id: "user-id", name: "Test Faculty", email: "test@example.test", accountStatus: true, roles: [role] };
 const page = (items = [user], nextCursor = null) => ({ items, pageInfo: { nextCursor, hasMore: nextCursor !== null } });
 const json = value => new Response(JSON.stringify(value), { headers: { "Content-Type": "application/json" } });
 const originalFetch = globalThis.fetch;
@@ -35,13 +35,13 @@ test("Users requests encode the documented filters/cursor and keep private reads
   globalThis.fetch = async (url, options) => {
     const query = new URL(url, "http://local.test");
     assert.equal(query.pathname, "/api/users");
-    assert.deepEqual(Object.fromEntries(query.searchParams), { limit: "20", q: "A & B", roleId: "role/2", accountStatus: "active", cursor: "opaque+cursor" });
+    assert.deepEqual(Object.fromEntries(query.searchParams), { limit: "20", q: "A & B", roleId: "role/2", accountStatus: "false", cursor: "opaque+cursor" });
     assert.equal(options.credentials, "same-origin");
     assert.equal(options.cache, "no-store");
     assert.equal(options.headers.Accept, "application/json");
     return json(page());
   };
-  assert.deepEqual(await fetchUsers({ q: " A & B ", roleId: "role/2", accountStatus: " active " }, "opaque+cursor", new AbortController().signal), page());
+  assert.deepEqual(await fetchUsers({ q: " A & B ", roleId: "role/2", accountStatus: " false " }, "opaque+cursor", new AbortController().signal), page());
 });
 
 test("Successful empty pages stay distinct from HTTP, HTML, network and malformed failures", async () => {
@@ -140,4 +140,14 @@ test("Repeated user cursors produce an explicit pagination error", async () => {
   await loader.loadMore(filters);
   assert.equal(state.error.kind, "malformed");
   assert.equal(state.items.length, 1);
+});
+
+
+test("Inactive users are valid list records; string statuses are rejected", async () => {
+  globalThis.fetch = async () => json(page([{ ...user, accountStatus: false }]));
+  assert.equal((await fetchUsers(filters, null, new AbortController().signal)).items[0].accountStatus, false);
+  for (const status of ["true", "false", "Active"]) {
+    globalThis.fetch = async () => json(page([{ ...user, accountStatus: status }]));
+    await assert.rejects(fetchUsers(filters, null, new AbortController().signal), error => error.kind === "malformed");
+  }
 });

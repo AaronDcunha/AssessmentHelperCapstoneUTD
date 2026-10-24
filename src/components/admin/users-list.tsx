@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/form-fields";
 import { Section } from "@/components/ui/section";
@@ -19,8 +19,6 @@ export function UsersList({ canManageUsers, canReadRoles }: { canManageUsers: bo
   const [catalog, setCatalog] = useState<{ items: UserRole[]; status: "loading" | "ready" | "error" }>({ items: [], status: "loading" });
   const [roleRetry, setRoleRetry] = useState(0);
   const [knownRoles, setKnownRoles] = useState<UserRole[]>([]);
-  const [knownStatuses, setKnownStatuses] = useState<string[]>([]);
-  const statusesId = useId();
   const search = q.trim();
   const status = accountStatus.trim();
   const filters = { q: search, roleId, accountStatus: status };
@@ -43,10 +41,9 @@ export function UsersList({ canManageUsers, canReadRoles }: { canManageUsers: bo
     return () => controller.abort();
   }, [canReadRoles, roleRetry]);
 
-  // Remember values actually returned by the API; the draft defines no status enum.
+  // Remember role suggestions when changing filters.
   const roles = [...new Map([...catalog.items, ...knownRoles, ...items.flatMap(item => item.roles)].map(role => [role.id, role])).values()];
-  const statuses = [...new Set([...knownStatuses, ...items.map(item => item.accountStatus)])];
-  const rememberOptions = () => { setKnownRoles(roles); setKnownStatuses(statuses); };
+  const rememberOptions = () => { setKnownRoles(roles); };
   const cellClasses = "break-words";
 
   return (
@@ -62,10 +59,12 @@ export function UsersList({ canManageUsers, canReadRoles }: { canManageUsers: bo
               <option value="">All roles</option>
               {roles.map(role => <option key={role.id} value={role.id}>{role.name}</option>)}
             </Select>
-            <Input label="Account status" name="accountStatus" list={statusesId} placeholder="All statuses"
-              value={accountStatus} onChange={event => { rememberOptions(); setAccountStatus(event.target.value); }}
-              hint="Enter a status value or select a suggestion." />
-            <datalist id={statusesId}>{statuses.map(value => <option key={value} value={value} />)}</datalist>
+            <Select label="Account status" name="accountStatus" value={accountStatus}
+              onChange={event => { rememberOptions(); setAccountStatus(event.target.value); }}>
+              <option value="">All statuses</option>
+              <option value="true">Active</option>
+              <option value="false">Inactive</option>
+            </Select>
           </div>
           <p className="mt-ah-8 text-caption text-muted">
             {!canReadRoles ? "Role options come from loaded users." : catalog.status === "loading" ? "Loading role options…"
@@ -91,7 +90,7 @@ export function UsersList({ canManageUsers, canReadRoles }: { canManageUsers: bo
                   <TableCell className={cellClasses}>{item.name}</TableCell>
                   <TableCell className={cellClasses}>{item.email || "—"}</TableCell>
                   <TableCell className={cellClasses}>{item.roles.map(role => role.name).join(", ") || "No roles"}</TableCell>
-                  <TableCell className={cellClasses}>{item.accountStatus}</TableCell>
+                  <TableCell className={cellClasses}>{item.accountStatus ? "Active" : "Inactive"}</TableCell>
                   <TableCell>{canManageUsers ? <TextAction href={`${adminRoutes.users}/${encodeURIComponent(item.id)}`} aria-label={`Edit ${item.name}`}>Edit</TextAction> : "—"}</TableCell>
                 </tr>)}
               </tbody>

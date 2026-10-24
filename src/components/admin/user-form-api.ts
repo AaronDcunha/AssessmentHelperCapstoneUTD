@@ -1,4 +1,4 @@
-import { fetchUsers, fetchUserRoles, readList } from "./users-api";
+import { fetchUserRoles, readList } from "./users-api";
 import { AdminApiError as UserFormApiError, requestAdminJson as request, isRevision as revision } from "./admin-api";
 export { AdminApiError as UserFormApiError } from "./admin-api";
 export type { Revision, FieldErrors } from "./admin-api";
@@ -6,7 +6,7 @@ import type { Revision } from "./admin-api";
 
 export type FacultyProfile = { departmentId: string; hiringLevelId: string; hireDate?: string | null };
 export type UserRecord = {
-  id: string; name: string; email: string; accountStatus: string; roleIds: string[];
+  id: string; name: string; email: string; accountStatus: boolean; roleIds: string[];
   professor: FacultyProfile | null; revision: Revision;
 };
 export type Department = { id: string; code: string; name: string };
@@ -19,7 +19,7 @@ const strings = (v: unknown): v is string[] => Array.isArray(v) && v.every(text)
 const profile = (v: unknown): v is FacultyProfile => object(v) && text(v.departmentId) && text(v.hiringLevelId)
   && (v.hireDate === undefined || v.hireDate === null || typeof v.hireDate === "string");
 const user = (v: unknown): v is UserRecord => object(v) && text(v.id) && text(v.name) && typeof v.email === "string"
-  && text(v.accountStatus) && strings(v.roleIds) && (v.professor === null || profile(v.professor)) && revision(v.revision);
+  && typeof v.accountStatus === "boolean" && strings(v.roleIds) && (v.professor === null || profile(v.professor)) && revision(v.revision);
 const assignment = (v: unknown): v is RoleAssignment => object(v) && text(v.userId) && strings(v.roleIds)
   && strings(v.permissions) && revision(v.revision);
 const department = (v: unknown): v is Department => object(v) && text(v.id) && typeof v.code === "string" && text(v.name);
@@ -75,9 +75,4 @@ export async function getHiringLevels(signal: AbortSignal): Promise<HiringLevel[
   // This endpoint explicitly returns {items}, unlike the cursor-paginated catalogs.
   if (!object(data) || !Array.isArray(data.items) || !data.items.every(level)) throw malformed(false);
   return data.items;
-}
-export async function getAccountStatuses(signal: AbortSignal): Promise<string[]> {
-  // No status-catalog endpoint/enum exists. Offer only exact values observed in the API.
-  const page = await fetchUsers({ q: "", roleId: "", accountStatus: "" }, null, signal);
-  return [...new Set(page.items.map(item => item.accountStatus))];
 }

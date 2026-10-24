@@ -8,7 +8,7 @@ export const emptyUserDraft: UserDraft = {
   name: "", email: "", roleIds: [], accountStatus: "", departmentId: "", hiringLevelId: "", hireDate: "",
 };
 export function draftFromUser(user: UserRecord): UserDraft {
-  return { name: user.name, email: user.email, roleIds: [...user.roleIds], accountStatus: user.accountStatus,
+  return { name: user.name, email: user.email, roleIds: [...user.roleIds], accountStatus: String(user.accountStatus),
     departmentId: user.professor?.departmentId ?? "", hiringLevelId: user.professor?.hiringLevelId ?? "", hireDate: user.professor?.hireDate ?? "" };
 }
 export const sameRoles = (a: string[], b: string[]) => a.length === b.length && [...a].sort().every((id, i) => id === [...b].sort()[i]);
@@ -22,12 +22,12 @@ export function rebaseDraft(draft: UserDraft, previous: UserRecord, latest: User
   next.roleIds = [...new Set([...latest.roleIds.filter(id => !removed.has(id)), ...draft.roleIds.filter(id => !before.roleIds.includes(id))])];
   return next;
 }
-export function validateUserDraft(draft: UserDraft, baseline: UserRecord | null, allowedRoles: string[], statuses: string[]): FieldErrors {
+export function validateUserDraft(draft: UserDraft, baseline: UserRecord | null, allowedRoles: string[]): FieldErrors {
   const errors: FieldErrors = {};
   if (!draft.name.trim()) errors.name = "Enter a full name.";
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.email.trim())) errors.email = "Enter a valid email address.";
   if (!draft.roleIds.length || draft.roleIds.some(id => !allowedRoles.includes(id) && !baseline?.roleIds.includes(id))) errors.roleIds = "Choose at least one available role.";
-  if (!draft.accountStatus || !statuses.includes(draft.accountStatus)) errors.accountStatus = "Choose a status returned by the API. Status options may be unavailable.";
+  if (draft.accountStatus !== "true" && draft.accountStatus !== "false") errors.accountStatus = "Choose Active or Inactive.";
   if (baseline?.professor || draft.hiringLevelId || draft.departmentId || draft.hireDate) {
     if (!draft.departmentId) errors["professor.departmentId"] = "Select a department for this faculty profile.";
     if (!draft.hiringLevelId) errors["professor.hiringLevelId"] = "Select a faculty hiring level.";
@@ -44,7 +44,7 @@ function detailPatch(draft: UserDraft, user: UserRecord): Record<string, unknown
   const result: Record<string, unknown> = {};
   if (draft.name.trim() !== user.name) result.name = draft.name.trim();
   if (draft.email.trim() !== user.email) result.email = draft.email.trim();
-  if (draft.accountStatus !== user.accountStatus) result.accountStatus = draft.accountStatus;
+  if (draft.accountStatus !== String(user.accountStatus)) result.accountStatus = draft.accountStatus === "true";
   const before = draftFromUser(user);
   const changes: Record<string, string> = {};
   for (const field of ["departmentId", "hiringLevelId", "hireDate"] as const) if (draft[field] !== before[field]) changes[field] = draft[field];
@@ -58,7 +58,7 @@ export async function saveUserDraft(draft: UserDraft, baseline: UserRecord | nul
   try {
     if (!current) {
       current = await createUser({ name: draft.name.trim(), email: draft.email.trim(), roleIds: draft.roleIds,
-        accountStatus: draft.accountStatus, ...(draft.hiringLevelId ? { professor: profile(draft) } : {}) });
+        accountStatus: draft.accountStatus === "true", ...(draft.hiringLevelId ? { professor: profile(draft) } : {}) });
       return { current, detailsSaved: true, error: null };
     }
     const patch = detailPatch(draft, current);
