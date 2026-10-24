@@ -1,4 +1,13 @@
 ASSESSMENT HELPER IMPLEMENTATION NOTES
+October 24, 2026 configuration/frontend integration:
+The configuration backend and AC/Admin frontends coexist in this branch.
+Configuration endpoints marked COMPLETED in the API draft are implemented;
+monitoring, assessment and Admin business handlers remain pending. Earlier
+frontend-only statements about missing configuration APIs describe their original
+branch scope, not the combined branch. The confirmed faculty-status semester
+response and boolean accountStatus contract are retained. Configuration template
+IDs identify editable records; no separate version model is introduced.
+
 October 23, 2026 persistence clarification:
 Use generated Prisma Client model APIs and Prisma transactions for configuration
 queries and mutations, not hand-written SQL or raw-query escape hatches. The
@@ -20,6 +29,49 @@ block criterion removal once assessments reference the template. Faculty can rea
 published templates and relevant cycles; management requires current database
 cycles.manage/templates.manage grants. See AC_CONFIGURATION_BACKEND.md for the
 implemented contracts, filters, security, revisions, migration and checks.
+
+October 23, 2026 observation tracking detail follow-up:
+Render the existing GET /api/observations/{observationId} contract's progress array,
+observation.scheduledMeeting and proposedMeetings in the read-only detail page.
+Preserve backend progress ordering/states, display completion timestamps, and show
+meeting dates/times/locations using the supplied IANA time zone. Keep proposed
+options separate from the scheduled appointment. Missing/invalid zone metadata
+falls back explicitly to UTC. Missing progress/meeting data has empty states.
+No new endpoint, backend handler, database or schema change is introduced.
+
+October 23, 2026 confirmed faculty-status response change:
+GET /api/evaluation-cycles/{cycleId}/faculty-status now specifies
+lastEvaluation:{semester:{id,name},completedAt}|null, replacing the old nested
+semesterId field. The backend must join the last completed evaluation to its
+existing Semester record and map termName to name. No new database column is
+needed. Keep lastEvaluation null when history is absent; do not substitute the
+selected cycle's semester. URL, filters, pagination and other fields are unchanged.
+The frontend Last evaluation column now displays semester.name, with a dash if
+missing, rather than a UUID. The backend endpoint itself is not implemented in
+this frontend branch. See the API draft section 8 and AC_MONITORING_FRONTEND.md.
+
+October 23, 2026 AC read-only assessment follow-up:
+The user requested the assessment view after previously deferring it. Observation
+details now load the observation's assessment and exact assigned template, map
+answers/comments by ID, and display recorded acknowledgements without mutation
+actions. Enable assessment requests only for the assessments.read grant returned
+by the server page guard. Backend handlers must still enforce that permission,
+record scope, and draft visibility. Null assessments and denied/missing endpoints
+show unavailable/empty states. No assessment backend/schema/migration is added.
+KPI unavailable values remain zero per the user's instruction. Faculty-status
+semester naming follows the confirmed response change recorded above.
+
+October 23, 2026 AC monitoring frontend review fixes:
+Consume paginated API list envelopes and follow continuation cursors. Replace
+the invented current-cycle path ID with actual authorized cycle selection. Select
+a sole cycle automatically; with multiple cycles, require the user to choose.
+No cycles means no cycle-specific requests. Share selection across AC pages and
+retain All semesters on Observation Progress using actual IDs. Use business
+permissions for every AC page guard and sidebar entry, never test:ac. Check nested
+detail/edit routes directly. API authorization remains a backend responsibility.
+Unavailable metrics/zero presentation remains deferred; the assessment follow-up
+above supersedes its earlier deferral. No database/schema/API-handler changes are part of these
+frontend fixes. See AC_MONITORING_FRONTEND.md for the access matrix and tests.
 
 October 18 integration: shared main layout requires login and supplies user identity
 to AppShell. All /test pages and /auth-test require temporary test:admin permission.
@@ -191,3 +243,142 @@ no business records or dashboard queries are introduced by this integration.
 October 19, 2026 Admin navigation update: temporarily include direct links to
 all existing component preview pages and Faculty/AC/Admin role probes under
 Admin, including Alert AC. All links require test:admin and retain route guards.
+
+October 23, 2026 Admin Dashboard frontend (Issue #50, Dashboard only):
+/admin uses the shared shell and requires users.read on the server. Navigation
+uses the same effective grant; role labels and test:admin alone do not grant
+product access. Administration links and sidebar entries point to /admin/users,
+/admin/roles, and /admin/hiring-levels, filtered by their respective read grants.
+Destination-page implementations are described below. Existing Faculty navigation and
+Admin test shortcuts remain. The Dashboard has no business API call or invented
+identity data. Its spacious layout and plain Section follow Figma PDF 26. The
+shared Figma semester display was added in the final fidelity cleanup below.
+
+October 23, 2026 Users list frontend (Issue #50, list only):
+/admin/users requires users.read and calls GET /api/users with the draft filters
+and cursor pagination. Missing endpoints show explicit errors, without sample
+users. Role options use paginated GET /api/roles when roles.read is granted, with
+loaded-user roles as a fallback. Account-status suggestions use returned values;
+the filter also accepts an exact API value because the draft defines no enum.
+Create/Edit links require users.manage; their implementation is described below.
+Search is debounced; old requests are cancelled and cannot replace newer results.
+
+October 23, 2026 Create/Edit User frontend (Issue #50, PDF 28):
+/admin/users/new and /admin/users/[userId] require users.manage server-side and
+share one form. GET/POST/PATCH/DELETE /api/users and PUT /api/users/{id}/roles
+use the draft contract; no backend handlers, account provisioning, schema or
+seed changes are included. Role replacement preserves the entire selected set.
+Detail PATCH and role PUT are separate: use each returned revision, report partial
+success, and retain pending edits for retry. Network/ambiguous successful-write
+responses pause further writes until an explicit edit reload; uncertain creates
+require checking the Users list to avoid duplicate creation. Deletion requires
+confirmation and a verified 204. Backend retention/self/last-admin policy is pending.
+Role and department catalogs follow cursor pagination. Hiring levels use the
+documented {items} response. Account-status strings/transition rules have no agreed
+enum; Prisma's isActive boolean is not mapped to invented API strings. Offer only
+exact statuses observed in the first users-list page plus the current edit value.
+Create cannot submit without an API-provided status. Faculty profiles are optional;
+supplied profiles require department/hiring level. No role-to-profile inference or
+automatic role removal is implemented. Hire date is optional; clearing an existing
+date/profile awaits a nullable API contract. Revision strings and safe nonnegative
+integers are accepted as opaque tokens; missing revisions block edit writes.
+Business endpoints remain unavailable locally, so populated CRUD verification uses
+test-only browser interception, never fake production responses or database writes.
+Run node --test tests/unit/*.test.mjs for API, revision, partial-save and guard tests.
+Optional browser regression: start npm run dev -- --hostname localhost and an
+isolated headless Chrome/Edge with --remote-debugging-port=9223, then run
+node tests/e2e/admin-user-form.mjs. It uses ignored seeded credentials privately,
+intercepts business APIs in one browser target, and writes screenshots to OS temp.
+
+October 23, 2026 Roles & Permissions frontend (Issue #50, PDF 29):
+/admin/roles requires roles.read server-side. Write controls require the effective
+role-permissions.manage grant, not roles.manage or an Admin display name. Backend
+API authorization remains mandatory, including permissions.read for the catalog
+where required. No auth, business API handlers, schema or seed changes are included.
+GET /api/roles follows cursor pagination and retains complete permissionKeys and
+API-provided revisions. GET /api/permissions uses its documented {items} catalog.
+The Figma matrix uses returned names/keys; illustrative labels and Shared/TBD cells
+do not establish grants. Cells show direct assignments, not inferred inherited access.
+Per-role Save sends only PUT /api/roles/{roleId}/permissions with the full selected
+permissionKeys and expectedRevision. Other roles' pending edits remain untouched.
+Unknown existing assignments stay visible/read-only and are retained on writes.
+Cancel affects only its role. Saves are serialized, never automatically retried,
+and never claim atomic updates across roles. PUT effectivePermissionKeys are shown
+separately as returned by the server, not copied into direct grants or other roles.
+Conflicts/uncertain writes require explicit reload of that role. Reload merges
+local additions/removals with current direct grants and revision, preserving
+concurrent additions and other pending roles. Removed/unverifiable roles stay
+blocked with their edits retained. 401/403 disable all further writes on the page.
+Shared Admin JSON transport was extracted from the user form without changing its
+public imports; existing Create/Edit unit/browser checks cover the shared behavior.
+Run node --test tests/unit/*.test.mjs and optional node tests/e2e/admin-roles.mjs
+against localhost development server and isolated headless Chrome/Edge CDP port
+9223. Browser fixtures intercept business APIs only in that target; no production
+sample grants or database writes are introduced. Local business APIs remain missing.
+Inheritance/admin safeguards remain backend policy; no local role-name rules are
+invented. Header subtitle/bell differences were resolved in the final cleanup below.
+
+October 23, 2026 Hiring Levels & Frequency frontend (Issue #50, PDF 30):
+/admin/hiring-levels requires hiring-levels.read server-side; Add/Edit/Remove
+controls require the effective hiring-levels.manage grant. The shared Admin shell,
+Section, fields, Button, TableCell, TextAction and JSON transport are reused.
+The Figma three-column layout retains 80px rows and quiet Edit/Remove actions;
+the documented active boolean is displayed below the hiring-level name.
+GET /api/hiring-levels accepts its explicit {items:HiringLevel[]} response and
+follows global cursor pagination if pageInfo is supplied. Full resources require
+name, positive integer evaluationIntervalYears, active boolean and a usable revision.
+POST sends only name/evaluationIntervalYears; active has no invented create default.
+PATCH sends changed name/evaluationIntervalYears/active fields and expectedRevision
+from the loaded resource. Edit supports active/inactive through that boolean;
+status changes never substitute for DELETE. Remove requires confirmation and a
+verified HTTP 204. In-use/retention conflicts retain the level; no automatic reset,
+reassignment or deactivation is attempted. The DELETE contract defines no revision
+payload, so none is invented. Reloads use the documented list, not a new detail API.
+Validation accepts positive whole years without hardcoding ranks/intervals. The
+backend must decide supported interval ranges and reference/history retention.
+Recoverable failures preserve dialog values. Stale reads are cancelled/ignored,
+writes are serialized and never retried automatically, and 401/403 disable writes.
+Conflicts and uncertain edit/remove outcomes require explicit reload and review
+with the latest revision; unchanged fields adopt concurrent changes while local
+edits are retained. A missing record after an ambiguous deletion is shown as
+unconfirmed, never as a successful deletion. Ambiguous adds retain input and block
+another add in that page session; inspect the reloaded list before creating again
+on a fresh page. Without an idempotency/operation lookup contract, the client cannot
+automatically prove whether an unacknowledged creation committed.
+Unit tests cover API payloads, validation, stale responses, duplicate suppression,
+revision rebasing, in-use/uncertain removal and route/control permissions.
+Optional node tests/e2e/admin-hiring-levels.mjs uses localhost development server
+and isolated headless Chrome/Edge CDP port 9223. Its browser fixtures intercept all
+business API calls; real seeded logins only read account data. No backend handlers,
+schema, seeds, environment or dependencies changed. Live persistence awaits the
+documented backend endpoints. Global subtitle/bell corrections are described below.
+
+October 23, 2026 Admin final Figma fidelity cleanup (Issue #50):
+All six Admin routes (five designs, shared Create/Edit form) use the existing
+Faculty Dashboard semester label, Fall 2026, through shared Admin header metadata.
+This is the established Figma display context, not an API-backed current semester.
+The existing PageHeader bell appears beside the real account avatar and is labelled
+Notifications unavailable; no notification destination or behavior is invented.
+The shell's per-header option preserves Faculty defaults and existing test pages.
+All Faculty/Admin navigation and test/demo links remain intact. No AC product-page
+bindings exist yet; the existing AC access probe is preserved and checked.
+Exact Figma frames 16:2649, 16:2745, 16:2888, 16:3006 and 16:3149 were compared.
+Functional differences remain intentional: user filters/pagination, optional faculty
+fields and complete role assignments, editable direct-grant checkboxes and per-role
+save controls, hiring-level status/actions, API errors/Retry, and responsive wrapping
+or table scrolling. No illustrative identity, status, grants or production data is
+substituted for backend resources. Test/demo navigation makes the sidebar longer
+than the Figma illustration. Create and Edit retain separate descriptive titles.
+Optional node tests/e2e/admin-final-review.mjs checks desktop/mobile populated
+fixtures, real unavailable endpoints, navigation, header/row/control dimensions,
+and Faculty/AC probe regressions using the same isolated browser setup above.
+All business writes are blocked in this read-only review fixture. Existing form,
+role and hiring-level browser tests exercise mutations only through interception.
+
+October 24, 2026 account-status contract correction (supersedes string/status-lookup notes):
+accountStatus is a JSON boolean mapped directly to AppUser.isActive. true displays
+as Active and false as Inactive. Create/Edit always offer both choices, independent
+of existing users, pagination or lookup failures. Create requires an explicit choice.
+POST/PATCH send actual booleans, including false. The Users filter offers All, Active
+and Inactive; its query serializes true/false and omits the parameter for All.
+API response validators reject status strings. No schema or backend handlers changed.

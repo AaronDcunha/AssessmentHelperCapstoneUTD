@@ -7,28 +7,37 @@ October 23 AC Configuration update: the cycle, semester lookup/settings and
 template operations in sections 2 and 6 are implemented as described below.
 See AC_CONFIGURATION_BACKEND.md for the finalized integration contract and tests.
 Other sections retain their proposal status unless separately marked completed.
-Proposed contracts, not implemented business APIs or approved database models.
+
+October 23, 2026 faculty-status response update: lastEvaluation now contains
+semester:{id,name} instead of semesterId. See section 8 and Implementation_Notes.
+The AC frontend consumes this shape; the backend handler is still pending here.
+
+Endpoints marked COMPLETED are implemented for their stated scope. Unmarked
+endpoints remain proposals; frontend consumers alone do not implement an API.
 Implementation_Notes.txt and current team decisions take priority over this draft.
 The original AssessmentHelper_API_Endpoints.txt remains unchanged as a backup.
 
 Progress labels: (COMPLETED) = implemented for the stated scope; (INCOMPLETE) =
 partially implemented with remaining work noted. Unmarked endpoints are planned.
 
-Already implemented: Auth.js login/sessions/logout, custom /login, session-aware
-redirects, demo GET /api/me, role helpers and test APIs. All test pages are Admin-only.
-Pending auth work: demo professor-name lookup, account status/database grants, and
-eventual UTD SSO integration. No stored username or production local-password system
-is required by the agreed login plan.
-Other endpoints below remain planned. Reuse existing auth; do not build another system.
+Already implemented: Auth.js credentials/JWT login, stored username/password-hash
+verification, active-account checks, current database role/permission resolution,
+GET /api/me, route guards, and the configuration endpoints marked COMPLETED below.
+Reserved mock identities remain development-only opt-in fixtures. UTD SSO is pending.
+Faculty, AC monitoring and Admin frontends exist; their other business handlers
+remain pending unless explicitly marked completed. See AUTH_BACKEND.md,
+AC_CONFIGURATION_BACKEND.md and AC_MONITORING_FRONTEND.md for scope details.
 
 CONVENTIONS
 ===========
 Q = query; B = JSON body; R = response. ? = optional. {id} = opaque path ID.
-Fields/enums below are proposals. Typed shapes describe data, not executable JSON.
+Fields/enums for completed endpoints follow their implementation notes; other
+shapes are proposals. Typed shapes describe data, not executable JSON.
 List<T> = {items:T[],pageInfo:{nextCursor:string|null,hasMore:boolean}}.
 All lists accept cursor?/limit?; proposed default 20, maximum 100. Counts cover all
 matching records, not just the current page. Dates: YYYY-MM-DD; timestamps: UTC ISO
-8601. Include IANA timeZone with schedules. Exact deadline boundaries remain TBD.
+8601. Include IANA timeZone with schedules. Configuration cycle status includes
+each deadline instant; other workflow deadline cutoffs remain TBD.
 
 Standard errors: {error:{code,message,fieldErrors?,requestId?}}.
 400 invalid request; 401 logged out/inactive; 403 forbidden; 404 unavailable record;
@@ -42,7 +51,8 @@ scope and record ownership. Derive actor from session. Validate/allow-list input
 never trust browser ownership, roles, timestamps or completion states. Use revisions
 for concurrent edits and idempotent transactions for retried workflow mutations.
 Admin inherits AC + Faculty access; AC inherits Faculty access. /me remains personal.
-Final permission keys, AC scope, revision/idempotency details require agreement.
+Configuration grants, university-wide scope and integer revisions are specified
+in AC_CONFIGURATION_BACKEND.md. Other workflow scopes/idempotency remain pending.
 
 COMMON RESPONSE SHAPES
 ======================
@@ -83,7 +93,8 @@ Checked AssessmentHelper_Relational_Schema.drawio. API camelCase can map to its
 snake_case fields; nested responses are authorized joins, not extra tables.
 - User.id -> app_user.user_id. Professor uses that same ID through professor.user_id;
   teaches.professor_id and signup/candidate/feedback professor references identify it.
-  No username column exists or is needed. app_user.email is unique; name is not.
+  Current Prisma AppUser stores a unique username for database login and a unique
+  email; fullName is not unique. The older diagram is not the executable schema.
 - Roles/grants -> role, user_role, permission, role_permission. permissions uses
   permission_key. role.key/description are proposed additions, not current fields;
   use role_id/name or agree stable keys. Inheritance needs application/schema support.
@@ -99,18 +110,19 @@ snake_case fields; nested responses are authorized joins, not extra tables.
   candidate acceptance must reference one of those persisted options.
 - Candidate -> observation_candidate. Its current fields track only one send/response;
   attempts, compatible dates and acceptedMeetingOptionId require additional relations.
-- Template -> observation_template.template_version_id. Criterion ->
-  template_criterion. type maps to question_type; options expand rating_range only
-  after its representation is agreed. key/order, scale labels, comment/signature
-  configuration and publication applicability are proposed extensions.
+- Template -> observation_template.template_id; no separate version model. Criterion
+  -> template_criterion. The configuration migration implements criterion_key,
+  options JSON, publication status/time, comment prompts, signature labels and
+  revisions. question_type stores RATING/TEXT; API type uses rating/text.
 - Feedback -> process_feedback. process_rating/difficulties/suggestions exist;
   generic answers, survey version and multiple attachments need extensions. Its
   participant_role column does not resolve dual-role submission/counting policy.
 - Notification -> notification. target can derive from observation_id/cycle_id;
   title can derive from type. Other target kinds require an agreed extension.
-- evaluation_interval_years -> evaluationIntervalYears; account_status -> accountStatus.
-  Semester name derives from year/season. Semester dates/timezone, hiringLevel.active,
-  revisions, async operations and idempotency records are not in the current diagram.
+- evaluation_interval_years -> evaluationIntervalYears; app_user.is_active -> accountStatus.
+  Semester name maps from termName; year/season derive from termCode. Configuration
+  migration adds semester dates/timezone and semester/cycle/template revisions.
+  hiringLevel.active, async operations and idempotency records remain proposals.
 
 Required schema updates: web assessment/answer/history records replacing the old
 signed_assessment.signed_file_reference flow; invitation attempts; accepted/final
@@ -127,13 +139,12 @@ This cross-check does not change the diagram or the teammate's Prisma schema.
 ===================================
 (INCOMPLETE)
 /api/auth/* -- EXISTING Auth.js routes. Use library helpers:
-  signIn('credentials',{username,password,redirect:false,redirectTo:'/test'})
+  signIn('credentials',{username,password,redirect:false,redirectTo:'/dashboard'})
   signOut({redirectTo:'/login'})
   Auth.js handles session cookies and its CSRF flow; no manual token storage.
-  /login redirects active users to /test. Non-admins then see /forbidden for now.
-  Demo intent: look up the professor by name. The existing request key 'username'
-  is only a compatibility label, not a stored username. Current fixtures still use
-  faculty/ac/admin; database-backed name lookup is pending. Production uses UTD SSO.
+  /login redirects active users to /dashboard. Credentials use the stored unique
+  username and verify the password hash. Reserved faculty/ac/admin mock logins
+  require development mode and AUTH_DEMO_ENABLED=true. UTD SSO is future work.
   Professor names are not identity proof or necessarily unique: use internal user
   IDs for records, reject ambiguous demo matches, and later link verified SSO identity
   to those IDs. The exact UTD SSO protocol/claim mapping is not established here.
@@ -149,15 +160,16 @@ POST /api/auth/signout -- Auth.js logout, used by the shared profile dropdown.
 (COMPLETED)
 Login UI and route guards -- /login form, active-session redirect, shared login
   check, Admin-only test pages, and /forbidden sign-out action.
-  These work with demo identities; production identity/permission data is pending.
+  Database logins reload active-account status and effective grants server-side.
+  Production UTD SSO identity integration remains pending.
 
 (INCOMPLETE)
-GET /api/me -- EXISTING demo; permanent version belongs to the auth task.
+GET /api/me -- EXISTING database-backed identity; extended profile shape is proposed.
   R: {id,name,email?,roles:string[],permissions:string[],professor?:
     {departmentId,hiringLevelId,hireDate?},roleDetails?:Role[]}.
-  Preserve roles/permissions string arrays; never return credentials. Existing demo
-  'username' output is temporary and is not a proposed database/profile requirement.
-  Remaining: database profile lookup, active-account checks and effective DB grants.
+  Preserve roles/permissions string arrays; never return credentials. Current
+  active-account checks and effective database grants are implemented. Extended
+  professor/roleDetails fields remain proposals; see AUTH_BACKEND.md for actual output.
 
 (COMPLETED)
 GET /api/test/{area} -- temporary role-permission probes, not production endpoints.
@@ -388,8 +400,16 @@ GET /api/evaluation-cycles/{cycleId}/reports -- scoped AC/Admin.
     byHiringLevel:[{hiringLevelId,name,due,outstanding}],availableViews}.
 GET /api/evaluation-cycles/{cycleId}/faculty-status -- NEW.
   Q: hiringLevelId?,evaluationStatus?,signedUp?:boolean,departmentId?,q?.
-  R: List<{professor:User,hiringLevel,lastEvaluation:{semesterId,completedAt}|null,
+  R: List<{professor:User,hiringLevel,lastEvaluation:{semester:{id,name},completedAt}|null,
     evaluationStatus,signupId,observationId}>. Scoped AC/Admin.
+  UPDATED October 23: replaces lastEvaluation.semesterId with
+  lastEvaluation.semester:{id,name}. Name is the existing semester termName
+  (e.g. Fall 2026); do not return an opaque ID as its display label. Resolve the
+  semester belonging to the last completed evaluation, not the selected cycle.
+  Return lastEvaluation:null when no last evaluation exists. completedAt and
+  all other response fields, filters, list pagination and the URL are unchanged.
+  This is a response-contract change for the backend implementer, not a schema
+  migration or an implemented faculty-status handler in this frontend branch.
 GET /api/evaluation-cycles/{cycleId}/attention -- NEW; scoped AC/Admin.
   Q: issue?:overdue|unmatched|incomplete|alert|expiredApproval,departmentId?.
   R: List<{id,faculty:User,issue,observationStatus,observationId,alertId?,
@@ -429,6 +449,11 @@ for inventing system notifications. Header logout continues to use Auth.js.
 ===========================
 Admin Dashboard itself is hyperlinks only. These routes support future tabs.
 All writes require effective Admin permissions and appropriate scope.
+accountStatus is a JSON boolean mapped directly to AppUser.isActive: true = Active,
+false = Inactive. POST requires it; PATCH accepts either boolean when supplied.
+GET /api/users serializes its optional status filter as accountStatus=true or
+accountStatus=false; omit the parameter for all accounts. UI labels are Active
+and Inactive. These are the only statuses; never derive choices from user records.
 
 GET /api/users
   Q: q?:name/email,roleId?,accountStatus?,departmentId?,hiringLevelId?.

@@ -16,7 +16,7 @@ export type AppShellProps = {
   headerUser?: PageHeaderProps["user"];
   notificationAction?: PageHeaderProps["notificationAction"];
   subtitle?: string;
-  pageHeaders?: Record<string, { title: string; subtitle?: string; facultyLayout?: boolean }>;
+  pageHeaders?: Record<string, { title: string; subtitle?: string; facultyLayout?: boolean; contentSpacing?: "default" | "spacious"; showUnavailableControls?: boolean }>;
 };
 
 export function AppShell({ children, authorizedSections, user, headerUser, notificationAction, subtitle, pageHeaders }: AppShellProps) {
@@ -27,8 +27,15 @@ export function AppShell({ children, authorizedSections, user, headerUser, notif
   const current = authorizedSections.flatMap((section) => section.items.map((item) => ({ ...item, sectionId: section.id })))
     .filter((item) => typeof item.href === "string" && (pathname === item.href || pathname.startsWith(`${item.href}/`)))
     .sort((a, b) => String(b.href).length - String(a.href).length)[0];
-  const header = pageHeaders?.[pathname];
+  // Exact entries take precedence over App Router-style dynamic route patterns.
+  const pathSegments = pathname.split("/");
+  const header = pageHeaders?.[pathname] ?? Object.entries(pageHeaders ?? {}).find(([route]) => {
+    const segments = route.split("/");
+    return segments.length === pathSegments.length && segments.every((segment, i) =>
+      segment === pathSegments[i] || (/^\[[^\]]+\]$/.test(segment) && pathSegments[i] !== ""));
+  })?.[1];
   const facultyLayout = header?.facultyLayout === true;
+  const spaciousContent = facultyLayout || header?.contentSpacing === "spacious";
   const expandedSections = Object.fromEntries(authorizedSections.map((section) => [
     section.id, expanded[section.id] ?? (section.id === current?.sectionId || authorizedSections.length === 1),
   ]));
@@ -47,7 +54,7 @@ export function AppShell({ children, authorizedSections, user, headerUser, notif
           centerProfileText={facultyLayout}
           className="h-full w-full lg:w-[288px]" style={{ minHeight: "100%" }} />
       </div>
-      <div className={`min-w-0 flex-1 p-ah-24 ${facultyLayout ? "md:p-ah-48" : "md:p-ah-32"}`}>
+      <div className={`min-w-0 flex-1 p-ah-24 ${spaciousContent ? "md:p-ah-48" : "md:p-ah-32"}`}>
         <div className="mx-auto w-full max-w-[1096px]">
           <PageHeader title={header?.title ?? current?.label ?? "Assessment Helper"}
             subtitle={header?.subtitle ?? subtitle} user={headerUser} notificationAction={notificationAction}
@@ -55,8 +62,8 @@ export function AppShell({ children, authorizedSections, user, headerUser, notif
               <AccountDropdown name={headerUser.name} initials={headerUser.initials}
                 onLogout={() => signOut({ redirectTo: "/login" })} />
             ) : undefined}
-            showUnavailableControls={facultyLayout}
-            className={facultyLayout ? "mb-ah-32" : "mb-ah-24"} />
+            showUnavailableControls={header?.showUnavailableControls ?? facultyLayout}
+            className={spaciousContent ? "mb-ah-32" : "mb-ah-24"} />
           <main>{children}</main>
         </div>
       </div>
