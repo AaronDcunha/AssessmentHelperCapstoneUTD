@@ -1,4 +1,47 @@
 ASSESSMENT HELPER IMPLEMENTATION NOTES
+October 23, 2026 observation tracking detail follow-up:
+Render the existing GET /api/observations/{observationId} contract's progress array,
+observation.scheduledMeeting and proposedMeetings in the read-only detail page.
+Preserve backend progress ordering/states, display completion timestamps, and show
+meeting dates/times/locations using the supplied IANA time zone. Keep proposed
+options separate from the scheduled appointment. Missing/invalid zone metadata
+falls back explicitly to UTC. Missing progress/meeting data has empty states.
+No new endpoint, backend handler, database or schema change is introduced.
+
+October 23, 2026 confirmed faculty-status response change:
+GET /api/evaluation-cycles/{cycleId}/faculty-status now specifies
+lastEvaluation:{semester:{id,name},completedAt}|null, replacing the old nested
+semesterId field. The backend must join the last completed evaluation to its
+existing Semester record and map termName to name. No new database column is
+needed. Keep lastEvaluation null when history is absent; do not substitute the
+selected cycle's semester. URL, filters, pagination and other fields are unchanged.
+The frontend Last evaluation column now displays semester.name, with a dash if
+missing, rather than a UUID. The backend endpoint itself is not implemented in
+this frontend branch. See the API draft section 8 and AC_MONITORING_FRONTEND.md.
+
+October 23, 2026 AC read-only assessment follow-up:
+The user requested the assessment view after previously deferring it. Observation
+details now load the observation's assessment and exact assigned template, map
+answers/comments by ID, and display recorded acknowledgements without mutation
+actions. Enable assessment requests only for the assessments.read grant returned
+by the server page guard. Backend handlers must still enforce that permission,
+record scope, and draft visibility. Null assessments and denied/missing endpoints
+show unavailable/empty states. No assessment backend/schema/migration is added.
+KPI unavailable values remain zero per the user's instruction. Faculty-status
+semester naming follows the confirmed response change recorded above.
+
+October 23, 2026 AC monitoring frontend review fixes:
+Consume paginated API list envelopes and follow continuation cursors. Replace
+the invented current-cycle path ID with actual authorized cycle selection. Select
+a sole cycle automatically; with multiple cycles, require the user to choose.
+No cycles means no cycle-specific requests. Share selection across AC pages and
+retain All semesters on Observation Progress using actual IDs. Use business
+permissions for every AC page guard and sidebar entry, never test:ac. Check nested
+detail/edit routes directly. API authorization remains a backend responsibility.
+Unavailable metrics/zero presentation remains deferred; the assessment follow-up
+above supersedes its earlier deferral. No database/schema/API-handler changes are part of these
+frontend fixes. See AC_MONITORING_FRONTEND.md for the access matrix and tests.
+
 October 18 integration: shared main layout requires login and supplies user identity
 to AppShell. All /test pages and /auth-test require temporary test:admin permission.
 Access denial redirects to /forbidden. Test APIs retain role-specific probes;

@@ -7,7 +7,8 @@ test("AC reads use the documented cycle and observation endpoint paths", async (
   const calls = [];
   globalThis.fetch = async (input, init) => {
     calls.push({ input: String(input), method: init?.method ?? "GET" });
-    return new Response(JSON.stringify({}), { status: 200, headers: { "Content-Type": "application/json" } });
+    const list = /\/(faculty-status|attention|observations)(\?|$)/.test(String(input));
+    return Response.json(list ? { items: [], pageInfo: { nextCursor: null, hasMore: false } } : {});
   };
 
   try {
@@ -17,6 +18,8 @@ test("AC reads use the documented cycle and observation endpoint paths", async (
     await acApi.getObservations("cycle 1", { status: "in-progress" });
     await acApi.getMetrics("cycle 1");
     await acApi.getObservation("observation 1");
+    await acApi.getObservationTemplate("observation 1");
+    await acApi.getObservationAssessment("observation 1");
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -28,7 +31,51 @@ test("AC reads use the documented cycle and observation endpoint paths", async (
     "/api/evaluation-cycles/cycle%201/observations?status=in-progress",
     "/api/evaluation-cycles/cycle%201/metrics",
     "/api/observations/observation%201",
+    "/api/observations/observation%201/template",
+    "/api/observations/observation%201/assessment",
   ]);
+});
+
+test("all list readers unwrap envelopes and retrieve every page without losing filters", async () => {
+  const originalFetch = globalThis.fetch;
+  const readers = [
+    () => acApi.getEvaluationCycles({ status: "signup" }),
+    () => acApi.getFacultyStatus("cycle-id", { evaluationStatus: "overdue" }),
+    () => acApi.getAttention("cycle-id", { issue: "unmatched" }),
+    () => acApi.getObservations("cycle-id", { assessmentStatus: "submitted" }),
+    () => acApi.getHiringLevels(),
+  ];
+  try {
+    for (const read of readers) {
+      const paths = [];
+      globalThis.fetch = async input => {
+        paths.push(String(input));
+        return Response.json(paths.length === 1
+          ? { items: [{ id: "first" }], pageInfo: { nextCursor: "next page", hasMore: true } }
+          : { items: [{ id: "second" }], pageInfo: { nextCursor: null, hasMore: false } });
+      };
+      assert.deepEqual(await read(), [{ id: "first" }, { id: "second" }]);
+      const first = new URL(paths[0], "http://test"), second = new URL(paths[1], "http://test");
+      assert.equal(first.pathname, second.pathname);
+      for (const [key, value] of first.searchParams) assert.equal(second.searchParams.get(key), value);
+      assert.equal(second.searchParams.get("cursor"), "next page");
+    }
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("empty lists remain arrays; malformed envelopes and repeated cursors fail clearly", async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => Response.json({ items: [], pageInfo: { nextCursor: null, hasMore: false } });
+    assert.deepEqual(await acApi.getEvaluationCycles(), []);
+    for (const value of [null, [], {}, { items: [], pageInfo: { nextCursor: null, hasMore: true } },
+      { items: [], pageInfo: { nextCursor: "repeat", hasMore: true } }]) {
+      let calls = 0;
+      globalThis.fetch = async () => { calls++; return Response.json(value); };
+      await assert.rejects(acApi.getEvaluationCycles(), ApiRequestError);
+      assert(calls <= 2, "Pagination must not loop indefinitely");
+    }
+  } finally { globalThis.fetch = originalFetch; }
 });
 
 test("AC writes use POST for create and PATCH for edit", async () => {

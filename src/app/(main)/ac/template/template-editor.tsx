@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { AssessmentQuestionEditor } from "@/components/ac/assessment-question-editor";
 import { Button } from "@/components/ui/button";
-import { acApi, CURRENT_CYCLE_ID } from "@/lib/ac-api";
+import { acApi } from "@/lib/ac-api";
 
 type Question = { id: string; value: string };
 
@@ -24,7 +24,7 @@ export function ObservationTemplateEditor() {
 
   useEffect(() => {
     let active = true;
-    acApi.getCurrentTemplate(CURRENT_CYCLE_ID).then((template) => {
+    acApi.getCurrentTemplate().then((template) => {
       if (!active) return;
       setTemplateId(template.id);
       setRevision(template.revision ?? 0);

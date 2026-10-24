@@ -3,24 +3,21 @@
 import { useEffect, useState } from "react";
 
 export function useApiResource<T>(loader: () => Promise<T>, fallback: T) {
-  const [data, setData] = useState(fallback);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<{ loader: () => Promise<T>; data: T; error: string | null } | null>(null);
 
   useEffect(() => {
     let active = true;
     loader().then((value) => {
       if (!active) return;
-      setData(value);
-      setError(null);
+      setResult({ loader, data: value, error: null });
     })
       .catch((reason: unknown) => {
         if (!active) return;
-        setData(fallback);
-        setError(reason instanceof Error ? reason.message : "The request failed.");
-      }).finally(() => { if (active) setLoading(false); });
+        setResult({ loader, data: fallback, error: reason instanceof Error ? reason.message : "The request failed." });
+      });
     return () => { active = false; };
   }, [fallback, loader]);
 
-  return { data, loading, error };
+  const current = result?.loader === loader ? result : null;
+  return { data: current?.data ?? fallback, loading: current === null, error: current?.error ?? null };
 }
