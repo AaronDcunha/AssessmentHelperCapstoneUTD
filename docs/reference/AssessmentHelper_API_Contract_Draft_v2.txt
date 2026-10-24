@@ -3,6 +3,10 @@ October 18, 2026 | Reviewed against Faculty, AC, Admin and Shared Figma screens.
 
 STATUS
 ======
+October 23, 2026 faculty-status response update: lastEvaluation now contains
+semester:{id,name} instead of semesterId. See section 8 and Implementation_Notes.
+The AC frontend consumes this shape; the backend handler is still pending here.
+
 Proposed contracts, not implemented business APIs or approved database models.
 Implementation_Notes.txt and current team decisions take priority over this draft.
 The original AssessmentHelper_API_Endpoints.txt remains unchanged as a backup.
@@ -372,8 +376,16 @@ GET /api/evaluation-cycles/{cycleId}/reports -- scoped AC/Admin.
     byHiringLevel:[{hiringLevelId,name,due,outstanding}],availableViews}.
 GET /api/evaluation-cycles/{cycleId}/faculty-status -- NEW.
   Q: hiringLevelId?,evaluationStatus?,signedUp?:boolean,departmentId?,q?.
-  R: List<{professor:User,hiringLevel,lastEvaluation:{semesterId,completedAt}|null,
+  R: List<{professor:User,hiringLevel,lastEvaluation:{semester:{id,name},completedAt}|null,
     evaluationStatus,signupId,observationId}>. Scoped AC/Admin.
+  UPDATED October 23: replaces lastEvaluation.semesterId with
+  lastEvaluation.semester:{id,name}. Name is the existing semester termName
+  (e.g. Fall 2026); do not return an opaque ID as its display label. Resolve the
+  semester belonging to the last completed evaluation, not the selected cycle.
+  Return lastEvaluation:null when no last evaluation exists. completedAt and
+  all other response fields, filters, list pagination and the URL are unchanged.
+  This is a response-contract change for the backend implementer, not a schema
+  migration or an implemented faculty-status handler in this frontend branch.
 GET /api/evaluation-cycles/{cycleId}/attention -- NEW; scoped AC/Admin.
   Q: issue?:overdue|unmatched|incomplete|alert|expiredApproval,departmentId?.
   R: List<{id,faculty:User,issue,observationStatus,observationId,alertId?,

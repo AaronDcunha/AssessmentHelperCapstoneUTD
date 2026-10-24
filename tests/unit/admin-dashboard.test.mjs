@@ -86,7 +86,12 @@ test("The shared shell marks /admin active, retains Faculty/test links and uses 
   assert.equal(faculty.items.length, 5);
   assert.deepEqual(adminSection.items.slice(0, 4).map(item => item.href), ["/admin", ...plannedRoutes]);
   assert.deepEqual(adminSection.items.slice(4).map(item => item.href), adminTestPages.map(item => item.href));
-  assert.ok(!shell.props.authorizedSections.some(section => section.id === "ac"));
+  const { acPermissions, canAccessAcPage } = load("src/lib/ac-permissions.ts");
+  const acSection = shell.props.authorizedSections.find(section => section.id === "ac");
+  const acIds = ["ac.dashboard", "ac.cycles", "ac.faculty", "ac.progress", "ac.template", "ac.reports", "ac.semester"];
+  assert.deepEqual(acSection.items.map(item => item.id),
+    acIds.filter(id => id in acPermissions && canAccessAcPage(currentUser.permissions, id)));
+  assert.equal(shell.props.pageHeaders["/ac"].title, "AC Dashboard");
   const html = renderToStaticMarkup(shell);
   assert.match(html, /<a(?=[^>]*href="\/admin")(?=[^>]*aria-current="page")[^>]*>/);
   assert.equal((html.match(/aria-current="page"/g) || []).length, 1);
