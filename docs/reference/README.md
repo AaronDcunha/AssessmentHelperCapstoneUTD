@@ -19,6 +19,7 @@ Authentication backend: see `AUTH_BACKEND.md` for the implemented development-on
 | File | Use |
 | --- | --- |
 | `Implementation_Notes.txt` | Current decisions and remaining implementation questions |
+| `AC_CONFIGURATION_BACKEND.md` | Implemented configuration endpoints, access rules, migrations, and verification |
 | `PROJECT_STRUCTURE.md` | Proposed directories and responsibilities |
 | `Expanded Use Cases.docx` / `.txt` | UC1–UC13 workflow descriptions; TXT is a paragraph-text extraction for AI/search |
 | `process_explanation_to_all.docx` / `.txt` | Faculty/AC process and draft KPI definitions |

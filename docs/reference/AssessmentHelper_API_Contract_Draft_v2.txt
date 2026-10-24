@@ -3,6 +3,10 @@ October 18, 2026 | Reviewed against Faculty, AC, Admin and Shared Figma screens.
 
 STATUS
 ======
+October 23 AC Configuration update: the cycle, semester lookup/settings and
+template operations in sections 2 and 6 are implemented as described below.
+See AC_CONFIGURATION_BACKEND.md for the finalized integration contract and tests.
+Other sections retain their proposal status unless separately marked completed.
 Proposed contracts, not implemented business APIs or approved database models.
 Implementation_Notes.txt and current team decisions take priority over this draft.
 The original AssessmentHelper_API_Endpoints.txt remains unchanged as a backup.
@@ -44,6 +48,7 @@ COMMON RESPONSE SHAPES
 ======================
 User = {id,name,email?}; return email only when needed.
 Semester = {id,name,year,season,startsOn,endsOn,timeZone,revision}.
+  startsOn/endsOn may be null for imported semesters until AC configures them.
 Cycle = {id,semester:Semester,signupDeadline,observationDeadline,feedbackDeadline,
   status,revision,allowedActions: string[]}.
 Section = {id,course:{id,code,title,departmentId,level},sectionNumber,semesterId,
@@ -57,7 +62,7 @@ Attempt = {id,candidateId,sequence,sentAt,expiresAt,responseStatus,respondedAt,
 Candidate = {id,observationId,professor:User,availableMeetingOptionIds:string[],
   responseStatus,outcome,acceptedMeetingOptionId,activeAttempt:Attempt|null}.
 Criterion = {id?,key,prompt,type,required,order,options?:[{value:number,label}],weight?}.
-Template = {id,version,title,status,publishedAt,revision,criteria:Criterion[],
+Template = {id,title,status,publishedAt,revision,criteria:Criterion[],
   commentPrompts:[{id?,prompt,required,order}],signatureLabels:{observer,observee}}.
 Assessment = {id,observationId,templateVersionId,status,revision,
   answers:[{criterionId,value:number|string|null}],comments:[{promptId,text}],
@@ -165,25 +170,30 @@ server pages/APIs must still authorize independently.
 
 2. SEMESTERS, CYCLES AND ELIGIBILITY
 ===================================
-GET /api/evaluation-cycles
+GET /api/evaluation-cycles (COMPLETED)
   Q: semesterId?,status?. R: List<Cycle>. Faculty: relevant cycles; AC/Admin: scope.
-  Agree current-cycle selection and behavior when several cycles are active.
-GET /api/evaluation-cycles/{cycleId}
+  Status is derived: signup, observation, feedback, closed. A deadline is inclusive.
+  One cycle per semester; list does not select a single current cycle.
+GET /api/evaluation-cycles/{cycleId} (COMPLETED)
   R: Cycle. Authorized faculty may read relevant semester/deadline information.
-POST /api/evaluation-cycles -- scoped AC/Admin.
+POST /api/evaluation-cycles (COMPLETED) -- cycles.manage, university-wide.
   B: {semesterId,signupDeadline,observationDeadline,feedbackDeadline}. R: Cycle.
-PATCH /api/evaluation-cycles/{cycleId} -- scoped AC/Admin.
+PATCH /api/evaluation-cycles/{cycleId} (COMPLETED) -- cycles.manage, university-wide.
   B: {expectedRevision,signupDeadline?,observationDeadline?,feedbackDeadline?}. R: Cycle.
-  Validate dates; agree duplicate-cycle, past-deadline edit and reopening policies.
-GET /api/semesters -- authorized lookup for filters and cycle setup.
+  Signup < observation < feedback; AC may edit passed deadlines, reopening periods.
+GET /api/semesters (COMPLETED) -- authorized lookup for filters and cycle setup.
   Q: year?,season?. R: List<Semester>.
-PATCH /api/semesters/{semesterId} -- scoped AC/Admin; authority to confirm.
-  B: {expectedRevision,startsOn?,endsOn?,timeZone?}. R: Semester.
-  Semester Settings edits semester boundaries AND cycle deadlines. OPTIONAL atomic
-  PUT /api/evaluation-cycles/{cycleId}/settings can save both transactionally:
-  B: {expectedCycleRevision,expectedSemesterRevision,semester:{startsOn,endsOn},
+  season filter: Spring|Summer|Fall. Names map from stored termName.
+PUT /api/evaluation-cycles/{cycleId}/settings (COMPLETED) -- cycles.manage.
+  Chosen atomic settings save; no standalone semester PATCH is implemented.
+  B: {expectedCycleRevision,expectedSemesterRevision,semester:{startsOn,endsOn,timeZone?},
     deadlines:{signupDeadline,observationDeadline,feedbackDeadline}}.
-  R: {semester:Semester,cycle:Cycle}. Choose one save contract before integration.
+  R: {semester:Semester,cycle:Cycle}. Both revisions increment in one transaction.
+  Boundaries are valid dates with startsOn <= endsOn. timeZone is an IANA zone.
+  Deadlines are UTC timestamps; they need not fall inside semester boundaries.
+  Reads: cycles.read/manage sees all; faculty own-record grants see semesters/cycles
+  where they teach, signed up, observe, or are an observer candidate (semester
+  lookup itself uses teaching assignments). Unknown/out-of-scope detail returns 404.
 GET /api/me/evaluation-status
   Q: cycleId?; omission requires agreed current-cycle rule.
   R: {cycle:Cycle|null,hiringLevel:HiringLevel|null,lastCompletedEvaluation:
@@ -299,23 +309,29 @@ PATCH /api/alerts/{alertId} -- CONDITIONAL resolution flow; scoped AC/Admin.
 
 6. TEMPLATES AND WEB ASSESSMENTS
 ================================
-GET /api/observation-templates
+GET /api/observation-templates (COMPLETED)
   Q: status?. R: List<Template summary>. AC: authorized drafts; faculty: published only.
-GET /api/observation-templates/{templateId}
-  R: Template. Here templateId identifies a version; align naming with final schema.
-GET /api/observation-templates/current
-  Q: cycleId? if applicability is cycle-specific. R: Template; 404 if none applies.
-POST /api/observation-templates -- scoped AC/Admin.
+GET /api/observation-templates/{templateId} (COMPLETED)
+  R: Template. templateId identifies an editable template record, not a version.
+GET /api/observation-templates/current (COMPLETED)
+  R: most recently published active Template; 404 if none applies.
+  Applicability is university-wide; cycleId is not supported (422).
+POST /api/observation-templates (COMPLETED) -- templates.manage, university-wide.
   B: {title,criteria:Criterion[],commentPrompts,signatureLabels}. R: draft Template.
-PATCH /api/observation-templates/{templateId} -- draft only; scoped AC/Admin.
+PATCH /api/observation-templates/{templateId} (COMPLETED) -- templates.manage.
   B: {expectedRevision,title?,criteria?:Criterion[],commentPrompts?,signatureLabels?}.
   R: Template. Proposed arrays replace supplied sections; omitted sections unchanged.
-  Validate IDs/order/options; agree deletion semantics. Published versions immutable.
-POST /api/observation-templates/{templateId}/versions -- scoped AC/Admin.
-  B: {title?}. R: new cloned draft Template; preserve previous versions/answers.
-POST /api/observation-templates/{templateId}/publish -- NEW; scoped AC/Admin.
-  B: {expectedRevision,cycleId?}. R: published Template. Validate completeness;
-  agree applicability and when observations get assigned a version.
+  Draft and published templates may be edited per October 18 clarification.
+  In-place question edits affect older linked assessments. Preserve criterion IDs
+  when editing existing questions. Cannot remove criteria once assessments exist;
+  use a new template for major changes. Existing answer JSON is never modified.
+  Types: rating|text. Ratings require 2-20 uniquely valued integer options with labels.
+  No separate version model or /versions endpoint is implemented.
+POST /api/observation-templates/{templateId}/publish (COMPLETED) -- templates.manage.
+  B: {expectedRevision}. R: published Template. Only drafts may publish.
+  New templates are inactive drafts. Publication activates them and records time.
+  templates.read/manage can read drafts and published templates; assessment.read.own
+  may read published templates only. Publication does not reassign old assessments.
 GET /api/observations/{observationId}/template
   R: exact assigned Template, not latest. Authorized participants/reviewers only.
 GET /api/observations/{observationId}/assessment

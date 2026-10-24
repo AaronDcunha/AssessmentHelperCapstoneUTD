@@ -1,5 +1,15 @@
 # Project structure and implementation responsibilities
 
+October 23 configuration update: cycle reads/mutations, semester lookup and atomic
+settings, and editable draft/published templates are implemented. Shared HTTP
+authorization/validation lives in `src/server/configuration-*.ts`, authorized reads
+in `src/server/queries/configuration.ts`, and transactional writes in
+`src/server/services/configuration.ts`. Configuration uses generated Prisma Client
+model APIs and transactions via `src/server/prisma.ts`; no hand-written queries.
+Prisma also manages schema/migrations. See `AC_CONFIGURATION_BACKEND.md` for the
+current contract. The older versioning suggestions below are superseded for
+templates by the October 18/23 implementation notes.
+
 This is the target organization, not a list of implemented features. As of October 11, 2026, the app has a Next.js starter page, dependencies, local PostgreSQL/Mailpit services, and placeholder directories. Authentication, Prisma models, workflow APIs, dashboards, jobs, and tests remain to be implemented. Inspect the source for current progress.
 
 October 14 update on the authentication backend branch: Auth.js JWT sessions, development-only mock identities, `/api/me`, shared access guards, protected test pages/APIs, and authentication tests are implemented. Database-backed authentication and all business models remain pending. See `AUTH_BACKEND.md`; the mock test permissions do not define the final database permission model.
@@ -46,7 +56,8 @@ assessment-helper-capstoneutd/
       observations/                Invitation and assessment-form components
       ac/                          AC-specific interfaces
     server/
-      db.ts                        Shared Prisma connection
+      db.ts                        Existing authentication pg pool
+      prisma.ts                    Shared Prisma Client for business features
       permissions.ts               Permission, ownership, and scope checks
       services/                    Business rules and transactional mutations
       queries/                     Authorized database reads
