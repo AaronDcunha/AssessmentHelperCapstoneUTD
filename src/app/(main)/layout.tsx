@@ -2,8 +2,15 @@ import type { ReactNode } from "react";
 import { acPermissions, canAccessAcPage, type AcPage } from "@/lib/ac-permissions";
 import { AppShell } from "@/components/layout/app-shell";
 import { requireUser } from "@/server/permissions";
-import { adminTestBindings, createNavigationConfig, filterNavigation } from "@/components/layout/navigation-config";
+import { adminNavigationBindings, adminRoutes, adminTestBindings, createNavigationConfig, filterNavigation } from "@/components/layout/navigation-config";
 import { facultyPageHeaders, facultyRoutes } from "@/components/observations/faculty-routes";
+
+// Reuse the existing Figma semester label; it is display context, not live cycle data.
+const adminHeader = {
+  subtitle: facultyPageHeaders[facultyRoutes.dashboard].subtitle,
+  showUnavailableControls: true,
+  contentSpacing: "spacious" as const,
+};
 
 const acPageHeaders = {
   "/ac": { title: "AC Dashboard", facultyLayout: true },
@@ -24,6 +31,8 @@ export default async function MainLayout({ children }: { children: ReactNode }) 
     "faculty.requests": { href: facultyRoutes.requests, permission: "observations.read.own" },
     "faculty.observations": { href: facultyRoutes.observations, permission: "observations.read.own" },
     "faculty.history": { href: facultyRoutes.history, permission: "observations.read.own" },
+    ...adminNavigationBindings,
+
     "ac.dashboard": { href: "/ac", permission: "reports.read" },
     "ac.cycles": { href: "/ac/cycles", permission: "cycles.read" },
     "ac.faculty": { href: "/ac/faculty", permission: "reports.read" },
@@ -38,7 +47,16 @@ export default async function MainLayout({ children }: { children: ReactNode }) 
       authorizedSections={filterNavigation(sections, item => item.id in acPermissions ? canAccessAcPage(user.permissions, item.id as AcPage) : !!item.permission && user.permissions.includes(item.permission))}
       user={{ name: user.name, initials: user.name, description: user.roles.join(" · ") }}
       headerUser={{ name: user.name, initials: user.name }}
-      pageHeaders={{ ...facultyPageHeaders, ...acPageHeaders }}
+      pageHeaders={{
+        ...facultyPageHeaders,
+        ...acPageHeaders,
+        [adminRoutes.dashboard]: { ...adminHeader, title: "Admin Dashboard" },
+        [adminRoutes.users]: { ...adminHeader, title: "Users" },
+        [adminRoutes.roles]: { ...adminHeader, title: "Roles & Permissions" },
+        [adminRoutes.hiringLevels]: { ...adminHeader, title: "Hiring Levels & Frequency" },
+        [`${adminRoutes.users}/new`]: { ...adminHeader, title: "Create User" },
+        [`${adminRoutes.users}/[userId]`]: { ...adminHeader, title: "Edit User" },
+      }}
     >
       {children}
     </AppShell>

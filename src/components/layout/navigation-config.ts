@@ -69,16 +69,31 @@ export const navigationDefinitions = [
     { id: "ac.semester", label: "Semester Settings", icon: "calendar" },
   ] },
   { id: "admin", label: "Admin", icon: "shield", items: [
-    ...adminTestPages.map(({ id, label, icon }) => ({ id, label, icon })),
     { id: "admin.dashboard", label: "Dashboard", icon: "grid" },
     { id: "admin.users", label: "Users", icon: "people" },
     { id: "admin.roles", label: "Roles & Permissions", icon: "shield" },
     { id: "admin.hiring", label: "Hiring Levels", icon: "chart" },
+    ...adminTestPages.map(({ id, label, icon }) => ({ id, label, icon })),
   ] },
 ] as const;
 
 export type NavigationDestinationId = typeof navigationDefinitions[number]["items"][number]["id"];
 export type NavigationBindings = Partial<Record<NavigationDestinationId, NavigationTarget & Pick<NavigationDestination, "permission">>>;
+
+/** Planned destinations are links only until their own pages are implemented. */
+export const adminRoutes = {
+  dashboard: "/admin",
+  users: "/admin/users",
+  roles: "/admin/roles",
+  hiringLevels: "/admin/hiring-levels",
+} as const;
+
+export const adminNavigationBindings: NavigationBindings = {
+  "admin.dashboard": { href: adminRoutes.dashboard, permission: "users.read" },
+  "admin.users": { href: adminRoutes.users, permission: "users.read" },
+  "admin.roles": { href: adminRoutes.roles, permission: "roles.read" },
+  "admin.hiring": { href: adminRoutes.hiringLevels, permission: "hiring-levels.read" },
+};
 
 export const adminTestBindings: NavigationBindings = Object.fromEntries(
   adminTestPages.map(({ id, href }) => [id, { href, permission: "test:admin" }]),

@@ -107,7 +107,7 @@ snake_case fields; nested responses are authorized joins, not extra tables.
   participant_role column does not resolve dual-role submission/counting policy.
 - Notification -> notification. target can derive from observation_id/cycle_id;
   title can derive from type. Other target kinds require an agreed extension.
-- evaluation_interval_years -> evaluationIntervalYears; account_status -> accountStatus.
+- evaluation_interval_years -> evaluationIntervalYears; app_user.is_active -> accountStatus.
   Semester name derives from year/season. Semester dates/timezone, hiringLevel.active,
   revisions, async operations and idempotency records are not in the current diagram.
 
@@ -425,6 +425,11 @@ for inventing system notifications. Header logout continues to use Auth.js.
 ===========================
 Admin Dashboard itself is hyperlinks only. These routes support future tabs.
 All writes require effective Admin permissions and appropriate scope.
+accountStatus is a JSON boolean mapped directly to AppUser.isActive: true = Active,
+false = Inactive. POST requires it; PATCH accepts either boolean when supplied.
+GET /api/users serializes its optional status filter as accountStatus=true or
+accountStatus=false; omit the parameter for all accounts. UI labels are Active
+and Inactive. These are the only statuses; never derive choices from user records.
 
 GET /api/users
   Q: q?:name/email,roleId?,accountStatus?,departmentId?,hiringLevelId?.
