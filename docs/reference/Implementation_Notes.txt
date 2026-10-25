@@ -1,4 +1,23 @@
 ASSESSMENT HELPER IMPLEMENTATION NOTES
+October 25, 2026 Admin backend:
+The 13 requested user/role/permission/hiring-level/department handlers are now
+implemented using Prisma queries and Serializable services. See ADMIN_BACKEND.md
+for exact permissions, validation, migrations, concurrency and verification.
+User/Role/HiringLevel revisions and HiringLevel active status are persisted.
+New user records have null usernames and no credentials (future SSO); existing
+seeded logins remain unchanged. No user DELETE or custom-role CRUD is implemented.
+Admin inherits AC/Faculty and AC inherits Faculty dynamically; direct grants remain
+separate and existing seeded grants are preserved. Conservative implementation
+safeguards prevent self admin lockout and loss of the last active managing Admin;
+in-use hiring levels cannot be deleted. Positive whole intervals use the database
+integer range. Department code/name map to the existing imported departmentName.
+These implementation choices were surfaced during this task; see the backend
+handoff for exact definitions. They supersede older pending-Admin backend notes.
+The full unit suite and expanded Admin tests passed (120 total), along with TypeScript,
+lint and production build on retry. Next.js reported an existing security advisory.
+Local PostgreSQL was unavailable;
+database integration and deployment of the new migration remain unverified.
+
 October 24, 2026 configuration/frontend integration:
 The configuration backend and AC/Admin frontends coexist in this branch.
 Configuration endpoints marked COMPLETED in the API draft are implemented;

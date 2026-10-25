@@ -19,11 +19,12 @@ Authentication backend: see `AUTH_BACKEND.md` for database-backed login, develop
 | File | Use |
 | --- | --- |
 | `Implementation_Notes.txt` | Current decisions and remaining implementation questions |
+| `ADMIN_BACKEND.md` | Implemented Admin endpoints, access rules, migration, safeguards and verification |
 | `AC_CONFIGURATION_BACKEND.md` | Implemented configuration endpoints, access rules, migrations, and verification |
 
 | `AC_MONITORING_FRONTEND.md` | AC list/cycle integration, business page guards, deferred work and verification |
 | `PROJECT_STRUCTURE.md` | Proposed directories and responsibilities |
-| `Expanded Use Cases.docx` / `.txt` | UC1–UC13 workflow descriptions; TXT is a paragraph-text extraction for AI/search |
+| `Expanded Use Cases.docx` / `.txt` | UC1â€“UC13 workflow descriptions; TXT is a paragraph-text extraction for AI/search |
 | `process_explanation_to_all.docx` / `.txt` | Faculty/AC process and draft KPI definitions |
 | `AssessmentHelper_API_Contract_Draft_v2.txt` | API contracts and proposals; configuration endpoints marked COMPLETED are implemented, while unmarked endpoints remain planned |
 | `AssessmentHelper_API_Endpoints.txt` | Preserved earlier endpoint draft/backup; includes outdated assessment-upload routes |

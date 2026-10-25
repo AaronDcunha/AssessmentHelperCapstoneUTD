@@ -111,3 +111,5 @@ October 19 faculty/auth integration: the shared main layout now authenticates
 and supplies user identity plus permission-filtered Faculty/Admin test navigation.
 Root and successful logins default to /dashboard. Faculty route-family layouts
 enforce read access. Business dashboard data remains preview/empty state.
+
+October 25 Admin update: shared authorization/validation and HTTP handling live in src/server/admin-*.ts; authorized reads in src/server/queries/admin.ts; Serializable writes in src/server/services/admin.ts. See ADMIN_BACKEND.md for the implemented endpoints and remaining SSO/user-deletion limitations.

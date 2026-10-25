@@ -29,6 +29,7 @@ try {
   // SQL is confined to schema setup and applying checked-in Prisma migrations.
   await migrationPool.query(initial);
   await migrationPool.query(await readFile(new URL('../../prisma/migrations/20261023000000_ac_configuration/migration.sql',import.meta.url),'utf8'));
+  await migrationPool.query(await readFile(new URL('../../prisma/migrations/20261025000000_admin_backend/migration.sql',import.meta.url),'utf8'));
   await prisma.semester.createMany({data:[{semesterId,termCode:'26f',termName:'Fall 2026'},{semesterId:otherSemesterId,termCode:'27s',termName:'Spring 2027'}]});
   await prisma.observationTemplate.create({data:{templateId:legacyTemplateId,templateName:'Existing published template',status:'published',isActive:true,publishedAt:new Date('2026-10-19T00:00:00Z'),
     criteria:{create:{criterionId:legacyCriterionId,criterionKey:legacyCriterionId,criterionText:'Existing question',questionType:'RATING',minRating:1,maxRating:5,displayOrder:1,
