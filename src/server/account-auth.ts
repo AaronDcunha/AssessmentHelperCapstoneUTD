@@ -1,4 +1,4 @@
-import { scrypt, timingSafeEqual } from "node:crypto";
+import { randomBytes, scrypt, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 
 const deriveKey = promisify(scrypt);
@@ -8,6 +8,18 @@ export type AccountUser = {
 export type AccountRecord = AccountUser & { isActive: boolean; passwordHash: string | null };
 // Same work for unknown users to avoid a fast account-existence check.
 const dummyHash = `scrypt:${"0".repeat(32)}:${"0".repeat(128)}`;
+
+export async function hashPassword(password: string): Promise<string> {
+  const salt = randomBytes(16).toString("hex");
+  const hash = await deriveKey(password, salt, 64) as Buffer;
+  return `scrypt:${salt}:${hash.toString("hex")}`;
+}
+
+export function usernameFromName(name: string): string {
+  const parts = name.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase()
+    .split(/\s+/).map(part => part.replace(/[^\p{L}\p{N}]/gu, "")).filter(Boolean);
+  return (parts.length > 1 ? `${parts[0]}_${parts.at(-1)}` : parts[0] || "user").slice(0, 90);
+}
 
 export async function verifyPassword(password: string, stored: string): Promise<boolean> {
   const match = /^scrypt:([a-f0-9]{32}):([a-f0-9]{128})$/.exec(stored);

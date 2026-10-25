@@ -12,9 +12,11 @@ datasource db {
 model AppUser {
   userId   String  @id @default(uuid()) @map("user_id") @db.Uuid
   fullName String  @map("full_name")
-  username String  @unique
+  username String? @unique
   email    String  @unique
   isActive Boolean @default(true) @map("is_active")
+
+  revision Int @default(0)
 
   // Authentication relationships.
   userRoles       UserRole[]
@@ -33,6 +35,8 @@ model AppUser {
 model Role {
   roleId   String @id @default(uuid()) @map("role_id") @db.Uuid
   roleName String @unique @map("role_name")
+
+  revision Int @default(0)
 
   // Connects roles to users and permissions.
   userRoles       UserRole[]
@@ -116,6 +120,9 @@ model HiringLevel {
   hiringLevelId           String @id @default(uuid()) @map("hiring_level_id") @db.Uuid
   levelName               String @unique @map("level_name")
   evaluationIntervalYears Int    @map("evaluation_interval_years")
+
+  active Boolean @default(true)
+  revision Int @default(0)
 
   // One hiring level can be assigned to multiple professors.
   professors Professor[]
