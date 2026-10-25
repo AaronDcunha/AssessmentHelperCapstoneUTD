@@ -447,7 +447,7 @@ for inventing system notifications. Header logout continues to use Auth.js.
 
 10. ADMIN DESTINATION PAGES
 ===========================
-October 25: the 13 user/role/permission/hiring-level/department endpoints listed in ADMIN_BACKEND.md are implemented; see that file for finalized safeguards, permissions, migration and validation. User DELETE and role CRUD remain proposals.
+October 25: the 13 user/role/permission/hiring-level/department endpoints listed in ADMIN_BACKEND.md are implemented; see that file for finalized safeguards, permissions, migration and validation. User DELETE is implemented by the October 25 follow-up below; role CRUD remains proposed.
 Admin Dashboard itself is hyperlinks only. These routes support its management pages.
 All writes require the effective business permissions documented in ADMIN_BACKEND.md, university-wide.
 accountStatus is a JSON boolean mapped directly to AppUser.isActive: true = Active,
@@ -464,15 +464,23 @@ GET /api/users/{userId} (COMPLETED) -- NEW edit-form read.
     professor:{departmentId,hiringLevelId,hireDate?}|null,revision}.
 POST /api/users (COMPLETED) -- NEW, Create User screen.
   B: {name,email,roleIds:string[],accountStatus,professor?}. R: user resource.
-  No username or local password provisioning. Associate accounts with verified UTD
-  SSO identities through the future auth integration; keep demo lookup separate.
+  October 25 user correction: server generates normalized firstname_lastname
+  usernames (first/last word; single-word fallback; collisions append _2, _3, etc.)
+  and initial password 123 stored as a salted scrypt hash, atomically. Credentials
+  are not accepted from the client or added to the response. Existing logins are
+  preserved; name edits do not rename usernames or reset passwords.
 PATCH /api/users/{userId} (COMPLETED)
   B: {expectedRevision,name?,email?,accountStatus?,professor?:
     {departmentId?,hiringLevelId?,hireDate?}}. R: user resource.
   Disabled users lose subsequent access, including existing sessions. Rank changes
   must not erase roles/history. Detail PATCH and role PUT are separate transactional saves; use the returned revision.
-DELETE /api/users/{userId} -- policy CONDITIONAL; Figma Delete user.
-  R: 204. Agree deactivation vs deletion, retention and last-admin/self safeguards.
+DELETE /api/users/{userId} (COMPLETED) -- Figma Delete user; users.manage.
+  No body. R: empty 204. Physical deletion removes credentials, role assignments,
+  owned notifications and an unreferenced faculty profile atomically. Self-delete
+  and deletion of the last active managing Admin return 409. Teaching assignments,
+  signups, selected observations, candidates or feedback block deletion with 409;
+  deactivate via PATCH instead. Missing users return 404. Existing sessions lose
+  access on their next account check. No history is cascaded or anonymized.
 PUT /api/users/{userId}/roles (COMPLETED)
   B: {roleIds:string[],expectedRevision}. R: {userId,roleIds,permissions,revision}.
   Replaces full role set; preserves unrelated roles in UI; backend protects self and last active managing Admin access.

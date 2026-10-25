@@ -1,4 +1,10 @@
 ASSESSMENT HELPER IMPLEMENTATION NOTES
+October 25 user deletion follow-up (supersedes user-DELETE-pending notes):
+User requested DELETE /api/users/{userId}. Implemented using Prisma Client in a Serializable transaction, requiring users.manage and same origin. No body; empty 204 success, 404 missing account. Self-deletion and loss of the last active managing Admin return 409. Teaching, signup, selected-observer, candidate and feedback references block deletion (409); use deactivation instead. Only an unreferenced profile, credentials, role links and owned notifications are removed with the account. History is never cascaded/anonymized. No migration is required. Existing frontend Delete User is connected. Isolated real-database verification passed, including rollback and session/account lookup invalidation.
+
+October 25 authentication/account provisioning correction (supersedes no-credentials/future-SSO creation notes):
+User requested Prisma-only runtime authentication and local login for new Admin-created accounts. Account/credential/grant reads now use Prisma Client. New accounts receive normalized firstname_lastname (first/last word), or a single name word; collisions append _2, _3, etc. Initial password 123 is stored only as a randomly salted scrypt hash, in the same transaction as the account/profile/roles. Existing seeded logins are preserved; existing null usernames are not backfilled. Name edits do not reset credentials. API request/response formats remain unchanged. No schema change is needed for this correction.
+
 October 25, 2026 Admin backend:
 The 13 requested user/role/permission/hiring-level/department handlers are now
 implemented using Prisma queries and Serializable services. See ADMIN_BACKEND.md

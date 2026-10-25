@@ -24,7 +24,7 @@ export function adminHandler(operation:Operation, dependencies:{getUser:()=>Prom
       }
       const params=context ? await context.params : {};
       const data=await dependencies.execute(operation,user,new URL(request.url),params,body);
-      if (operation === "levels.delete") return new Response(null,{status:204,headers:{"Cache-Control":"no-store"}});
+      if (operation.endsWith(".delete")) return new Response(null,{status:204,headers:{"Cache-Control":"no-store"}});
       return Response.json(data,{status:operation.endsWith(".create")?201:200,headers:{"Cache-Control":"no-store"}});
     } catch(error) {
       let failure=error instanceof ConfigurationError ? error : null;

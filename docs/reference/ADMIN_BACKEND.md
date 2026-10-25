@@ -1,5 +1,7 @@
 # Admin backend
 
+October 25 deletion follow-up: `DELETE /api/users/{userId}` is now implemented, bringing the requested Admin operations plus this follow-up to 14. Requires users.manage and the same origin checks as other writes. No body; success is empty 204, missing account 404. Physical deletion atomically removes credentials, role links, owned notifications and an unreferenced professor profile. It blocks self-deletion, loss of the last managing Admin, and any teaching/signup/selected-observer/candidate/feedback reference with 409. Historical records are neither removed nor anonymized; use accountStatus=false when deletion is blocked. Serializable isolation protects concurrent changes. No schema migration is needed. Existing frontend Delete User calls this handler. Unit tests, TypeScript, ESLint and isolated PostgreSQL integration passed, including successful removal/login rejection, missing users, self/last-Admin protection, rollback and preservation of selected-observer identity. Application accounts were not deleted during verification.
+
 Implemented October 25, 2026. The existing Admin frontend uses these handlers without a new client contract. Apply committed migrations with `npx prisma migrate deploy` before running the updated app. Generate the client with `npm run db:generate`.
 
 | Endpoint | Required effective permissions |
@@ -8,6 +10,7 @@ Implemented October 25, 2026. The existing Admin frontend uses these handlers wi
 | GET /api/users/{userId} | users.manage |
 | POST /api/users | users.manage AND roles.assign |
 | PATCH /api/users/{userId} | users.manage |
+| DELETE /api/users/{userId} | users.manage |
 | PUT /api/users/{userId}/roles | roles.assign |
 | GET /api/roles | roles.read |
 | GET /api/permissions | permissions.read |
@@ -24,7 +27,7 @@ AppUser and Role now have integer revisions starting at zero. HiringLevel adds a
 
 Creation requires name, email, explicit boolean accountStatus and at least one valid role. Optional faculty profiles require an existing department and active hiring level. PATCH preserves omitted profile values, roles, teaching and evaluation history; new profiles require both references. Existing inactive hiring-level assignments can be retained, but new assignments require an active level. Hire dates use validated YYYY-MM-DD. Null profile/date clearing is undefined and rejected. Unknown fields, duplicate/unknown role IDs and unsupported permission keys are rejected. Emails are trimmed and lowercased; uniqueness uses the existing database constraint.
 
-Per the existing contract, creation provisions neither a username nor local credentials. The username column is now nullable; seeded credential accounts are preserved. New records cannot log in until future verified SSO integration is implemented. No passwords, usernames or credentials enter Admin API responses. User DELETE remains unimplemented because its retention contract is outside this endpoint request; the existing frontend's user Delete action receives 405.
+Per the October 25 user correction, creation now provisions normalized firstname_lastname usernames and randomly salted scrypt hashes of initial password 123 atomically with profile/roles. Multi-part names use first/last words; single-word names use that word. Collisions append _2, _3, etc.; bases are capped at 90 characters for login compatibility. Concurrent creation conflicts return 409 for explicit retry. Existing seeded logins remain unchanged; existing null usernames are not backfilled. Name edits do not rename logins or reset passwords. Admin request/response formats remain unchanged and exclude credentials. Runtime authentication also uses Prisma Client. User DELETE is implemented by the follow-up documented above.
 
 Direct role permissionKeys stay separate from effectivePermissionKeys. Admin dynamically inherits AC and Faculty grants; AC inherits Faculty grants. Both Admin API responses and existing database authentication use this hierarchy. Existing seeded flattened direct grants are preserved, so a directly assigned grant remains effective even if removed from a lower role. Custom roles inherit nothing. Changing grants does not rewrite other roles or assigned role IDs.
 

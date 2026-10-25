@@ -2,7 +2,7 @@ import { ConfigurationError, invalid, fields, object, text, uuid, date, revision
 export type AdminUser = ConfigurationUser;
 export const grants = {
   "users.list": ["users.read"], "users.get": ["users.manage"], "users.create": ["users.manage", "roles.assign"],
-  "users.update": ["users.manage"], "users.roles": ["roles.assign"],
+  "users.update": ["users.manage"], "users.delete": ["users.manage"], "users.roles": ["roles.assign"],
   "roles.list": ["roles.read"], "permissions.list": ["permissions.read"], "roles.permissions": ["role-permissions.manage"],
   "levels.list": ["hiring-levels.read"], "levels.create": ["hiring-levels.manage"],
   "levels.update": ["hiring-levels.manage"], "levels.delete": ["hiring-levels.manage"],

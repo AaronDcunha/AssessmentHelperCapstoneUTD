@@ -12,7 +12,7 @@ function request(operation,headers={},body='{}') {
  return new Request('http://localhost/api/admin',{method,headers:{origin:'http://localhost','content-type':'application/json',...headers},...(method==='POST'?{body}:{})});
 }
 const forbidden=()=>assert.fail('Denied request accessed persistence');
-test('all 13 endpoints enforce authentication and exact grants before persistence',async()=>{
+test('all Admin endpoints enforce authentication and exact grants before persistence',async()=>{
  for(const operation of Object.keys(grants)) {
   for(const [user,status] of [[null,401],[{id,permissions:['test:admin']},403]]) {
    assert.equal((await adminHandler(operation,{getUser:async()=>user,execute:forbidden})(request(operation))).status,status,operation);
@@ -34,6 +34,26 @@ test('all writes require same origin; delete accepts an empty body',async()=>{
 });
 test('create requires roles.assign in addition to users.manage',async()=>{
  assert.equal((await adminHandler('users.create',{getUser:async()=>({id,permissions:['users.manage']}),execute:forbidden})(request('users.create'))).status,403);
+});
+
+test('user DELETE returns an empty 204 and rejects missing grants and cross-origin requests',async()=>{
+ const handler=adminHandler('users.delete',{getUser:async()=>identity,execute:async()=>null});
+ const response=await handler(request('users.delete'));
+ assert.equal(response.status,204); assert.equal(await response.text(),'');
+ const denied=adminHandler('users.delete',{getUser:async()=>({id,permissions:['users.read']}),execute:forbidden});
+ assert.equal((await denied(request('users.delete'))).status,403);
+ assert.equal((await handler(request('users.delete',{origin:'https://other.example'}))).status,403);
+});
+
+test('user deletion rejects self, missing accounts and retained faculty relations before cleanup',async()=>{
+ const target='00000000-0000-4000-8000-000000000002';
+ const db={role:{findMany:async()=>[]},appUser:{findMany:async()=>[],findUnique:async()=>({userId:target})},
+  professor:{findUnique:async()=>({_count:{teaches:0,evaluationSignups:0,selectedObservations:1,observationCandidates:0,processFeedback:0}}),deleteMany:forbidden}};
+ const prisma={$transaction:async run=>run(db)};
+ await assert.rejects(()=>mutateAdmin(prisma,identity,'users.delete',{userId:id}),e=>e.code==='SELF_DELETE_FORBIDDEN');
+ await assert.rejects(()=>mutateAdmin(prisma,identity,'users.delete',{userId:target}),e=>e.code==='USER_HISTORY_REQUIRED');
+ db.appUser.findUnique=async()=>null;
+ await assert.rejects(()=>mutateAdmin(prisma,identity,'users.delete',{userId:target}),e=>e.status===404);
 });
 test('validation preserves false and rejects mass assignment, invalid dates and intervals',()=>{
  const b={name:'Example',email:'Example@Test.edu',accountStatus:false,roleIds:[id]};

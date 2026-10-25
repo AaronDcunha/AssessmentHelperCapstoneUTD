@@ -1,5 +1,7 @@
 # Project structure and implementation responsibilities
 
+October 25 authentication correction: database-auth.ts now uses getPrisma() model reads, including credentials and inherited permissions. Admin services atomically provision generated usernames and hashed local credentials. The pg authentication-pool references below are historical. See AUTH_BACKEND.md and ADMIN_BACKEND.md.
+
 October 23 configuration update: cycle reads/mutations, semester lookup and atomic
 settings, and editable draft/published templates are implemented. Shared HTTP
 authorization/validation lives in `src/server/configuration-*.ts`, authorized reads

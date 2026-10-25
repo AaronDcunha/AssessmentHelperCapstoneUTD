@@ -1,6 +1,7 @@
 import { adminAccess, preserveAdminAccess } from "../admin-safeguards";
+import { hashPassword, usernameFromName } from "../account-auth";
 import type { PrismaClient } from "../../generated/prisma/client";
-import { object, fields, uuid, revision, invalid } from "../configuration-validation";
+import { ConfigurationError, object, fields, uuid, revision, invalid } from "../configuration-validation";
 import { authorize, required, conflict, strings, userInput, levelInput, effectivePermissions, type AdminUser, type Operation } from "../admin-validation";
 import { grantInclude, userInclude, userResponse, levelResponse, type Connection } from "../queries/admin";
 
@@ -18,13 +19,38 @@ async function validProfile(db: Connection,p: {departmentId?: string; hiringLeve
 export async function mutateAdmin(prisma: PrismaClient,user: AdminUser,operation: Operation,params: Record<string,string>,value: unknown) {
   authorize(user,operation);
   return prisma.$transaction(async db=>{
-    const guarded = ["users.update","users.roles","roles.permissions"].includes(operation);
+    const guarded = ["users.update","users.delete","users.roles","roles.permissions"].includes(operation);
     const before = guarded ? await adminAccess(db,user.id) : null;
     async function protect() { if (before) preserveAdminAccess(before,await adminAccess(db,user.id)); }
+    if (operation === "users.delete") {
+      const id = uuid(params.userId);
+      required(await db.appUser.findUnique({where:{userId:id}}));
+      if (id.toLowerCase() === user.id.toLowerCase())
+        throw new ConfigurationError(409,"SELF_DELETE_FORBIDDEN","You cannot delete your own account.");
+      const professor = await db.professor.findUnique({where:{userId:id},include:{_count:{select:{
+        teaches:true,evaluationSignups:true,selectedObservations:true,observationCandidates:true,processFeedback:true,
+      }}}});
+      // Check optional observer relations too: their default SET NULL action
+      // would otherwise erase the observer's identity from retained history.
+      if (professor && Object.values(professor._count).some(count => count > 0))
+        throw new ConfigurationError(409,"USER_HISTORY_REQUIRED","This account has teaching or evaluation records. Deactivate it instead to preserve history.");
+      await db.professor.deleteMany({where:{userId:id}});
+      await db.loginCredential.deleteMany({where:{userId:id}});
+      await db.notification.deleteMany({where:{userId:id}});
+      await db.userRole.deleteMany({where:{userId:id}});
+      await db.appUser.delete({where:{userId:id}});
+      await protect();
+      return null;
+    }
     if (operation === "users.create") {
       const input=userInput(value,true); await validRoles(db,input.roleIds!);
       if (input.profile) await validProfile(db,input.profile);
-      return userResponse(await db.appUser.create({data:{fullName:input.data.fullName!,email:input.data.email!,isActive:input.data.isActive!,
+      const base = usernameFromName(input.data.fullName!);
+      let username = base;
+      for (let suffix = 2; await db.appUser.findUnique({where:{username}}); suffix++) username = `${base}_${suffix}`;
+      const passwordHash = await hashPassword("123");
+      return userResponse(await db.appUser.create({data:{fullName:input.data.fullName!,email:input.data.email!,isActive:input.data.isActive!,username,
+        loginCredential:{create:{passwordHash}},
         userRoles:{create:input.roleIds!.map(roleId=>({roleId}))},
         ...(input.profile ? {professor:{create:{departmentId:input.profile.departmentId!,hiringLevelId:input.profile.hiringLevelId!,hireDate:input.profile.hireDate}}} : {})},include:userInclude}));
     }
