@@ -1,11 +1,13 @@
 export type Page<T> = { items: T[]; pageInfo: { nextCursor: string | null; hasMore: boolean } };
 
 export type UserSummary = { id: string; name?: string | null; displayName?: string | null; username?: string | null };
+export type Semester = { id: string; name: string; year?: number | null; season?: string | null; startsOn: string | null; endsOn: string | null; timeZone: string; revision: number };
 export type Cycle = {
   id: string; semesterId?: string;
-  semester?: { id?: string; name?: string; title?: string; season?: string; year?: number; startsOn?: string | null; endsOn?: string | null; revision?: number } | null;
+  semester?: { id?: string; name?: string; title?: string; season?: string | null; year?: number | null; startsOn?: string | null; endsOn?: string | null; timeZone?: string; revision?: number } | null;
   signupDeadline?: string | null; observationDeadline?: string | null; feedbackDeadline?: string | null;
   status?: string | null; revision?: number;
+  allowedActions?: string[];
 };
 export type ReportsResponse = {
   cycleId: string; asOf?: string; definitionsVersion?: string;
@@ -65,24 +67,26 @@ export type MetricsResponse = {
 };
 export type CycleWrite = { semesterId: string; signupDeadline: string; observationDeadline: string; feedbackDeadline: string };
 export type HiringLevel = { id: string; name: string; evaluationIntervalYears?: number; active?: boolean };
-export type ObservationTemplate = {
-  id: string; title: string; revision?: number;
-  criteria: Array<{ id: string; prompt?: string; questionText?: string; label?: string; required?: boolean; weight?: number }>;
-};
+export type TemplateCriterion = { id?: string; key: string; prompt: string; type: "rating" | "text"; required: boolean; order: number; options?: Array<{ value: number; label: string }>; weight?: number };
+export type TemplateComment = { id?: string; prompt: string; required: boolean; order: number };
 export type ObservationTemplateWrite = {
   title: string;
-  criteria: Array<{ id: string; prompt: string; required: boolean; weight: number }>;
-  commentPrompts: string[];
-  signatureLabels: string[];
+  criteria: TemplateCriterion[];
+  commentPrompts: TemplateComment[];
+  signatureLabels: { observer: string; observee: string };
 };
+export type TemplateSummary = { id: string; title: string; status: "draft" | "published"; publishedAt: string | null; revision: number };
+export type ObservationTemplate = ObservationTemplateWrite & TemplateSummary;
 
 export class ApiRequestError extends Error {
   readonly status?: number;
+  readonly code?: string;
 
-  constructor(message: string, status?: number) {
+  constructor(message: string, status?: number, code?: string) {
     super(message);
     this.name = "ApiRequestError";
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -97,7 +101,13 @@ function queryString(values: Record<string, string | number | boolean | null | u
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, { ...init, headers: { "Content-Type": "application/json", ...init?.headers }, cache: "no-store" });
-  if (!response.ok) throw new ApiRequestError(`Request failed with status ${response.status}.`, response.status);
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    const code = typeof body?.error?.code === "string" ? body.error.code : undefined;
+    // Only show expected, structured contract messages; never echo server exceptions.
+    const detail = response.status < 500 && typeof body?.error?.message === "string" ? body.error.message : undefined;
+    throw new ApiRequestError(detail || `Request failed with status ${response.status}.`, response.status, code);
+  }
   return response.json() as Promise<T>;
 }
 
@@ -128,6 +138,7 @@ async function requestList<T>(path: string): Promise<T[]> {
 export const acApi = {
   getEvaluationCycles: (filters: { semesterId?: string; status?: string } = {}) => requestList<Cycle>(`/api/evaluation-cycles${queryString(filters)}`),
   getEvaluationCycle: (cycleId: string) => requestJson<Cycle>(cyclePath(cycleId)),
+  getSemesters: () => requestList<Semester>("/api/semesters"),
   getReports: (cycleId: string, filters: { departmentId?: string; hiringLevelId?: string } = {}) => requestJson<ReportsResponse>(`${cyclePath(cycleId)}/reports${queryString(filters)}`),
   getFacultyStatus: (cycleId: string, filters: { hiringLevelId?: string; evaluationStatus?: string } = {}) => requestList<FacultyStatusItem>(`${cyclePath(cycleId)}/faculty-status${queryString(filters)}`),
   getAttention: (cycleId: string, filters: { issue?: string; departmentId?: string } = {}) => requestList<AttentionItem>(`${cyclePath(cycleId)}/attention${queryString(filters)}`),
@@ -138,15 +149,18 @@ export const acApi = {
   getObservationAssessment: (observationId: string) => requestJson<ObservationAssessmentResponse>(`/api/observations/${encodeURIComponent(observationId)}/assessment`),
   getHiringLevels: () => requestList<HiringLevel>("/api/hiring-levels"),
   createCycle: (body: CycleWrite) => requestJson<Cycle>("/api/evaluation-cycles", { method: "POST", body: JSON.stringify(body) }),
-  updateCycle: (cycleId: string, body: Partial<CycleWrite> & { expectedRevision: number }) => requestJson<Cycle>(cyclePath(cycleId), { method: "PATCH", body: JSON.stringify(body) }),
+  updateCycle: (cycleId: string, body: Partial<Omit<CycleWrite, "semesterId">> & { expectedRevision: number }) => requestJson<Cycle>(cyclePath(cycleId), { method: "PATCH", body: JSON.stringify(body) }),
   updateCycleSettings: (cycleId: string, body: {
     expectedCycleRevision: number; expectedSemesterRevision: number;
-    semester: { startsOn: string; endsOn: string };
+    semester: { startsOn: string; endsOn: string; timeZone?: string };
     deadlines: { signupDeadline: string; observationDeadline: string; feedbackDeadline: string };
   }) => requestJson<{ semester: Cycle["semester"]; cycle: Cycle }>(`${cyclePath(cycleId)}/settings`, { method: "PUT", body: JSON.stringify(body) }),
   getCurrentTemplate: () => requestJson<ObservationTemplate>("/api/observation-templates/current"),
+  getTemplates: () => requestList<TemplateSummary>("/api/observation-templates"),
+  getTemplate: (templateId: string) => requestJson<ObservationTemplate>(`/api/observation-templates/${encodeURIComponent(templateId)}`),
   createTemplate: (body: ObservationTemplateWrite) => requestJson<ObservationTemplate>("/api/observation-templates", { method: "POST", body: JSON.stringify(body) }),
   updateTemplate: (templateId: string, body: ObservationTemplateWrite & { expectedRevision: number }) => requestJson<ObservationTemplate>(`/api/observation-templates/${encodeURIComponent(templateId)}`, { method: "PATCH", body: JSON.stringify(body) }),
+  publishTemplate: (templateId: string, expectedRevision: number) => requestJson<ObservationTemplate>(`/api/observation-templates/${encodeURIComponent(templateId)}/publish`, { method: "POST", body: JSON.stringify({ expectedRevision }) }),
 };
 
 export function userDisplayName(user?: UserSummary | null) {

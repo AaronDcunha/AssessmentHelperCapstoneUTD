@@ -1,4 +1,14 @@
 ASSESSMENT HELPER IMPLEMENTATION NOTES
+October 26, 2026 AC Configuration Frontend (issue #52):
+Cycle forms and semester settings now use the implemented configuration payloads,
+real semester choices, revisions and semester-zone deadline conversion. Template
+editing supports drafts/published records, all three sections, preserved IDs/custom
+scales, save/publication and unsaved preview. No backend/schema/seed, Faculty,
+History, Admin or monitoring changes. See AC_CONFIGURATION_FRONTEND.md for reference
+mapping, frontend assumptions and controlled verification; no real configuration
+records were changed for demonstrations. This supersedes older configuration-form
+frontend deferrals, without changing the implemented backend contract.
+
 October 25 user deletion follow-up (supersedes user-DELETE-pending notes):
 User requested DELETE /api/users/{userId}. Implemented using Prisma Client in a Serializable transaction, requiring users.manage and same origin. No body; empty 204 success, 404 missing account. Self-deletion and loss of the last active managing Admin return 409. Teaching, signup, selected-observer, candidate and feedback references block deletion (409); use deactivation instead. Only an unreferenced profile, credentials, role links and owned notifications are removed with the account. History is never cascaded/anonymized. No migration is required. Existing frontend Delete User is connected. Isolated real-database verification passed, including rollback and session/account lookup invalidation.
 

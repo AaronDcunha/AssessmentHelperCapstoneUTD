@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import { useAcCycle } from "@/components/ac/cycle-context";
-import { ButtonLink } from "@/components/ui/button";
+import { Button, ButtonLink } from "@/components/ui/button";
+import { Section } from "@/components/ui/section";
 import { TableCell } from "@/components/ui/table";
 import { cycleDisplayName, type Cycle } from "@/lib/ac-api";
-
-const date = (value?: string | null) => value ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(value)) : "—";
+import { deadlineDisplay } from "@/lib/ac-configuration";
 
 function CycleActionsMenu({ cycle }: { cycle: Cycle }) {
   const menuId = useId();
@@ -58,16 +58,16 @@ function CycleActionsMenu({ cycle }: { cycle: Cycle }) {
 }
 
 export default function EvaluationCyclesPage({ canManage }: { canManage: boolean }) {
-  const { cycles, loading, error } = useAcCycle();
+  const { cycles, loading, error, refreshCycles } = useAcCycle();
   return (
     <div className="space-y-ah-24">
-      <section className="space-y-ah-16" aria-labelledby="cycles-heading">
-        <h2 id="cycles-heading" className="text-section text-ink">Current and previous cycles</h2>
+      <Section variant="plain" title="Current and previous cycles" contentClassName="space-y-ah-16">
         {canManage && <ButtonLink href="/ac/cycles/new" className="w-[260px]">Create Cycle</ButtonLink>}
-        {error && <p className="text-caption text-muted">Evaluation cycle data is currently unavailable.</p>}
-      </section>
+        {error && <div className="space-y-ah-12"><p role="alert" className="text-danger">{error}</p><Button variant="secondary" onClick={refreshCycles}>Retry cycles</Button></div>}
+        {loading && <p role="status" className="text-muted">Loading evaluation cycles…</p>}
+      </Section>
       <div className="overflow-x-auto rounded-ah-8 border border-border bg-surface">
-        <table className="w-full table-fixed border-collapse">
+        <table className="w-full min-w-[760px] table-fixed border-collapse">
           <colgroup><col style={{ width: "19%" }} /><col style={{ width: "19%" }} /><col style={{ width: "21%" }} /><col style={{ width: "21%" }} /><col style={{ width: "14%" }} /><col style={{ width: "6%" }} /></colgroup>
           <thead><tr className="h-[81px] bg-canvas">
             {["Cycle", "Signup deadline", "Observation deadline", "Feedback deadline", "Status", ""].map((heading, index) => <TableCell key={`${heading}-${index}`} variant="header" className="h-[80px]!">{heading}</TableCell>)}
@@ -75,10 +75,10 @@ export default function EvaluationCyclesPage({ canManage }: { canManage: boolean
           <tbody>
             {cycles.map((cycle) => (
               <tr key={cycle.id} className="h-[81px] border-t border-border">
-                <TableCell className="h-[80px]!">{cycleDisplayName(cycle)}</TableCell><TableCell className="h-[80px]!">{date(cycle.signupDeadline)}</TableCell>
-                <TableCell className="h-[80px]!">{date(cycle.observationDeadline)}</TableCell><TableCell className="h-[80px]!">{date(cycle.feedbackDeadline)}</TableCell>
+                <TableCell className="h-[80px]!">{cycleDisplayName(cycle)}<span className="block text-caption text-muted">{cycle.semester?.timeZone ?? "UTC (zone unavailable)"}</span></TableCell><TableCell className="h-[80px]!">{deadlineDisplay(cycle.signupDeadline, cycle.semester?.timeZone)}</TableCell>
+                <TableCell className="h-[80px]!">{deadlineDisplay(cycle.observationDeadline, cycle.semester?.timeZone)}</TableCell><TableCell className="h-[80px]!">{deadlineDisplay(cycle.feedbackDeadline, cycle.semester?.timeZone)}</TableCell>
                 <TableCell className="h-[80px]!">{cycle.status ?? "—"}</TableCell>
-                <TableCell className="h-[80px]! px-ah-0! text-center">{canManage && <CycleActionsMenu cycle={cycle} />}</TableCell>
+                <TableCell className="h-[80px]! px-ah-0! text-center">{canManage && cycle.allowedActions?.includes("update") && <CycleActionsMenu cycle={cycle} />}</TableCell>
               </tr>
             ))}
             {!loading && cycles.length === 0 && <tr><td colSpan={6} className="h-[80px] px-ah-12 text-body text-muted">
