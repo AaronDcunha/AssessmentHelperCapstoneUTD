@@ -12,9 +12,11 @@ datasource db {
 model AppUser {
   userId   String  @id @default(uuid()) @map("user_id") @db.Uuid
   fullName String  @map("full_name")
-  username String  @unique
+  username String? @unique
   email    String  @unique
   isActive Boolean @default(true) @map("is_active")
+
+  revision Int @default(0)
 
   // Authentication relationships.
   userRoles       UserRole[]
@@ -33,6 +35,8 @@ model AppUser {
 model Role {
   roleId   String @id @default(uuid()) @map("role_id") @db.Uuid
   roleName String @unique @map("role_name")
+
+  revision Int @default(0)
 
   // Connects roles to users and permissions.
   userRoles       UserRole[]
@@ -117,6 +121,9 @@ model HiringLevel {
   levelName               String @unique @map("level_name")
   evaluationIntervalYears Int    @map("evaluation_interval_years")
 
+  active Boolean @default(true)
+  revision Int @default(0)
+
   // One hiring level can be assigned to multiple professors.
   professors Professor[]
 
@@ -158,6 +165,10 @@ model Semester {
   semesterId String @id @default(uuid()) @map("semester_id") @db.Uuid
   termCode   String @unique @map("term_code")
   termName   String @map("term_name")
+  startsOn   DateTime? @map("starts_on") @db.Date
+  endsOn     DateTime? @map("ends_on") @db.Date
+  timeZone   String @default("America/Chicago") @map("time_zone")
+  revision   Int @default(0)
 
   // Relationships.
   courseSections   CourseSection[]
@@ -240,8 +251,9 @@ model ClassMeeting {
 // The Assessment Committee manages these cycles.
 model EvaluationCycle {
   cycleId             String   @id @default(uuid()) @map("cycle_id") @db.Uuid
-  semesterId          String   @map("semester_id") @db.Uuid
+  semesterId          String   @unique @map("semester_id") @db.Uuid
   cycleName           String   @map("cycle_name")
+  revision            Int      @default(0)
   signupDeadline      DateTime @map("signup_deadline")
   observationDeadline DateTime @map("observation_deadline")
   feedbackDeadline    DateTime @map("feedback_deadline")
@@ -343,6 +355,11 @@ model ObservationTimeOption {
 model ObservationTemplate {
   templateId   String   @id @default(uuid()) @map("template_id") @db.Uuid
   templateName String   @map("template_name")
+  revision     Int      @default(0)
+  status       String   @default("draft")
+  publishedAt  DateTime? @map("published_at") @db.Timestamptz(6)
+  commentPrompts Json @default("[]") @map("comment_prompts")
+  signatureLabels Json @default("{\"observer\":\"Observer\",\"observee\":\"Observee\"}") @map("signature_labels")
   description  String?
   isActive     Boolean  @default(true) @map("is_active")
   createdAt    DateTime @default(now()) @map("created_at")
@@ -360,6 +377,8 @@ model TemplateCriterion {
   criterionId   String  @id @default(uuid()) @map("criterion_id") @db.Uuid
   templateId    String  @map("template_id") @db.Uuid
   criterionText String  @map("criterion_text")
+  criterionKey  String  @map("criterion_key")
+  options       Json?
   questionType  String  @map("question_type")
   minRating     Int?    @map("min_rating")
   maxRating     Int?    @map("max_rating")
@@ -371,6 +390,7 @@ model TemplateCriterion {
   template ObservationTemplate @relation(fields: [templateId], references: [templateId])
 
   @@unique([templateId, displayOrder])
+  @@unique([templateId, criterionKey])
   @@map("template_criterion")
 }
 

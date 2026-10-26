@@ -1,5 +1,7 @@
 # Database-backed authentication
 
+October 25 correction: runtime account, credential and permission reads now use generated Prisma Client model APIs through `getPrisma()`. This supersedes the pg-pool description below. Run `npm run db:generate` after schema changes. Admin-created accounts receive normalized firstname_lastname usernames and randomly salted scrypt hashes of initial password 123. Names use first/last words; single-word names use that word. Collisions append _2, _3, etc. Existing seeded logins are preserved; existing null usernames are not backfilled. Name edits do not change usernames/passwords. Unit coverage includes Prisma account reads, inherited grants, revoked grants, inactive users, passwords and collision provisioning; the isolated Admin integration also verifies creation-to-login with actual Prisma persistence when PostgreSQL is available.
+
 October 19 update: the login form now authenticates seeded accounts from PostgreSQL through the existing Auth.js Credentials provider and one-hour JWT sessions. No frontend changes are required.
 
 Start PostgreSQL yourself, run `npm run db:setup` once, configure a random `AUTH_SECRET`, run `npm run dev`, and visit `/login`. Use the locally generated `prisma/demo-accounts.txt`: for example `arden_stone` / `123` (Admin), `amber_arrow` / `123` (AC), or `alder_sol` / `123` (Faculty). Set `AUTH_DEMO_ENABLED=false` to disable the old reserved mock accounts; database login does not depend on that flag.

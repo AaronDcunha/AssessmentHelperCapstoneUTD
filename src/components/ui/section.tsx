@@ -9,6 +9,7 @@ export type SectionProps = Omit<ComponentProps<"section">, "title"> & {
   actions?: ReactNode;
   headingLevel?: 1 | 2 | 3 | 4 | 5 | 6;
   contentClassName?: string;
+  variant?: "card" | "plain";
 };
 
 /** Shared card section: pages supply content; borders, spacing and headings stay consistent. */
@@ -20,6 +21,7 @@ export function Section({
   headingLevel = 2,
   className,
   contentClassName,
+  variant = "card",
   children,
   "aria-labelledby": labelledBy,
   ...props
@@ -31,7 +33,7 @@ export function Section({
     <section
       {...props}
       aria-labelledby={labelledBy ?? headingId}
-      className={["rounded-ah-12 border border-border bg-surface p-ah-24", className].filter(Boolean).join(" ")}
+      className={[variant === "card" && "rounded-ah-12 border border-border bg-surface p-ah-24", className].filter(Boolean).join(" ")}
     >
       <div className="mb-ah-16 flex flex-wrap items-start justify-between gap-ah-16">
         <div className="min-w-0 space-y-ah-8">
