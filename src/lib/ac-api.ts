@@ -67,13 +67,17 @@ export type CycleWrite = { semesterId: string; signupDeadline: string; observati
 export type HiringLevel = { id: string; name: string; evaluationIntervalYears?: number; active?: boolean };
 export type ObservationTemplate = {
   id: string; title: string; revision?: number;
-  criteria: Array<{ id: string; prompt?: string; questionText?: string; label?: string; required?: boolean; weight?: number }>;
+  criteria: Array<{ id: string; key: string; prompt: string; type: "rating" | "text"; required: boolean; order: number;
+    options?: Array<{ value: number; label: string }>; weight?: number }>;
+  commentPrompts: Array<{ id?: string; prompt: string; required: boolean; order: number }>;
+  signatureLabels: { observer: string; observee: string };
 };
 export type ObservationTemplateWrite = {
   title: string;
-  criteria: Array<{ id: string; prompt: string; required: boolean; weight: number }>;
-  commentPrompts: string[];
-  signatureLabels: string[];
+  criteria: Array<{ id?: string; key: string; prompt: string; type: "rating" | "text"; required: boolean; order: number;
+    options?: Array<{ value: number; label: string }>; weight?: number }>;
+  commentPrompts: Array<{ id?: string; prompt: string; required: boolean; order: number }>;
+  signatureLabels: { observer: string; observee: string };
 };
 
 export class ApiRequestError extends Error {

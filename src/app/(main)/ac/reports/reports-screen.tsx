@@ -2,10 +2,12 @@
 
 import { useCallback } from "react";
 import { CycleSelector, useAcCycle } from "@/components/ac/cycle-context";
+import { DemoDataNotice } from "@/components/ac/demo-data-notice";
 import { useApiResource } from "@/components/ac/use-api-resource";
 import { MetricCard } from "@/components/shared/metric-card";
 import { Section } from "@/components/ui/section";
 import { acApi, type MetricsResponse, type ReportsResponse } from "@/lib/ac-api";
+import { DEMO_EXECUTIVE_SUMMARIES, DEMO_METRICS, DEMO_REPORT } from "@/lib/ac-demo-data";
 
 const EMPTY_METRICS: MetricsResponse = { cycleId: "", available: false, metrics: [] };
 const EMPTY_REPORT: ReportsResponse = { cycleId: "", summary: { facultyDue: 0, overdue: 0, unmatched: 0, incomplete: 0 }, byHiringLevel: [] };
@@ -18,8 +20,8 @@ const cards = [
 
 export default function ReportsPage() {
   const cycleId = useAcCycle().selectedCycle?.id;
-  const metrics = useApiResource(useCallback(() => cycleId ? acApi.getMetrics(cycleId) : Promise.resolve(EMPTY_METRICS), [cycleId]), EMPTY_METRICS);
-  const report = useApiResource(useCallback(() => cycleId ? acApi.getReports(cycleId) : Promise.resolve(EMPTY_REPORT), [cycleId]), EMPTY_REPORT);
+  const metrics = useApiResource(useCallback(() => cycleId ? acApi.getMetrics(cycleId) : Promise.resolve(EMPTY_METRICS), [cycleId]), EMPTY_METRICS, DEMO_METRICS);
+  const report = useApiResource(useCallback(() => cycleId ? acApi.getReports(cycleId) : Promise.resolve(EMPTY_REPORT), [cycleId]), EMPTY_REPORT, DEMO_REPORT);
   const normalize = (value: string) => value.toLowerCase().replaceAll(/[^a-z0-9]/g, "");
   const valueFor = (aliases: readonly string[]) => {
     const metric = metrics.data.metrics.find((item) => aliases.includes(normalize(item.key)) || aliases.includes(normalize(item.label)));
@@ -30,13 +32,18 @@ export default function ReportsPage() {
   return (
     <div className="space-y-ah-24">
       <CycleSelector />
+      {(metrics.error || report.error) && <DemoDataNotice>
+        Demo KPIs use only the six frontend example observations: participation is complete/total, and observer utilization and list sufficiency are assigned/total. No database records are used.
+      </DemoDataNotice>}
       <section aria-label="Key performance indicators" className="grid grid-cols-1 gap-ah-16 sm:grid-cols-2 xl:grid-cols-4">
         {cards.map((card) => <MetricCard key={card.label} label={card.label} value={valueFor(card.aliases)} className="w-full" />)}
       </section>
       <Section title="Executive summary" contentClassName="space-y-ah-12 text-body text-ink">
-        {report.data.byHiringLevel.length > 0 ? report.data.byHiringLevel.map((item) => (
+        {report.error ? <ul className="list-disc space-y-ah-8 pl-ah-24">
+          {DEMO_EXECUTIVE_SUMMARIES.map((summary) => <li key={summary}>{summary}</li>)}
+        </ul> : report.data.byHiringLevel.length > 0 ? report.data.byHiringLevel.map((item) => (
           <p key={item.hiringLevelId}>{item.name}: {item.due} due, {item.outstanding} outstanding</p>
-        )) : <p className="text-muted">{report.error ? "Report summary is currently unavailable." : "No report summary is available."}</p>}
+        )) : <p className="text-muted">No report summary is available.</p>}
       </Section>
     </div>
   );

@@ -35,3 +35,22 @@ test("changing the selected cycle hides old data and ignores late responses", as
   assert.deepEqual(useApiResource(loaderC, fallback).data, ["another cycle"]);
   cleanup?.();
 });
+
+test("an error-only fallback is not exposed until the loader fails", async () => {
+  let state = null, effect;
+  const react = {
+    useState: () => [state, value => { state = value; }],
+    useEffect: callback => { effect = callback; },
+  };
+  const { outputText } = ts.transpileModule(readFileSync(new URL("../../src/components/ac/use-api-resource.ts", import.meta.url), "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+  });
+  const loaded = { exports: {} };
+  new Function("require", "module", "exports", outputText)(() => react, loaded, loaded.exports);
+  const loader = async () => { throw new Error("Unavailable"); };
+  const empty = [], demo = ["demo"];
+
+  assert.deepEqual(loaded.exports.useApiResource(loader, empty, demo), { data: [], loading: true, error: null });
+  effect(); await Promise.resolve(); await Promise.resolve();
+  assert.deepEqual(loaded.exports.useApiResource(loader, empty, demo), { data: ["demo"], loading: false, error: "Unavailable" });
+});
