@@ -5,8 +5,8 @@ export type WeeklyMeeting = { id: string; day: string; startTime: string; endTim
 export type MeetingOption = { date: string; meetingTime: string };
 const weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-export function facultyDate(value: Date): string {
-  const parts = new Intl.DateTimeFormat("en-US", { timeZone: facultyTimeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(value);
+export function facultyDate(value: Date, timeZone = facultyTimeZone): string {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(value);
   return ["year", "month", "day"].map(type => parts.find(part => part.type === type)!.value).join("-");
 }
 
@@ -25,18 +25,22 @@ export function meetingForDate(date: string, meetings: readonly WeeklyMeeting[])
   return { date, meetingTime: `${matches[0].startTime}–${matches[0].endTime} · Scheduled class meeting` };
 }
 
-export function proposedMeetingOptions(meetings: readonly WeeklyMeeting[], now: Date, deadline: Date): MeetingOption[] {
-  const first = facultyDate(now), last = facultyDate(deadline);
+export function proposedMeetingOptions(meetings: readonly WeeklyMeeting[], now: Date, deadline: Date,
+  semester: { startsOn: string | null; endsOn: string | null; timeZone: string }): MeetingOption[] {
+  if (!semester.startsOn || !semester.endsOn || !parseCalendarDate(semester.startsOn) || !parseCalendarDate(semester.endsOn)
+    || semester.startsOn > semester.endsOn) return [];
+  const today = facultyDate(now, semester.timeZone);
+  const first = today > semester.startsOn ? today : semester.startsOn, last = facultyDate(deadline, semester.timeZone);
   const start = parseCalendarDate(first), end = parseCalendarDate(last);
   // Invalid/far-future cycles must not cause unbounded recurrence expansion.
   if (!start || !end || end <= start || end.getTime() - start.getTime() > 366 * 86400000) return [];
-  const time = new Intl.DateTimeFormat("en-GB", { timeZone: facultyTimeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(now);
+  const time = new Intl.DateTimeFormat("en-GB", { timeZone: semester.timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(now);
   const options: MeetingOption[] = [];
-  for (const date = new Date(start); date < end; date.setUTCDate(date.getUTCDate() + 1)) {
+  for (const date = new Date(start); date < end && date.toISOString().slice(0, 10) <= semester.endsOn; date.setUTCDate(date.getUTCDate() + 1)) {
     const key = date.toISOString().slice(0, 10);
     const option = meetingForDate(key, meetings);
     // Today's class must not already have started. Deadline date is exclusive, matching DatePicker.
-    if (option && (key !== first || option.meetingTime.slice(0, 5) > time)) options.push(option);
+    if (option && (key !== today || option.meetingTime.slice(0, 5) > time)) options.push(option);
   }
   return options;
 }

@@ -22,6 +22,18 @@ function cycleScope(user: ConfigurationUser): Prisma.EvaluationCycleWhereInput {
     { observations: { some: { candidates: { some: { professor: { userId: user.id } } } } } },
   ] };
 }
+
+/** Faculty dashboards always use own participation, even for AC/Admin callers.
+ * Reuse the same scope for the explicit Faculty cycle selector.
+ */
+export async function getRelevantFacultyCycles(db: Connection, user: ConfigurationUser, now: Date) {
+  const ownUser = { ...user, permissions: user.permissions.filter(key => key !== "cycles.read" && key !== "cycles.manage") };
+  if (!hasAnyPermission(ownUser, cycleReadPermissions)) return [];
+  return db.evaluationCycle.findMany({
+    where: { AND: [cycleScope(ownUser), { feedbackDeadline: { gte: now } }] },
+    include: { semester: true }, orderBy: { cycleId: "asc" },
+  });
+}
 function semesterResponse(s: Semester) {
   const term = /^(\d{2})([suf])$/.exec(s.termCode);
   return { id: s.semesterId, name: s.termName, year: term ? 2000 + Number(term[1]) : null,

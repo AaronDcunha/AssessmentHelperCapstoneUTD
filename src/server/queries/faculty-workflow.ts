@@ -4,6 +4,7 @@ import type { AccountUser } from "../account-auth";
 import { getPool } from "../db";
 import { getFacultyDashboard, type FacultyDashboard } from "./faculty-dashboard";
 import { facultyDate, meetingForDate, proposedMeetingOptions, type WeeklyMeeting, type MeetingOption } from "../services/faculty-calendar";
+import { getFacultyLinks, type FacultyLinks } from "./faculty-links";
 
 type Database = { query<Row extends QueryResultRow>(sql: string, values: unknown[]): Promise<{ rows: Row[] }> };
 export type FacultySection = { id: string; label: string; meetings: WeeklyMeeting[]; options: MeetingOption[] };
@@ -20,28 +21,32 @@ export type FacultyWorkflow = {
   signup: { allowed: boolean; reason: string; observationDeadline: string | null };
   observation: FacultyObservation | null;
   requests: FacultyRequest[];
+  links?: FacultyLinks;
 };
 
 export function signupBlockReason(user: AccountUser, dashboard: FacultyDashboard, existingSignup: boolean): string {
   if (!["signups.create.own", "signups.read.own", "course-sections.read.own", "evaluation-status.read.own", "observations.read.own"].every(permission => user.permissions.includes(permission))) return "Signup is not available with your current permissions.";
-  if (!dashboard.hasFacultyProfile || !dashboard.cycle) return "No active faculty evaluation cycle is available.";
+  if (!dashboard.hasFacultyProfile || !dashboard.cycle) return dashboard.cycleReason ?? "No active faculty evaluation cycle is available.";
   if (new Date(dashboard.cycle.signupDeadline) <= new Date(dashboard.asOf)) return "The signup deadline has passed.";
   if (existingSignup) return "You have already signed up for this cycle.";
+  if (!dashboard.cycle.startsOn || !dashboard.cycle.endsOn) return "Semester dates must be configured before signup dates are available.";
   // A prior-semester completed evaluation verifies this is not the first semester.
   // Missing-history/hire-date eligibility has not been agreed; never assume permission to enroll.
-  if (dashboard.evaluation.status === "unknown" || !dashboard.evaluation.lastCompletedEvaluation
-    || dashboard.evaluation.lastCompletedEvaluation.semesterId === dashboard.cycle.semesterId) return "Signup eligibility needs review before you can submit. No verified evaluation in a prior semester is available.";
+  if (dashboard.evaluation.canSignUp === false) return dashboard.evaluation.reason;
+  if (dashboard.evaluation.canSignUp === undefined && (dashboard.evaluation.status === "unknown" || !dashboard.evaluation.lastCompletedEvaluation
+    || dashboard.evaluation.lastCompletedEvaluation.semesterId === dashboard.cycle.semesterId)) return "Signup eligibility needs review before you can submit. No verified evaluation in a prior semester is available.";
   return "";
 }
 
-export async function getFacultyWorkflow(user: AccountUser, options: { now?: Date; database?: Database } = {}): Promise<FacultyWorkflow> {
+export async function getFacultyWorkflow(user: AccountUser, options: { now?: Date; database?: Database; cycleId?: string | null } = {}): Promise<FacultyWorkflow> {
   const now = options.now ?? new Date();
   const dashboard = await getFacultyDashboard(user, { ...options, now });
   const result: FacultyWorkflow = { dashboard, sections: [], existingSignup: null,
-    signup: { allowed: false, reason: "No active faculty evaluation cycle is available.", observationDeadline: dashboard.cycle ? facultyDate(new Date(dashboard.cycle.observationDeadline)) : null }, observation: null, requests: [] };
+    signup: { allowed: false, reason: dashboard.cycleReason ?? "No active faculty evaluation cycle is available.", observationDeadline: dashboard.cycle ? facultyDate(new Date(dashboard.cycle.observationDeadline), dashboard.cycle.timeZone) : null }, observation: null, requests: [] };
   const cycle = dashboard.cycle;
   if (!dashboard.hasFacultyProfile || !cycle) return result;
   const db = options.database ?? getPool();
+  result.links = await getFacultyLinks(user, cycle.id, now);
   if (user.permissions.includes("course-sections.read.own")) {
     const sections = await db.query<{ id: string; label: string; meetings: WeeklyMeeting[] }>(`
       SELECT cs.section_id AS id, co.course_code || '.' || cs.section_code || ' · ' || co.course_title AS label,
@@ -51,7 +56,7 @@ export async function getFacultyWorkflow(user: AccountUser, options: { now?: Dat
       FROM public.teaches t JOIN public.professor p ON p.professor_id = t.professor_id
       JOIN public.course_section cs ON cs.section_id = t.section_id JOIN public.course co ON co.course_id = cs.course_id
       WHERE p.user_id = $1 AND cs.semester_id = $2 ORDER BY co.course_code, cs.section_code, cs.section_id`, [user.id, cycle.semesterId]);
-    result.sections = sections.rows.map(section => ({ ...section, options: proposedMeetingOptions(section.meetings, now, new Date(cycle.observationDeadline)) }));
+    result.sections = sections.rows.map(section => ({ ...section, options: proposedMeetingOptions(section.meetings, now, new Date(cycle.observationDeadline), cycle) }));
   }
   if (user.permissions.includes("signups.read.own")) {
     const signups = await db.query<{ id: string; sectionId: string; signedUpAt: Date }>(`

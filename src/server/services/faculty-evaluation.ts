@@ -1,9 +1,27 @@
-export type EvaluationStatus = "due" | "overdue" | "notDue" | "unknown";
+export type EvaluationStatus = "due" | "overdue" | "notDue" | "unknown" | "ineligible";
 
 function termIndex(code: string | null): number | null {
   const match = code && /^(\d{2})([suf])$/.exec(code);
   if (!match) return null;
   return (2000 + Number(match[1])) * 3 + { s: 0, u: 1, f: 2 }[match[2] as "s" | "u" | "f"];
+}
+
+/** Documented Faculty assumptions: current rank interval; first evaluation from
+ * second semester; missing dates can be corroborated by a prior teaching term. */
+export function facultyEligibility(cycle: { termCode: string; startsOn: string | null; endsOn: string | null } | null,
+  completedTerm: string | null, interval: number | null, hireDate: Date | null, teachingTerms: string[]) {
+  const status = facultyEvaluationStatus(cycle?.termCode ?? null, completedTerm, interval);
+  if (!cycle || termIndex(cycle.termCode) === null || !Number.isInteger(interval) || !interval || interval < 1) return { ...status, canSignUp: false };
+  const current = termIndex(cycle.termCode)!;
+  const previous = termIndex(completedTerm);
+  const hired = hireDate?.toISOString().slice(0, 10);
+  if (hired && cycle.startsOn && hired >= cycle.startsOn) return { status: "ineligible" as const, reason: "Signup begins after your first semester of employment.", canSignUp: false };
+  const established = (previous !== null && previous < current) || (hired && cycle.startsOn && hired < cycle.startsOn)
+    || teachingTerms.some(code => termIndex(code) !== null && termIndex(code)! < current);
+  if (previous !== null && previous > current) return { ...status, canSignUp: false };
+  if (!established) return { status: "unknown" as const, reason: "A hire date or prior teaching/evaluation semester is needed to verify eligibility.", canSignUp: false };
+  if (previous === null) return { status: "due" as const, reason: "No completed evaluation is recorded; established faculty are due for an initial evaluation.", canSignUp: true };
+  return { ...status, canSignUp: previous < current };
 }
 
 /** Provisional display rule only; this does not authorize signup or determine first-semester eligibility. */

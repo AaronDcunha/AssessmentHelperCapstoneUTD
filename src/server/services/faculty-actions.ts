@@ -3,10 +3,10 @@ import { randomUUID } from "node:crypto";
 import type { AccountUser } from "../account-auth";
 import { getPool } from "../db";
 import { getFacultyWorkflow } from "../queries/faculty-workflow";
+import { meetingOccurrence } from "./faculty-meetings";
 
-export class FacultyActionError extends Error {
-  constructor(message: string, public status = 409) { super(message); }
-}
+import { FacultyActionError } from "./faculty-errors";
+export { FacultyActionError } from "./faculty-errors";
 const uuid = /^[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}$/i;
 
 export function signupInput(body: unknown): { sectionId: string; dates: string[] } {
@@ -37,18 +37,24 @@ export async function submitFacultySignup(user: AccountUser, body: unknown) {
     if (!section) throw new FacultyActionError("That section is not assigned to you in the current cycle.", 400);
     // Protect ownership and the schedule used for validation until commit.
     await client.query("SELECT section_id FROM public.course_section WHERE section_id = $1 FOR SHARE", [section.id]);
+    await client.query("SELECT semester_id FROM public.semester WHERE semester_id = $1 FOR SHARE", [workspace.dashboard.cycle.semesterId]);
     const assignment = await client.query("SELECT t.section_id FROM public.teaches t JOIN public.professor p ON p.professor_id = t.professor_id WHERE p.user_id = $1 AND t.section_id = $2 FOR SHARE OF t", [user.id, section.id]);
     if (!assignment.rowCount) throw new FacultyActionError("The course assignment changed. Reload and try again.");
     await client.query("SELECT meeting_id FROM public.class_meeting WHERE section_id = $1 FOR SHARE", [section.id]);
     const refreshed = await getFacultyWorkflow(user, { database: client, now: new Date() });
     const current = refreshed.sections.find(item => item.id === section.id);
     if (!refreshed.signup.allowed) throw new FacultyActionError(refreshed.signup.reason);
+    if (refreshed.dashboard.cycle?.id !== workspace.dashboard.cycle.id) throw new FacultyActionError("The relevant evaluation cycle changed. Reload before submitting.");
     if (!current || input.dates.some(date => !current.options.some(option => option.date === date))) throw new FacultyActionError("One or more dates are no longer available. Reload the section schedule.", 400);
     const signupId = randomUUID(), observationId = randomUUID();
     await client.query(`INSERT INTO public.evaluation_signup (signup_id, cycle_id, professor_id, section_id, signup_date)
       VALUES ($1, $2, $3, $4, $5)`, [signupId, workspace.dashboard.cycle.id, profile.rows[0].id, section.id, new Date()]);
     await client.query(`INSERT INTO public.observation (observation_id, signup_id, cycle_id, status) VALUES ($1, $2, $3, 'PENDING')`, [observationId, signupId, workspace.dashboard.cycle.id]);
-    for (const date of input.dates) await client.query(`INSERT INTO public.observation_time_option (time_option_id, observation_id, preferred_date) VALUES ($1, $2, $3::date)`, [randomUUID(), observationId, date]);
+    for (const date of input.dates) {
+      const occurrence = meetingOccurrence(date, current.meetings, refreshed.dashboard.cycle!.timeZone);
+      if (!occurrence) throw new FacultyActionError("The proposed meeting cannot be resolved in its configured time zone.");
+      await client.query(`INSERT INTO public.observation_time_option (time_option_id, observation_id, preferred_date, starts_at, ends_at, time_zone, location) VALUES ($1, $2, $3::date, $4, $5, $6, $7)`, [randomUUID(), observationId, date, occurrence.startsAt, occurrence.endsAt, occurrence.timeZone, occurrence.location]);
+    }
     await client.query("COMMIT");
     return { signupId, observationId, message: "Your signup and proposed dates have been saved. Observer recommendations are not yet released." };
   } catch (error) {

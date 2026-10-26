@@ -1,4 +1,4 @@
 import { facultyActionResponse } from "@/server/services/faculty-action-response";
-import { declineFacultyRequest } from "@/server/services/faculty-actions";
+import { declineFacultyInvitation } from "@/server/services/faculty-invitations";
 
-export async function POST(request: Request) { return facultyActionResponse(request, declineFacultyRequest); }
+export async function POST(request: Request) { return facultyActionResponse(request, declineFacultyInvitation); }

@@ -43,10 +43,10 @@ export function FacultyAssessmentScreen({ initial, unavailable = false }: { init
       finally { setPending(false); }
     }}>
       <div className={panel} hidden={step !== 1}>
-        <p className="border-b border-border pb-ah-24">{current.course}.{current.section} · Observer: {current.observer} · Observee: {current.observee} · {current.scheduledAt && new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "America/Chicago" }).format(new Date(current.scheduledAt))}</p>
+        <p className="border-b border-border pb-ah-24">{current.course}.{current.section} · {current.signatureLabels.observer}: {current.observer} · {current.signatureLabels.observee}: {current.observee} · {current.scheduledAt && new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: current.timeZone }).format(new Date(current.scheduledAt))}</p>
         <h2 className="text-section">Scale questions</h2><p className="text-muted">{current.description ?? current.title}</p>
         {ratings.map(criterion => <AssessmentRatingField key={criterion.id} label={criterion.prompt} required={criterion.required} value={typeof responses.answers[criterion.id] === "number" ? responses.answers[criterion.id] as number : null}
-          readOnly={!current.canEdit || pending} options={criterion.min !== null && criterion.max !== null && criterion.max >= criterion.min && criterion.max - criterion.min <= 20 ? Array.from({ length: criterion.max - criterion.min + 1 }, (_, index) => ({ value: criterion.min! + index, label: index === 0 ? "Minimum" : criterion.min! + index === criterion.max ? "Maximum" : "Rating" })) : []}
+          readOnly={!current.canEdit || pending} options={criterion.options ?? []}
           onChange={value => answer(criterion.id, value)} />)}
         {!ratings.length && <p className="text-muted">This template has no scale questions.</p>}
       </div>
@@ -55,9 +55,10 @@ export function FacultyAssessmentScreen({ initial, unavailable = false }: { init
         {!text.length && <p className="text-muted">This template has no long response questions.</p>}
       </div>
       <div className={panel} hidden={step !== 3}>
+        {current.commentPrompts.slice().sort((a, b) => a.order - b.order).map(prompt => <Textarea key={prompt.id} label={prompt.prompt} required={prompt.required} rows={3} wrapperClassName="max-w-[480px]" readOnly={!current.canEdit || pending} value={responses.promptAnswers?.[prompt.id] ?? ""} onChange={event => setResponses(previous => ({ ...previous, promptAnswers: { ...previous.promptAnswers, [prompt.id]: event.target.value } }))} />)}
         <Textarea label="Additional Comments" rows={3} wrapperClassName="max-w-[480px]" readOnly={!current.canEdit || pending} value={responses.comments} onChange={event => setResponses(previous => ({ ...previous, comments: event.target.value }))} />
         <h2 className="border-t border-border pt-ah-24 text-section">Signatures</h2>
-        <div className="grid gap-ah-24 md:grid-cols-2"><Input label="Observer Signature" readOnly value={current.observerSignedAt ? `${current.observer} · Acknowledged` : "Awaiting observer acknowledgement"} /><Input label="Observee Signature" readOnly value={current.observeeSignedAt ? `${current.observee} · Acknowledged` : "Awaiting observee acknowledgement"} /></div>
+        <div className="grid gap-ah-24 md:grid-cols-2"><Input label={current.signatureLabels.observer} readOnly value={current.observerSignedAt ? `${current.observer} · Acknowledged` : "Awaiting observer acknowledgement"} /><Input label={current.signatureLabels.observee} readOnly value={current.observeeSignedAt ? `${current.observee} · Acknowledged` : "Awaiting observee acknowledgement"} /></div>
         <p className="text-caption text-muted">Each participant acknowledges separately that the observation occurred. Acknowledgement does not mean agreement with the ratings. Answers cannot change after the observer submits; both acknowledgements finalize and lock the form.</p>
         {current.canAcknowledge && <label className="flex items-start gap-ah-12 text-label"><input type="checkbox" checked={acknowledged} disabled={pending} onChange={event => setAcknowledged(event.target.checked)} />I acknowledge that this observation occurred.</label>}
         {current.locked && <p role="status">This form is finalized and locked.</p>}

@@ -6,6 +6,8 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import pg from 'pg';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const require = createRequire(import.meta.url);
@@ -13,9 +15,9 @@ const actorId = '11111111-1111-4111-8111-111111111111';
 const observeeId = '22222222-2222-4222-8222-222222222222';
 const sectionId = '33333333-3333-4333-8333-333333333333';
 const user = { id: actorId, permissions: ['profile.read.own', 'observations.read.own', 'assessment.read.own', 'assessment.submit.own', 'assessment.acknowledge.own', 'signups.create.own', 'signups.read.own', 'course-sections.read.own', 'evaluation-status.read.own', 'invitations.respond.own'] };
-const criteria = [{ id: 'rating', prompt: 'Required rating', type: 'RATING', min: 1, max: 5, required: true }, { id: 'text', prompt: 'Optional text', type: 'TEXT', min: null, max: null, required: false }];
+const criteria = [{ id: 'rating', prompt: 'Required rating', type: 'RATING', min: 1, max: 5, required: true, options: [1, 2, 3, 4, 5].map(value => ({ value, label: String(value) })) }, { id: 'text', prompt: 'Optional text', type: 'TEXT', min: null, max: null, required: false, options: null }];
 const now = new Date('2026-10-19T12:00:00Z');
-const cycle = { id: 'cycle', semesterId: 'semester', semester: 'Fall 2026', signupDeadline: '2026-10-31T12:00:00Z', observationDeadline: '2026-11-30T12:00:00Z' };
+const cycle = { id: 'cycle', semesterId: 'semester', semester: 'Fall 2026', startsOn: '2026-08-20', endsOn: '2026-12-20', timeZone: 'America/Chicago', signupDeadline: '2026-10-31T12:00:00Z', observationDeadline: '2026-11-30T12:00:00Z' };
 const dashboard = { asOf: now.toISOString(), hasFacultyProfile: true, cycle, currentObservation: { id: 'observation', scheduledAt: '2026-10-18T12:00:00Z' }, evaluation: { status: 'due', lastCompletedEvaluation: { semesterId: 'previous' } }, access: { observations: true } };
 
 // Real services/queries execute; only auth and the SQL transport are substituted.
@@ -27,6 +29,7 @@ function runtime(db, identity = user, overrides = {}) {
     const loaded = { exports: {} };
     function localRequire(name) {
       if (name === 'server-only') return {};
+      if (name.endsWith('/faculty-links')) return { getFacultyLinks: async () => ({ recommendations: [], requests: [], feedback: [] }) };
       if (name.endsWith('/db') || name === '../db') return { getPool: () => db };
       if (name.endsWith('/permissions')) return { getCurrentUser: async () => identity };
       if (name.endsWith('/faculty-dashboard')) return { getFacultyDashboard: async () => overrides.dashboard ?? dashboard };
@@ -43,16 +46,36 @@ function runtime(db, identity = user, overrides = {}) {
 }
 
 const meetings = [{ id: 'meeting', day: 'Monday', startTime: '10:00', endTime: '11:15', location: null }];
+test('persisted meeting instants reject DST gaps and ambiguous repeated times', () => {
+  const { localMeetingInstant } = runtime({})('src/server/services/faculty-meetings.ts');
+  assert.equal(localMeetingInstant('2026-03-08', '02:30', 'America/Chicago'), null);
+  assert.equal(localMeetingInstant('2026-11-01', '01:30', 'America/Chicago'), null);
+  assert.equal(localMeetingInstant('2026-03-08', '03:30', 'America/Chicago').toISOString(), '2026-03-08T08:30:00.000Z');
+});
+test('calendar respects configured bounds, missing settings, local dates and daylight-saving time', () => {
+  const { proposedMeetingOptions } = runtime({})('src/server/services/faculty-calendar.ts');
+  const options = settings => proposedMeetingOptions(meetings, now, new Date(cycle.observationDeadline), { ...cycle, ...settings }).map(option => option.date);
+  assert.deepEqual(options({ startsOn: '2026-10-26', endsOn: '2026-11-02' }), ['2026-10-26', '2026-11-02']);
+  assert.deepEqual(options({ startsOn: null }), []);
+  assert.deepEqual(options({ endsOn: null }), []);
+  assert.deepEqual(options({ startsOn: '2026-11-03', endsOn: '2026-11-02' }), []);
+  const local = [{ ...meetings[0], startTime: '01:00', endTime: '02:00' }];
+  const boundary = new Date('2026-10-19T06:30:00Z');
+  const deadline = new Date('2026-10-20T12:00:00Z');
+  assert.deepEqual(proposedMeetingOptions(local, boundary, deadline, cycle), []); // Already started in Chicago.
+  assert.deepEqual(proposedMeetingOptions(local, boundary, deadline, { ...cycle, timeZone: 'America/Los_Angeles' }).map(option => option.date), ['2026-10-19']);
+  assert.deepEqual(proposedMeetingOptions(local, new Date('2026-11-02T05:30:00Z'), new Date('2026-11-03T12:00:00Z'), cycle).map(option => option.date), ['2026-11-02']);
+});
 test('calendar derives only unambiguous future weekly meetings before the exclusive deadline, using Chicago dates', () => {
   const { proposedMeetingOptions, facultyDate, meetingForDate } = runtime({})('src/server/services/faculty-calendar.ts');
   assert.equal(facultyDate(new Date('2026-10-20T01:00:00Z')), '2026-10-19');
   assert.equal(facultyDate(new Date('2026-11-03T05:00:00Z')), '2026-11-02');
-  assert.deepEqual(proposedMeetingOptions(meetings, now, new Date('2026-11-03T06:00:00Z')).map(option => option.date), ['2026-10-19', '2026-10-26', '2026-11-02']);
-  assert.deepEqual(proposedMeetingOptions(meetings, new Date('2026-10-19T16:00:00Z'), new Date('2026-10-26T05:00:00Z')), []);
+  assert.deepEqual(proposedMeetingOptions(meetings, now, new Date('2026-11-03T06:00:00Z'), cycle).map(option => option.date), ['2026-10-19', '2026-10-26', '2026-11-02']);
+  assert.deepEqual(proposedMeetingOptions(meetings, new Date('2026-10-19T16:00:00Z'), new Date('2026-10-26T05:00:00Z'), cycle), []);
   assert.equal(meetingForDate('2026-02-30', meetings), null);
   assert.equal(meetingForDate('2026-10-19', [...meetings, { ...meetings[0], id: 'second' }]), null);
   assert.equal(meetingForDate('2026-10-19', [{ ...meetings[0], startTime: 'invalid' }]), null);
-  assert.deepEqual(proposedMeetingOptions(meetings, now, new Date('2035-01-01')), []);
+  assert.deepEqual(proposedMeetingOptions(meetings, now, new Date('2035-01-01'), cycle), []);
 });
 
 test('signup checks permission, deadline, existing signup and missing/first-semester eligibility without granting it from a rank', () => {
@@ -63,6 +86,7 @@ test('signup checks permission, deadline, existing signup and missing/first-seme
   assert.match(signupBlockReason(user, { ...dashboard, evaluation: { status: 'notDue', lastCompletedEvaluation: { semesterId: cycle.semesterId } } }, false), /review/);
   assert.match(signupBlockReason(user, dashboard, true), /already/);
   assert.match(signupBlockReason(user, { ...dashboard, asOf: cycle.signupDeadline }, false), /deadline/);
+  assert.match(signupBlockReason(user, { ...dashboard, cycle: { ...cycle, startsOn: null } }, false), /Semester dates/);
 });
 
 test('course options and request reads bind account identity and current-cycle semester on the server', async () => {
@@ -85,12 +109,13 @@ test('course options and request reads bind account identity and current-cycle s
   assert.deepEqual(restricted.sections, []); assert.equal(restricted.existingSignup, null);
 });
 
-function assessmentDatabase() {
+function assessmentDatabase(overrides = {}) {
   const calls = [];
   let row = { observationId: 'observation', templateId: 'template', title: 'Stored template', description: null,
+    templateRevision: 0, commentPrompts: [], signatureLabels: { observer: 'Observer', observee: 'Observee' }, timeZone: cycle.timeZone,
     course: 'TEST', section: '1', scheduledAt: new Date('2026-10-18T12:00:00Z'), observer: 'Observer fixture', observee: 'Observee fixture',
-    criteria, responses: null, observerSignedAt: null, observeeSignedAt: null, locked: false };
-  const db = { calls, async connect() { return db; }, release() {}, async query(sql, values = []) {
+    criteria, responses: null, observerSignedAt: null, observeeSignedAt: null, locked: false, ...overrides };
+  const db = { calls, changeTemplate(changes) { row = { ...row, ...changes }; }, async connect() { return db; }, release() {}, async query(sql, values = []) {
     calls.push({ sql, values });
     if (sql.includes('t.template_name AS title')) {
       if (![actorId, observeeId].includes(values[0])) return { rows: [] };
@@ -107,6 +132,49 @@ test('assessment validates actual criteria, required values and scale bounds; dr
   for (const answers of [{}, { rating: 6 }, { rating: 2.5 }, { rating: '5' }, { rating: 3, foreign: 4 }]) assert.throws(() => validateAssessmentAnswers(criteria, { answers, comments: '' }, true));
   assert.throws(() => validateAssessmentAnswers([{ ...criteria[0], type: 'UNKNOWN' }], { answers: {}, comments: '' }, false));
   assert.equal(validateAssessmentAnswers(criteria, { answers: { rating: 4 }, comments: 'Stored comment' }, true).answers.rating, 4);
+});
+
+test('sparse configured rating options and required template comments are enforced without inventing intermediate ratings', () => {
+  const { validateAssessmentAnswers } = runtime({})('src/server/services/faculty-assessment.ts');
+  const sparse = [{ ...criteria[0], min: -2, max: 10, options: [{ value: -2, label: 'Needs work' }, { value: 0, label: 'Neutral' }, { value: 10, label: 'Excellent' }] }];
+  for (const value of [-2, 0, 10]) assert.equal(validateAssessmentAnswers(sparse, { answers: { rating: value }, comments: '' }, true).answers.rating, value);
+  for (const value of [-1, 1, 5, '0']) assert.throws(() => validateAssessmentAnswers(sparse, { answers: { rating: value }, comments: '' }, true), /allowed values/);
+  const prompts = [{ id: 'prompt', prompt: 'Evidence', required: true, order: 0 }];
+  assert.throws(() => validateAssessmentAnswers(sparse, { answers: { rating: 0 }, comments: '' }, true, prompts), /required comment/);
+  const response = { answers: { rating: 0 }, comments: 'Legacy note', promptAnswers: { prompt: 'Evidence retained' } };
+  assert.deepEqual(validateAssessmentAnswers(sparse, response, true, prompts), response);
+  assert.throws(() => validateAssessmentAnswers(sparse, { ...response, promptAnswers: { other: 'foreign' } }, false, prompts), /Invalid template comments/);
+});
+
+test('assigned templates stay linked and template edits change revisions before a stale draft can be written', async () => {
+  const db = assessmentDatabase({ templateId: 'assigned-older-template' }), load = runtime(db);
+  const { getFacultyAssessment, assessmentView } = load('src/server/queries/faculty-assessment.ts');
+  const form = await getFacultyAssessment(user, { database: db });
+  const result = await load('src/server/services/faculty-assessment.ts').saveFacultyAssessment(user, { action: 'save', revision: form.revision, responses: { answers: { rating: 4 }, comments: '' } });
+  assert.equal(result.form.templateId, 'assigned-older-template');
+  const query = db.calls.find(call => call.sql.includes('t.template_name AS title')).sql;
+  assert.match(query, /COALESCE\(a.template_id,/);
+  assert.match(query, /is_active AND status = 'published' ORDER BY published_at DESC, template_id DESC/);
+  const row = { ...form, scheduledAt: new Date(form.scheduledAt), observerSignedAt: null, observeeSignedAt: null };
+  assert.notEqual(assessmentView({ ...row, templateRevision: 1 }, user).revision, form.revision);
+  assert.notEqual(assessmentView({ ...row, criteria: [{ ...criteria[0], options: [{ value: 0, label: 'Zero' }, { value: 4, label: 'Four' }] }] }, user).revision, form.revision);
+  assert.ok(db.calls.some(call => call.sql.includes('INSERT INTO public.signed_assessment') && call.values[2] === 'assigned-older-template'));
+  db.changeTemplate({ templateRevision: 1 });
+  const writesBefore = db.calls.filter(call => call.sql.includes('INSERT INTO public.signed_assessment')).length;
+  await assert.rejects(load('src/server/services/faculty-assessment.ts').saveFacultyAssessment(user, { action: 'save', revision: result.form.revision, responses: result.form.responses }), /changed/);
+  assert.equal(db.calls.filter(call => call.sql.includes('INSERT INTO public.signed_assessment')).length, writesBefore);
+});
+
+test('Faculty form retains its three-step design and renders configured sparse labels, comments and signature labels', async () => {
+  const configured = [{ ...criteria[0], options: [{ value: 0, label: 'Needs support' }, { value: 10, label: 'Excellent' }] }];
+  const db = assessmentDatabase({ criteria: configured, signatureLabels: { observer: 'Reviewer', observee: 'Faculty member' },
+    commentPrompts: [{ id: actorId, prompt: 'Classroom evidence', required: true, order: 0 }], responses: { answers: { rating: 0 }, comments: 'Retained note' } });
+  const load = runtime(db);
+  const form = await load('src/server/queries/faculty-assessment.ts').getFacultyAssessment(user, { database: db });
+  const { FacultyAssessmentScreen } = load('src/components/observations/faculty-assessment-screen.tsx');
+  const html = renderToStaticMarkup(createElement(FacultyAssessmentScreen, { initial: form }));
+  for (const text of ['Step 1 of 3', '0 · Needs support', '10 · Excellent', 'Classroom evidence', 'Reviewer', 'Faculty member', 'Retained note']) assert.ok(html.includes(text), text);
+  assert.ok(!html.includes('1 · Minimum'));
 });
 
 test('observer drafts persist; stale saves and observing faculty signing for the observee are rejected; separate acknowledgements lock atomically', async () => {
@@ -149,7 +217,7 @@ test('signup input rejects injected identity, duplicate dates and empty selectio
 });
 
 test('signup commits signup, observation and dates together, rechecks availability, and rolls back on a changed deadline or insert failure', async () => {
-  const workspace = { dashboard, signup: { allowed: true, reason: '' }, sections: [{ id: sectionId, options: [{ date: '2026-10-26' }] }] };
+  const workspace = { dashboard, signup: { allowed: true, reason: '' }, sections: [{ id: sectionId, meetings, options: [{ date: '2026-10-26' }] }] };
   for (const scenario of ['success', 'unavailable-date', 'deadline-changed', 'insert-failed', 'duplicate']) {
     const calls = []; let reads = 0;
     const db = { async connect() { return db; }, release() {}, async query(sql, values = []) {
@@ -217,7 +285,7 @@ test('PostgreSQL can plan every workflow read, lock and mutation without executi
     }
     return original(sql, values);
   };
-  const workspace = { dashboard, signup: { allowed: true, reason: '' }, sections: [{ id: sectionId, options: [{ date: '2026-10-26' }] }], requests: [{ id: sectionId }] };
+  const workspace = { dashboard, signup: { allowed: true, reason: '' }, sections: [{ id: sectionId, meetings, options: [{ date: '2026-10-26' }] }], requests: [{ id: sectionId }] };
   const load = runtime(db, user, { workflow: workspace });
   const { getFacultyAssessment } = load('src/server/queries/faculty-assessment.ts');
   const { saveFacultyAssessment } = load('src/server/services/faculty-assessment.ts');

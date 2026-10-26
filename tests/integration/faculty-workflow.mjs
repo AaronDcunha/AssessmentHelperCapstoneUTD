@@ -58,7 +58,7 @@ try {
       const invalidSignup = await post('signup', { sectionId: data.sections[0].id, dates: [data.sections[0].options[0]?.date ?? '2026-10-19'] });
       assert.equal(invalidSignup.status, 409);
     }
-    assert.equal((await post('requests/decline', { candidateId: '11111111-1111-4111-8111-111111111111' })).status, 409);
+    assert.equal((await post('requests/decline', { candidateId: '11111111-1111-4111-8111-111111111111' })).status, 400);
     assert.equal((await post('assessment', { action: 'acknowledge', revision: 'none', acknowledged: true })).status, 409);
     const csrf = (await (await request('/api/auth/csrf')).json()).csrfToken;
     await request('/api/auth/signout', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ csrfToken: csrf }) });

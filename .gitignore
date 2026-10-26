@@ -44,3 +44,4 @@ next-env.d.ts
 # Locally generated Prisma client and demo login reference
 /src/generated/prisma/
 /prisma/demo-accounts.txt
+/.local/private-faculty-attachments/
