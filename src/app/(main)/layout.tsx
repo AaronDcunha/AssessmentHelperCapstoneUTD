@@ -5,9 +5,9 @@ import { requireUser } from "@/server/permissions";
 import { adminNavigationBindings, adminRoutes, adminTestBindings, createNavigationConfig, filterNavigation } from "@/components/layout/navigation-config";
 import { facultyPageHeaders, facultyRoutes } from "@/components/observations/faculty-routes";
 
-// Reuse the existing Figma semester label; it is display context, not live cycle data.
+// Preserve Admin's Figma display context independently of live Faculty cycle data.
 const adminHeader = {
-  subtitle: facultyPageHeaders[facultyRoutes.dashboard].subtitle,
+  subtitle: "Fall 2026",
   showUnavailableControls: true,
   contentSpacing: "spacious" as const,
 };

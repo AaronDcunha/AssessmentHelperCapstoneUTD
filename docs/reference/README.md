@@ -14,6 +14,8 @@ The original documents are preserved as supplied. They contain outdated requirem
 
 ## Files
 
+Faculty dashboard backend: see `FACULTY_DASHBOARD_BACKEND.md` for the live own-data query, private aggregate API, temporary cycle/eligibility assumptions, and focused checks.
+
 Authentication backend: see `AUTH_BACKEND.md` for database-backed login, development-only mock fixtures, current grants, and the frontend integration contract.
 
 | File | Use |

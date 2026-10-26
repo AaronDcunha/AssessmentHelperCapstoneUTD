@@ -17,6 +17,58 @@ endpoints remain proposals; frontend consumers alone do not implement an API.
 Implementation_Notes.txt and current team decisions take priority over this draft.
 The original AssessmentHelper_API_Endpoints.txt remains unchanged as a backup.
 
+October 19 dashboard implementation addendum (prototype scope only):
+October 26 Faculty completion supersedes older blocked-workflow statements:
+The own aggregate includes availableCycles/availableObservations, eligibility and
+verified own context choices. /api/me/dashboard adds invitations, requests/accept,
+requests/decline (attemptId required), requests/late-acceptance, selected-observer,
+issues, feedback and private feedback/attachments upload/download. Attempt/window,
+accepted-option/release persistence, reports and feedback are implemented by the
+additive Faculty migration. Generate/release and expired-approval support endpoints
+use existing AC grants; no AC frontend or History work is included. Acceptance is
+availability, final pairing is atomic and observer drafts stay private. This does
+not mark every generic endpoint below complete. See FACULTY_DASHBOARD_BACKEND.md
+for exact request bodies, permissions, documented assumptions and verification.
+
+GET /api/me/dashboard is implemented as a read-only own-account aggregate for
+the existing dashboard. No parameters; actor comes from Auth.js. Requires
+profile.read.own; evaluation, observations/count, and notification fields also
+require their respective existing own-read grants. Returns asOf, hasFacultyProfile,
+cycle|null, evaluation:{status,reason,hiringLevel,lastCompletedEvaluation|null},
+currentObservation|null, pendingObserverRequestCount:number|null, recentActivity[],
+and per-section access flags. API replies use private/no-store for success/errors;
+401 anonymous, 403 lacking base grant, 503 database/auth dependency unavailable.
+The page calls the shared server query directly. This is a focused addition to
+the draft, not a claim that the separate planned APIs below are implemented.
+See FACULTY_DASHBOARD_BACKEND.md for current schema mappings and temporary rules.
+
+October 19 linked Faculty follow-up (implemented prototype additions):
+October 26 integration supersedes its configuration assumptions: Faculty cycle
+context uses the shared relevant-cycle lookup (ambiguous open cycles unavailable),
+calendar options honor configured semester boundaries/timeZone, and first-save
+templates use publishedAt/UUID ordering. Existing assessments retain their template.
+Rating answers must match actual configured options. responses additionally accepts
+optional promptAnswers:{[promptId]:string} for configured comment prompts; required
+comments validate on acknowledgement. No new schema or History changes.
+
+GET /api/me/dashboard/workflow returns own assigned sections/schedules, current
+signup, calendar options, current observation details and active incoming requests.
+POST /api/me/dashboard/signup accepts {sectionId,dates:['YYYY-MM-DD']} and atomically
+records signup/observation/options after own-record, deadline and eligibility checks.
+POST /api/me/dashboard/requests/decline accepts {candidateId}, revalidates the active
+own invitation, and records its decline plus observee notification atomically.
+GET /api/me/dashboard/assessment returns {form}|null for own current scheduled work.
+POST /api/me/dashboard/assessment accepts {action:'save'|'acknowledge',revision,
+responses?:{answers:{[criterionId]:number|string},comments:string},acknowledged?:true}.
+The user explicitly chose separate acknowledgements then lock: observer drafts and
+submits first, observee acknowledges independently; both finalize/lock atomically.
+Enforce stored criteria/ranges, participant identity, frozen answers and stale-write
+checks. All replies are private/no-store; POSTs require same-origin JSON and existing
+action grants. No History, schema, auth, seed, dependencies or package changes.
+Remaining calendar/eligibility/release/acceptance/report/survey/alert limitations and
+exact temporary choices are recorded in FACULTY_DASHBOARD_BACKEND.md. These routes
+do not imply the separate planned endpoint families below are implemented.
+
 Progress labels: (COMPLETED) = implemented for the stated scope; (INCOMPLETE) =
 partially implemented with remaining work noted. Unmarked endpoints are planned.
 

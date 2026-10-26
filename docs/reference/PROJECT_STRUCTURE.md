@@ -1,5 +1,13 @@
 # Project structure and implementation responsibilities
 
+October 26 Faculty completion: own reads live in faculty-* queries; transactional
+release/invitation/approval and participation rules live in faculty-* services.
+Reuse configuration cycle scope and Admin effective permissions. db.ts handles
+Faculty SQL timestamps/dates explicitly as UTC; authentication remains Prisma-based.
+scripts/scheduler.ts is an explicit separate expiry/resend process, not a route-import
+side effect. Private evidence uses storage outside public and database metadata.
+See FACULTY_DASHBOARD_BACKEND.md and the additive Faculty migration. History is excluded.
+
 October 25 authentication correction: database-auth.ts now uses getPrisma() model reads, including credentials and inherited permissions. Admin services atomically provision generated usernames and hashed local credentials. The pg authentication-pool references below are historical. See AUTH_BACKEND.md and ADMIN_BACKEND.md.
 
 October 23 configuration update: cycle reads/mutations, semester lookup and atomic

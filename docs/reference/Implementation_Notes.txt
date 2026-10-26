@@ -1,4 +1,59 @@
 ASSESSMENT HELPER IMPLEMENTATION NOTES
+October 26, 2026 weekly progress handoff:
+Core Faculty implementation retained; this pass adds focused service regression
+coverage only. No UI, History, schema or application database changes. See the
+weekly handoff in FACULTY_DASHBOARD_BACKEND.md for fresh check results, remaining
+configuration/AC integration work and working assumptions awaiting team confirmation.
+Do not treat earlier populated/concurrency/build results as rerun in this pass.
+
+October 26, 2026 Faculty workflow completion (supersedes earlier blocked Faculty notes):
+Current user authorized documented assumptions and necessary additive migrations.
+Eligibility uses current rank intervals, prior evaluation/teaching/hire evidence,
+first-semester exclusion and voluntary signup; missing all evidence stays Unknown.
+Relevant cycles and active participant observations have verified explicit selectors.
+Generation/release, initial invitations, accepted meeting references, transactional
+final pairing/cancellation, retained attempts, automatic bounded resends, expired
+acceptance requests and AC review APIs now work. Reuse configuration/Admin services.
+Observer-private drafts, separate acknowledgements and final locking retain assigned
+templates and validate actual options/prompts. Non-occurrence/committee reports,
+participant feedback and private owner-only evidence persist. Assumptions: initial
+evaluation after first semester; current rank for intervals; UUID-ordered matching
+of up to five compatible same-department/level signed-up candidates; 48-hour windows
+capped by observation deadline; uncontacted candidates precede a second automatic
+window; AC may explicitly reopen the latest unsuperseded expired window. Reports
+follow appointment start and precede acknowledgements; feedback uses required 1-5
+satisfaction and optional difficulties/suggestions once per observation/role.
+Private evidence: PDF/PNG/JPEG, 5 MiB, three uploads per participant/observation.
+These are surfaced assumptions, not KPI, retention or AC privacy policies.
+Migration 20261026000000_faculty_workflows is deployed without reset/reseed; existing
+counts remain 539 users and zero downstream business records. Actual Fall 2026
+semester dates remain null and require AC configuration. No dates were fabricated.
+Run jobs:faculty separately for expiry/resends. Exact contracts, assumptions and
+verification are in FACULTY_DASHBOARD_BACKEND.md. History remains completely unchanged.
+
+October 26, 2026 Faculty integration with main (supersedes earlier Faculty configuration assumptions):
+Reuse the shared Prisma configuration cycle scope for own teaching/signups/selected
+observations/candidacies, including AC/Admin using Faculty screens. A sole relevant
+nonclosed valid cycle supplies context; multiple cycles leave dependent actions
+unavailable with an explanation. Automatic Faculty cycle selection is not agreed.
+Calendar options use configured semester startsOn/endsOn/timeZone, retain the
+exclusive observation-deadline date, and block when boundaries are missing. No
+holiday exceptions or new eligibility policy are invented. Existing missing-history
+signup restrictions remain pending agreement; current Admin interval/hire-date
+settings are inputs, not a complete eligibility service.
+First assessment save uses the latest published active template by publishedAt,
+then UUID descending. Retain assigned templates, actual labeled rating options,
+comment prompts and signature labels. Reject intermediate values absent from sparse
+scales; include template revisions/options/prompts in stale-write protection.
+No new schema/migration, reseed, authentication or History change is introduced.
+Selected candidate dates and recommendation-release persistence remain absent.
+Required invitation acceptance/final pairing/resends/expired approval and report,
+survey and alert gaps are not resolved by configuration. UC2/UC4/UC5 already define
+voluntary signup, first-semester exclusion, 48-hour initial windows, final pairing,
+and separate acknowledgement/finalization; missing-data eligibility, overlapping
+cycles, retry/cutoff/races, report permissions/timing/effects, survey details and
+alert lifecycle still need agreement. See FACULTY_DASHBOARD_BACKEND.md.
+
 October 25 user deletion follow-up (supersedes user-DELETE-pending notes):
 User requested DELETE /api/users/{userId}. Implemented using Prisma Client in a Serializable transaction, requiring users.manage and same origin. No body; empty 204 success, 404 missing account. Self-deletion and loss of the last active managing Admin return 409. Teaching, signup, selected-observer, candidate and feedback references block deletion (409); use deactivation instead. Only an unreferenced profile, credentials, role links and owned notifications are removed with the account. History is never cascaded/anonymized. No migration is required. Existing frontend Delete User is connected. Isolated real-database verification passed, including rollback and session/account lookup invalidation.
 
@@ -269,6 +324,49 @@ October 19, 2026 Admin navigation update: temporarily include direct links to
 all existing component preview pages and Faculty/AC/Admin role probes under
 Admin, including Alert AC. All links require test:admin and retain route guards.
 
+October 19, 2026 Faculty dashboard backend (supersedes dashboard preview values):
+/dashboard now reads the signed-in user's own PostgreSQL data through the existing
+pg pool, with a read-only /api/me/dashboard aggregate. Sections enforce existing
+own-profile/evaluation/observation/notification grants independently. Responses
+are private/no-store; no History/navigation, authentication, schema, seed, package,
+or workflow mutation changes are included.
+Provisional current cycle: earliest observation deadline among well-ordered cycles
+whose feedback deadline has not passed. No opening/active flag exists in the schema.
+Evaluation uses the last locked, both-signed Observee assessment semester plus the
+current rank interval. Missing history/invalid data remains Unknown, without
+inferring eligibility from missing hire dates. First-semester/rank-history/signup
+policies remain unresolved. Current work prefers Observee before selected-Observer
+records in that cycle. Pending requests must be unanswered/unexpired and not paired,
+cancelled or completed. Activity is five latest own notifications, never fabricated.
+See FACULTY_DASHBOARD_BACKEND.md for exact temporary rules, API scope, and checks.
+
+October 19, 2026 Faculty dashboard workflow follow-up (current user scope):
+Include linked Faculty evaluation, signup, current observation/appointment,
+incoming requests and web form. History frontend, backend and navigation are
+explicitly excluded and unchanged. Existing uncommitted dashboard work is retained.
+Own assigned sections, weekly schedules, current-cycle signup, proposed dates and
+active incoming invitations now have authorized reads. Calendar options recur from
+stored weekly meetings from server-local today to before the observation deadline,
+in America/Chicago; past-started meetings and ambiguous multi-meeting dates are
+excluded. No semester boundaries/holiday exceptions exist; display this limitation,
+do not claim an authoritative academic calendar, and do not invent exceptions.
+Signup uses existing uniqueness, current-cycle ownership/deadline checks, and an
+atomic signup/observation/date transaction. Until missing-history/first-semester
+eligibility is agreed, require a completed evaluation in a prior semester; seeded
+missing-history accounts remain blocked instead of silently becoming eligible.
+Invitation decline rechecks own recipient, active window and pairing under locks;
+it records the response and the observee notification in one transaction.
+The user explicitly chose separate assessment acknowledgements followed by locking:
+the assigned observer saves drafts and submits/acknowledges first; the observee
+reviews and acknowledges independently. Derive the participant and timestamps from
+the server, freeze answers after observer submission, and atomically lock/complete
+after both acknowledgements. Reject stale form revisions and edits after locking.
+Templates/criteria come from stored data; use the assessment's existing template or
+the newest active template for its first save, then retain that template reference.
+No schema, migrations, dependencies, seed or auth changes are made. Remaining gaps:
+accepted candidate date and recommendation-release state lack schema fields;
+incomplete-report storage/window, survey questions/scale, and alert reason/lifecycle
+rules remain unspecified. Those actions stay unavailable with an explanation.
 October 23, 2026 Admin Dashboard frontend (Issue #50, Dashboard only):
 /admin uses the shared shell and requires users.read on the server. Navigation
 uses the same effective grant; role labels and test:admin alone do not grant

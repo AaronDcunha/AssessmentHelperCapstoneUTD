@@ -199,9 +199,8 @@ test("Hiring levels require the read grant; management controls use the effectiv
   assert.match(html, /Loading hiring levels/);
 });
 
-test("All Admin headers reuse the semester context and unavailable bell, including both user form routes", async () => {
-  const { facultyPageHeaders, facultyRoutes } = load("src/components/observations/faculty-routes.ts");
-  const expectedSubtitle = facultyPageHeaders[facultyRoutes.dashboard].subtitle;
+test("All Admin headers preserve their Figma semester context independently of live Faculty data", async () => {
+  const expectedSubtitle = "Fall 2026";
   for (const path of ["/admin", "/admin/users", "/admin/users/new", "/admin/users/user-id", "/admin/roles", "/admin/hiring-levels"]) {
     pathname = path;
     const html = renderToStaticMarkup(await MainLayout({ children: null }));
@@ -214,7 +213,7 @@ test("All Admin headers reuse the semester context and unavailable bell, includi
 });
 
 test("Admin header options preserve Faculty headers and existing AC test-page defaults", async () => {
-  for (const [path, hasSemester, hasBell] of [["/dashboard", true, true], ["/dashboard/evaluation", false, true], ["/observations", false, true], ["/test/ac", false, false]]) {
+  for (const [path, hasSemester, hasBell] of [["/dashboard", false, true], ["/dashboard/evaluation", false, true], ["/observations", false, true], ["/test/ac", false, false]]) {
     pathname = path;
     const html = renderToStaticMarkup(await MainLayout({ children: null }));
     assert.equal(html.includes("Fall 2026"), hasSemester);
