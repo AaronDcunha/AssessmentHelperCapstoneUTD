@@ -61,6 +61,58 @@ and separate acknowledgement/finalization; missing-data eligibility, overlapping
 cycles, retry/cutoff/races, report permissions/timing/effects, survey details and
 alert lifecycle still need agreement. See FACULTY_DASHBOARD_BACKEND.md.
 
+October 26 AC integration follow-up: rebased #55 onto current main. Hiring-level
+lookup unwraps the Admin items response; reports.read permits this read-only
+lookup without granting hiring-level mutation access. Assessment reads also accept the Faculty
+writer responses {answers:{criterionId:value},comments:string,promptAnswers:{id:text}};
+return ID-keyed answer/comment arrays and preserve the free comment as generalComments.
+The Faculty workflow added issue/expired-acceptance records; #55 attention currently
+exposes overdue/unmatched/incomplete only, with alert/expiredApproval marked unavailable.
+The October 25 schema-absence explanation below is historical, not current schema status.
+
+October 25, 2026 AC monitoring backend (#55):
+The five cycle report/attention/faculty-status/observations/metrics reads and three
+observation detail/template/assessment reads use the shared Prisma Client and
+current business grants. Lists use UUID cursor pagination; AC reporting is
+university-wide, with optional department/hiring-level filters. Participants have
+own-observation access only. Attention returns overdue faculty and observation issues: unmatched
+means no selected observer on an unfinished non-cancelled record; incomplete means
+a scheduled/past record with an observer and no locked assessment. These operational
+definitions do not establish non-occurrence. Observation filters accept the frontend
+in-progress/complete/incomplete/unmatched values and stored uppercase statuses.
+Faculty lastEvaluation resolves the last completed observation in an earlier term
+and returns its own semester:{id,name}. Eligibility uses the current hiring-level
+interval and completed evaluation terms, excluding cancelled records and future terms.
+The professor's process explanation allows annual evaluations in Spring or Fall of
+the next calendar year; its two-year example is Spring 2025 -> due Spring 2027,
+overdue Fall 2027. Current-cycle completion restarts the interval. First-semester
+hires are excluded when configured semester dates establish that fact. Without
+history, the first required evaluation date remains unresolved: show Needs review,
+also used for unknown terms and unresolved two-year summer boundaries. Reports
+count these separately, excluding them from due/overdue totals. Due filters, hiring-
+level breakdowns and overdue attention use this same calculation. Sources: professor
+process_explanation_to_all (1).docx and current CS 4485 project Google Doc
+1o-_pRKhNvYHcNcdtE_PDLqty7tLI0NgqsDc04donL08 (read October 25), which confirms
+current hiring-level/interval changes affect status and second semester is earliest
+eligibility, not a confirmed first due date. October 25 user
+override: local development metrics now return fixed dummy KPI values, labelled
+source:demo and formulaVersion:demo in the API. These are not database calculations;
+production returns null values with reasons until formulas are agreed. Existing
+KPI cards display the supplied demo values; due/overdue fields use database counts.
+Alert/expired-approval attention
+is explicitly unavailable because the schema has no corresponding records.
+Assessment reads use the exact linked template, including inactive historical
+templates; only the selected observer can read an unlocked response pending a
+visibility decision. Locked responses are available to participants/authorized AC.
+Stored responses must use {answers:[{criterionId,value}],comments:[{promptId,text}]};
+unrecognized legacy formats return 409 rather than silently dropping answers.
+The schema has no assessment revision/submission timestamp: reads return null for
+those fields and make no save/finalize actions available. Recorded acknowledgements
+are mapped to their actual participant. No schema or lifecycle changes are added.
+Meeting options combine stored preferred dates with class schedules in the semester
+time zone; an appointment is matched by its stored start instant. Unmatched appointment
+metadata is reported unavailable, without inventing an end time or location.
+
 October 25 user deletion follow-up (supersedes user-DELETE-pending notes):
 User requested DELETE /api/users/{userId}. Implemented using Prisma Client in a Serializable transaction, requiring users.manage and same origin. No body; empty 204 success, 404 missing account. Self-deletion and loss of the last active managing Admin return 409. Teaching, signup, selected-observer, candidate and feedback references block deletion (409); use deactivation instead. Only an unreferenced profile, credentials, role links and owned notifications are removed with the account. History is never cascaded/anonymized. No migration is required. Existing frontend Delete User is connected. Isolated real-database verification passed, including rollback and session/account lookup invalidation.
 

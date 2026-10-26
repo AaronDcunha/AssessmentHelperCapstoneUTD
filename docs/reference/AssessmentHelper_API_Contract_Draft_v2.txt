@@ -3,6 +3,25 @@ October 18, 2026 | Reviewed against Faculty, AC, Admin and Shared Figma screens.
 
 STATUS
 ======
+October 25 #55 monitoring reads: the five cycle reporting routes and three
+observation/detail/template/assessment GET routes are implemented using Prisma.
+This is read-only integration, not completion of the evaluation/assessment workflow.
+See Implementation_Notes.txt (October 25 AC monitoring) for operational count/status
+definitions, eligibility rules/Needs review exceptions, conservative draft visibility and the
+stored assessment response shape. The current schema cannot supply assessment
+revision/submittedAt (both null). Alert/expired-approval monitoring adapters remain
+unavailable; main now stores corresponding Faculty workflow records.
+Missing policies/data are reported unavailable rather than inferred. Later task
+owners should extend these reads rather than introduce duplicate routes.
+User-authorized exception: development metrics return fixed dummy values marked
+source:demo/formulaVersion:demo; production metrics remain unavailable.
+Faculty evaluationStatus is due, overdue, not_due or needs-review (unavailable is
+accepted as a filter alias for needs-review). Reports expose summary.needsReview
+and per-hiring-level needsReview counts; these are excluded from due/overdue totals.
+Attention includes overdue faculty without requiring an existing signup/observation.
+Assessment reads accept Faculty ID-keyed answer/prompt objects as well as the older
+arrays, returning arrays and an optional generalComments string without changing writes.
+
 October 23 AC Configuration update: the cycle, semester lookup/settings and
 template operations in sections 2 and 6 are implemented as described below.
 See AC_CONFIGURATION_BACKEND.md for the finalized integration contract and tests.

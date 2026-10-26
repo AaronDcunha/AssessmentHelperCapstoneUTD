@@ -27,6 +27,7 @@ export default function FacultyDuePage() {
         </Select>
         <Select label="Due / Overdue" name="evaluationStatus" value={evaluationStatus} onChange={(event) => setEvaluationStatus(event.target.value)} className="h-control-56">
           <option value="all">All</option><option value="due">Due</option><option value="overdue">Overdue</option>
+          <option value="not_due">Not due</option><option value="needs-review">Needs review</option>
         </Select>
       </div>
 
@@ -41,7 +42,7 @@ export default function FacultyDuePage() {
                 <TableCell className="h-[80px]!">{userDisplayName(row.professor)}</TableCell>
                 <TableCell className="h-[80px]!">{typeof row.hiringLevel === "string" ? row.hiringLevel : row.hiringLevel.name}</TableCell>
                 <TableCell className="h-[80px]!">{row.lastEvaluation?.semester?.name?.trim() || "—"}</TableCell>
-                <TableCell className="h-[80px]!">{row.evaluationStatus || "—"}</TableCell>
+                <TableCell className="h-[80px]!">{{ due: "Due", overdue: "Overdue", not_due: "Not due", "needs-review": "Needs review" }[row.evaluationStatus] || "—"}</TableCell>
                 <TableCell className="h-[80px]!">{row.signupId ? "Yes" : "No"}</TableCell>
               </tr>
             ))}
