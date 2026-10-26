@@ -1,11 +1,19 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/form-fields";
 import { TableCell } from "@/components/ui/table";
 import { AssessmentRatingField } from "./assessment-rating-field";
 import { facultyRoutes as routes } from "./faculty-routes";
+import { ProposedDateSelector } from "./proposed-date-selector";
+import { postFacultyAction } from "./faculty-api";
+import type { FacultyWorkflow } from "@/server/queries/faculty-workflow";
+
+function dateTime(value: string) {
+  return new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+}
 
 const panel = "rounded-ah-8 border border-border bg-surface p-ah-24 space-y-ah-12";
 
@@ -17,32 +25,58 @@ function Back({ href = routes.dashboard }: { href?: string }) {
   return <ButtonLink href={href} variant="secondary" className="min-w-[180px] text-sidebar">Back</ButtonLink>;
 }
 
-export function EvaluationScreen() {
+export function EvaluationScreen({ data }: { data: FacultyWorkflow | null }) {
+  const evaluation = data?.dashboard.evaluation, cycle = data?.dashboard.cycle;
+  const labels = { due: "Due", overdue: "Overdue", notDue: "Not due", unknown: "Unknown" };
   return <div className="space-y-ah-24">
     <Block title="Evaluation status"><div className={panel}>
-      <p>Status: Unavailable</p><p>Hiring level: Unavailable</p><p>Last evaluation: Unavailable</p>
+      <p>Status: {evaluation && data?.dashboard.access.evaluation ? labels[evaluation.status] : "Unavailable"}</p><p>Hiring level: {evaluation?.hiringLevel ?? "Unavailable"}</p><p>Last evaluation: {evaluation?.lastCompletedEvaluation?.semester ?? (data?.dashboard.access.evaluation ? "None recorded" : "Unavailable")}</p>
+      {evaluation?.status === "unknown" && <p className="text-muted">{evaluation.reason}</p>}
     </div></Block>
     <Block title="Current cycle"><div className={panel}>
-      <p>No evaluation cycle is available.</p><p className="text-muted">Signup deadline: Unavailable</p><p className="text-muted">Observation deadline: Unavailable</p>
+      <p>{cycle?.semester ?? (data ? "No evaluation cycle is available." : "Evaluation data is temporarily unavailable.")}</p><p className="text-muted">Signup deadline: {cycle ? dateTime(cycle.signupDeadline) : "Unavailable"}</p><p className="text-muted">Observation deadline: {cycle ? dateTime(cycle.observationDeadline) : "Unavailable"}</p>
     </div></Block>
     <div className="flex flex-wrap gap-ah-16"><ButtonLink href={routes.signup} className="min-w-[240px]">Sign Up</ButtonLink><Back /></div>
   </div>;
 }
 
-export function SignupScreen() {
+export function SignupScreen({ data }: { data: FacultyWorkflow | null }) {
+  const router = useRouter();
   const [feedback, setFeedback] = useState("");
-  return <form className="space-y-ah-32" onSubmit={(event) => { event.preventDefault(); setFeedback("Signup was not submitted. An active cycle, an assigned course section, and available class dates are required. Faculty signup is not connected yet."); }}>
+  const [sectionId, setSectionId] = useState(data?.existingSignup?.sectionId ?? "");
+  const [dates, setDates] = useState<string[]>([]);
+  const [pending, setPending] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const section = data?.sections.find(section => section.id === sectionId);
+  return <form className="space-y-ah-32" onSubmit={async (event) => {
+    event.preventDefault();
+    if (pending || saved) return;
+    if (!data?.signup.allowed) { setFeedback(data?.signup.reason ?? "Signup data is temporarily unavailable."); return; }
+    if (!section || !dates.length) { setFeedback("Choose a course section and at least one scheduled date."); return; }
+    setPending(true); setFeedback("");
+    try {
+      const response = await postFacultyAction<{ message: string }>("signup", { sectionId, dates });
+      setSaved(true); setFeedback(response.message); router.refresh();
+    } catch (error) { setFeedback(error instanceof Error ? error.message : "Signup was not submitted. Please try again."); }
+    finally { setPending(false); }
+  }}>
     <Block title="1. Select Course and Section">
-      <p className="text-muted">No active cycle is available. Eligibility and the signup deadline cannot be verified.</p>
-      <Select label="Course / Section" value="" disabled wrapperClassName="max-w-[620px]" hint="No eligible course sections are available for signup."><option value="">No assigned course sections available</option></Select>
+      <p className="text-muted">{data?.signup.reason || (data?.dashboard.cycle ? `Signup deadline: ${dateTime(data.dashboard.cycle.signupDeadline)}` : "Signup data is temporarily unavailable.")}</p>
+      <Select label="Course / Section" value={sectionId} disabled={!data?.sections.length || pending || saved || !!data.existingSignup} onChange={event => { setSectionId(event.target.value); setDates([]); setFeedback(""); }} wrapperClassName="max-w-[620px]">
+        <option value="">{data?.sections.length ? "Choose a course section" : "No assigned course sections available"}</option>
+        {data?.sections.map(section => <option key={section.id} value={section.id}>{section.label}</option>)}
+      </Select>
     </Block>
     <Block title="2. Proposed Observation Dates and Times">
       <p className="text-muted">Choose multiple class dates. Each option must be before the observation deadline.</p>
-      <div className={panel}><p>No scheduled class dates are available.</p><p className="text-muted">A course section, its meeting schedule, and the cycle observation deadline are needed before dates can be selected.</p><p className="text-label">0 proposed options</p></div>
+      {section && data?.signup.observationDeadline ? <>
+        <ProposedDateSelector options={section.options} selected={dates} onChange={setDates} observationDeadline={data.signup.observationDeadline} disabled={pending || saved || !!data.existingSignup} />
+        <p className="text-caption text-muted">Dates follow the stored weekly schedule in America/Chicago. Semester boundaries and holiday exceptions are not available; confirm that class meets before submitting. Days with multiple meetings cannot be selected.</p>
+      </> : <div className={panel}><p>{data ? "Choose an assigned course section to see its scheduled dates." : "Class schedules are temporarily unavailable."}</p><p className="text-label">0 proposed options</p></div>}
     </Block>
-    <Block title="3. Review"><div className={panel}><p>No course or dates selected.</p><p className="text-caption text-muted">Your proposed dates and times will be shown to invited observers.</p></div></Block>
-    {feedback && <p role="alert" className="text-danger">{feedback}</p>}
-    <div className="flex flex-wrap gap-ah-16"><Button type="submit" className="min-w-[200px]">Submit Signup</Button><ButtonLink variant="secondary" href={routes.dashboard}>Cancel</ButtonLink></div>
+    <Block title="3. Review"><div className={panel}><p>{section ? `${section.label} · ${dates.length} proposed dates` : "No course or dates selected."}</p><p className="text-caption text-muted">Your proposed dates and times will be shown to invited observers.</p></div></Block>
+    {feedback && <p role="status" className={saved ? "text-sidebar" : "text-danger"}>{feedback}</p>}
+    <div className="flex flex-wrap gap-ah-16"><Button type="submit" disabled={pending || saved || !data?.signup.allowed} aria-busy={pending} className="min-w-[200px]">{pending ? "Submitting…" : "Submit Signup"}</Button><ButtonLink variant="secondary" href={routes.dashboard}>Cancel</ButtonLink></div>
   </form>;
 }
 
@@ -95,29 +129,50 @@ export function ConfirmedObserversScreen() {
   </div>;
 }
 
-export function RequestsScreen() {
+export function RequestsScreen({ data }: { data: FacultyWorkflow | null }) {
+  const router = useRouter();
+  const [feedback, setFeedback] = useState("");
+  const [pending, setPending] = useState<string | null>(null);
+  const [selection, setSelection] = useState<Record<string, string>>({});
+  const [declined, setDeclined] = useState<string[]>([]);
+  const requests = data?.requests.filter(request => !declined.includes(request.id)) ?? [];
   return <div className="space-y-ah-24"><Block title="Pending requests">
     <p className="text-muted">Select one proposed date and time for each request before accepting. You may accept more than one request.</p>
-    <div className={panel}><p>No incoming observer invitations are available.</p><p className="text-muted">Your received invitations will show the observee, course / section, proposed dates, response status, and response window.</p></div>
+    {!requests.length && <div className={panel}><p>{!data ? "Observer invitations are temporarily unavailable." : !data.dashboard.access.observations ? "Invitations are unavailable with your current permissions." : "No incoming observer invitations are available."}</p></div>}
+    {requests.map(request => <div key={request.id} className={`${panel} grid gap-ah-24 lg:grid-cols-[1fr_2fr_1fr]`}>
+      <div className="space-y-ah-8"><p>{request.observee}</p><p>{request.course}.{request.section}</p><p className="text-caption text-muted">Respond before {dateTime(request.expiresAt)}</p></div>
+      <fieldset className="space-y-ah-12"><legend className="sr-only">Choose a proposed date for {request.observee}</legend>
+        {!request.options.length && <p className="text-muted">No unambiguous proposed meetings are available.</p>}
+        {request.options.map(option => <label key={option.date} className="flex items-center gap-ah-12 text-caption"><input type="radio" name={request.id} checked={selection[request.id] === option.date} onChange={() => setSelection(previous => ({ ...previous, [request.id]: option.date }))} />{option.date} · {option.meetingTime}</label>)}
+      </fieldset>
+      <div className="space-y-ah-12"><Button fullWidth disabled title="Accepting invitations is not available yet.">Accept selected date</Button>
+        <Button variant="secondary" fullWidth disabled={pending !== null} onClick={async () => {
+          setPending(request.id); setFeedback("");
+          try { const response = await postFacultyAction<{ message: string }>("requests/decline", { candidateId: request.id }); setDeclined(previous => [...previous, request.id]); setFeedback(response.message); router.refresh(); }
+          catch (error) { setFeedback(error instanceof Error ? error.message : "The invitation was not declined."); }
+          finally { setPending(null); }
+        }}>{pending === request.id ? "Declining…" : "Decline"}</Button></div>
+    </div>)}
+    {!!requests.length && <p className="text-caption text-muted">Accepting invitations is not available yet. Your selected date has not been sent.</p>}
+    {feedback && <p role="status" className="text-muted">{feedback}</p>}
     <p className="text-muted">Acceptance offers your selected date. The observee still chooses the final observer.</p>
   </Block><Back /></div>;
 }
 
-export function ObservationsScreen() {
+export function ObservationsScreen({ data }: { data: FacultyWorkflow | null }) {
   return <div className="space-y-ah-24">
     <Block title="Current observations"><div className={panel}>
-      <p>No active observation records are available.</p>
-      <p className="text-muted">Current work as an Observer or Observee will appear here, with the next action for each observation.</p>
+      {data?.observation ? <><p>{data.observation.course}.{data.observation.section} · {data.observation.status}</p><p className="text-muted">As {data.observation.participation === "observee" ? "Observee" : "Observer"}</p><ButtonLink href={routes.details} variant="secondary">View Current Observation</ButtonLink>{data.observation.scheduledAt && <ButtonLink href={routes.appointment} variant="secondary">View Appointment</ButtonLink>}</> : <p>{data ? "No active observation records are available." : "Observation data is temporarily unavailable."}</p>}
     </div></Block>
     <div className="flex flex-wrap gap-ah-16"><ButtonLink href={routes.signup}>Sign Up for Observation</ButtonLink><Back /></div>
   </div>;
 }
 
-function RecordFields({ fields }: { fields: readonly (string | readonly string[])[] }) {
+function RecordFields({ fields, values = {} }: { fields: readonly (string | readonly string[])[]; values?: Record<string, string | null | undefined> }) {
   return <dl className="space-y-ah-12">{fields.map((row, index) => (
     <div key={index} className="flex flex-wrap gap-x-ah-16 gap-y-ah-4">
       {(typeof row === "string" ? [row] : row).map((field) => (
-        <div key={field} className="inline-flex flex-wrap gap-x-ah-8"><dt>{field}:</dt><dd className="text-muted">Unavailable</dd></div>
+        <div key={field} className="inline-flex flex-wrap gap-x-ah-8"><dt>{field}:</dt><dd className="text-muted">{values[field] ?? "Unavailable"}</dd></div>
       ))}
     </div>
   ))}</dl>;
@@ -127,35 +182,44 @@ function IncompleteReportButton({ primary = false }: { primary?: boolean }) {
   return <Button variant={primary ? "primary" : "secondary"} disabled aria-describedby="observation-actions-unavailable">Report Not Completed</Button>;
 }
 
-export function ObservationDetailsScreen() {
+export function ObservationDetailsScreen({ data }: { data: FacultyWorkflow | null }) {
+  const record = data?.observation;
   return <div className="space-y-ah-24">
     <Block title="Observation"><div className={panel}>
-      <RecordFields fields={["Course / Section", ["Observer", "Observee"], "Scheduled date and time"]} />
+      <RecordFields fields={["Course / Section", ["Observer", "Observee"], "Scheduled date and time"]} values={{ "Course / Section": record && `${record.course}.${record.section}`, Observer: record?.observer ?? "Not assigned", Observee: record?.observee, "Scheduled date and time": record?.scheduledAt ? dateTime(record.scheduledAt) : "Not scheduled" }} />
     </div></Block>
-    <Block title="Progress"><div className={panel}><RecordFields fields={[["Status", "Your participation"]]} /><p>No observation progress or outstanding actions are available.</p></div></Block>
+    <Block title="Progress"><div className={panel}><RecordFields fields={[["Status", "Your participation"]]} values={{ Status: record?.status, "Your participation": record?.participation }} />{!record && <p>{data ? "No current observation is available." : "Observation data is temporarily unavailable."}</p>}{record?.proposedDates.map(option => <p key={option.date}>{option.date} · {option.meetingTime}</p>)}</div></Block>
     <Block title="Actions"><div className="grid max-w-[992px] gap-ah-16 md:grid-cols-3">
       <ButtonLink variant="secondary" href={routes.form}>View Observation Form</ButtonLink>
       <IncompleteReportButton />
       <Button disabled aria-describedby="survey-unavailable">Complete Survey</Button>
     </div></Block>
-    <p id="observation-actions-unavailable" className="text-caption text-muted">Record actions require an authorized observation and participant role. No record is available; the form opens a temporary preview.</p>
-    <p id="survey-unavailable" className="text-caption text-muted">Process feedback is available only to participating faculty during the cycle feedback period. Participation and feedback dates are unavailable.</p>
+    <p id="observation-actions-unavailable" className="text-caption text-muted">Incomplete reporting is not available yet. No report has been sent. The observation form requires a scheduled observation and an assigned observer.</p>
+    <p id="survey-unavailable" className="text-caption text-muted">{data?.dashboard.cycle ? `Process feedback opens after ${dateTime(data.dashboard.cycle.observationDeadline)} and closes ${dateTime(data.dashboard.cycle.feedbackDeadline)}. The survey is not yet available for submission.` : "Process feedback requires verified participation and a cycle feedback period."}</p>
     <Back href={routes.observations} />
   </div>;
 }
 
-export function AppointmentScreen() {
+export function AppointmentScreen({ data }: { data: FacultyWorkflow | null }) {
+  const record = data?.observation;
+  const scheduled = record?.scheduledAt ? new Date(record.scheduledAt) : null;
+  const day = scheduled && new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: "America/Chicago" }).format(scheduled);
+  const time = scheduled && new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "America/Chicago" }).format(scheduled);
+  const meetings = record?.meetings.filter(meeting => meeting.day === day && meeting.startTime === time) ?? [];
   return <div className="space-y-ah-24">
     <Block title="Confirmed appointment"><div className={panel}>
-      <RecordFields fields={["Course / Section", ["Observee", "Observer"], ["Date", "Time", "Location"]]} />
+      <RecordFields fields={["Course / Section", ["Observee", "Observer"], ["Date", "Time", "Location"]]} values={{ "Course / Section": record && `${record.course}.${record.section}`, Observee: record?.observee, Observer: record?.observer,
+        Date: scheduled ? new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "America/Chicago" }).format(scheduled) : undefined,
+        Time: scheduled ? new Intl.DateTimeFormat("en-US", { timeStyle: "short", timeZone: "America/Chicago" }).format(scheduled) : undefined,
+        Location: meetings.length === 1 ? meetings[0].location : undefined }} />
     </div></Block>
-    <Block title="Appointment status"><div className={panel}><RecordFields fields={[["Appointment status", "Observation done"]]} /></div></Block>
+    <Block title="Appointment status"><div className={panel}><RecordFields fields={[["Appointment status", "Observation done"]]} values={{ "Appointment status": record?.status, "Observation done": record ? "Not finalized" : undefined }} /></div></Block>
     <Block title="Actions"><div className="grid max-w-[992px] gap-ah-16 md:grid-cols-3">
       <ButtonLink variant="secondary" href={routes.details}>View Observation</ButtonLink>
-      <Button disabled aria-describedby="observation-actions-unavailable">Open Observation Form</Button>
+      {record?.scheduledAt && record.observer ? <ButtonLink variant="secondary" href={routes.form}>Open Observation Form</ButtonLink> : <Button disabled aria-describedby="observation-actions-unavailable">Open Observation Form</Button>}
       <IncompleteReportButton primary />
     </div></Block>
-    <p id="observation-actions-unavailable" className="text-caption text-muted">Form submission and incomplete reports require a confirmed observation and an authorized participant. No appointment is available.</p>
+    <p id="observation-actions-unavailable" className="text-caption text-muted">{record ? "The form opens after the scheduled observation starts. Incomplete reporting is not available yet; no report has been sent." : "Form submission requires a scheduled observation and an authorized participant. No appointment is available."}</p>
     <Back href={routes.observations} />
   </div>;
 }

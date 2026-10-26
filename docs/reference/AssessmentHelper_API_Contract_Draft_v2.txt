@@ -7,6 +7,38 @@ Proposed contracts, not implemented business APIs or approved database models.
 Implementation_Notes.txt and current team decisions take priority over this draft.
 The original AssessmentHelper_API_Endpoints.txt remains unchanged as a backup.
 
+October 19 dashboard implementation addendum (prototype scope only):
+GET /api/me/dashboard is implemented as a read-only own-account aggregate for
+the existing dashboard. No parameters; actor comes from Auth.js. Requires
+profile.read.own; evaluation, observations/count, and notification fields also
+require their respective existing own-read grants. Returns asOf, hasFacultyProfile,
+cycle|null, evaluation:{status,reason,hiringLevel,lastCompletedEvaluation|null},
+currentObservation|null, pendingObserverRequestCount:number|null, recentActivity[],
+and per-section access flags. API replies use private/no-store for success/errors;
+401 anonymous, 403 lacking base grant, 503 database/auth dependency unavailable.
+The page calls the shared server query directly. This is a focused addition to
+the draft, not a claim that the separate planned APIs below are implemented.
+See FACULTY_DASHBOARD_BACKEND.md for current schema mappings and temporary rules.
+
+October 19 linked Faculty follow-up (implemented prototype additions):
+GET /api/me/dashboard/workflow returns own assigned sections/schedules, current
+signup, calendar options, current observation details and active incoming requests.
+POST /api/me/dashboard/signup accepts {sectionId,dates:['YYYY-MM-DD']} and atomically
+records signup/observation/options after own-record, deadline and eligibility checks.
+POST /api/me/dashboard/requests/decline accepts {candidateId}, revalidates the active
+own invitation, and records its decline plus observee notification atomically.
+GET /api/me/dashboard/assessment returns {form}|null for own current scheduled work.
+POST /api/me/dashboard/assessment accepts {action:'save'|'acknowledge',revision,
+responses?:{answers:{[criterionId]:number|string},comments:string},acknowledged?:true}.
+The user explicitly chose separate acknowledgements then lock: observer drafts and
+submits first, observee acknowledges independently; both finalize/lock atomically.
+Enforce stored criteria/ranges, participant identity, frozen answers and stale-write
+checks. All replies are private/no-store; POSTs require same-origin JSON and existing
+action grants. No History, schema, auth, seed, dependencies or package changes.
+Remaining calendar/eligibility/release/acceptance/report/survey/alert limitations and
+exact temporary choices are recorded in FACULTY_DASHBOARD_BACKEND.md. These routes
+do not imply the separate planned endpoint families below are implemented.
+
 Progress labels: (COMPLETED) = implemented for the stated scope; (INCOMPLETE) =
 partially implemented with remaining work noted. Unmarked endpoints are planned.
 
