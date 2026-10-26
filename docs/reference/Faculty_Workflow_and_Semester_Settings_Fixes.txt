@@ -1,0 +1,92 @@
+TASK: Faculty Workflow and Semester Settings Fixes
+Created: October 26, 2026
+Status: Pending
+Owner: Unassigned
+Scheduling: Follow-up work; implementation timing to be decided.
+
+Purpose
+Complete the fixes identified while reviewing Sai/faculty-dashboard-backend.
+The core Faculty workflows are implemented, but the full browser workflow has
+not been verified. Passing unit tests do not establish end-to-end completion.
+This task does not authorize or perform a branch merge.
+
+1. FIX AC SEMESTER SETTINGS SAVING - CURRENT TESTING BLOCKER
+Problem: The frontend sends deadline values in a format the implemented backend
+rejects. Date inputs also receive full ISO timestamps without conversion.
+Work: Correct input/output conversion using an explicit time zone and deadline
+time policy. Do not silently invent midnight/end-of-day behavior. Retain returned
+cycle and semester revisions after saving. Make the semester name read-only if
+renaming is unsupported; Cancel should restore loaded settings rather than clear
+them. Show actual validation/conflict errors instead of claiming the API is absent.
+Example: AC saves semester dates and deadlines; Faculty can then see available
+class dates and sign up, provided other eligibility/deadline checks pass.
+Done when: Settings load, save, reload and save again successfully; invalid dates
+and stale revisions show useful errors. Existing backend access checks remain.
+
+2. ALLOW READING EVERY SECTION OF A FINALIZED ASSESSMENT
+Problem: /observations/form starts at step 1 and disables Next for locked forms.
+Work: Separate read-only step navigation from save/acknowledgement actions.
+Example: After both participants acknowledge the form, either can reopen it and
+read ratings, long responses, comments and signatures without editing anything.
+Done when: All three steps remain navigable on locked forms; edits and repeat
+submission remain blocked on both the client and server.
+
+3. RESET SIGNUP INPUTS WHEN SWITCHING EVALUATION CYCLES
+Problem: Signup keeps local course selection, dates and saved state across cycle
+changes, including router refreshes that preserve the client component.
+Work: Reset or scope form state by cycle, initializing from that cycle's signup.
+Example: Signing up for Fall must not leave Spring disabled or showing Fall's
+selected course and dates.
+Done when: Switching between cycles never carries stale selections, messages or
+submission state into the newly selected cycle.
+
+4. GIVE REPORT AND FEEDBACK FORMS ENOUGH SPACE
+Problem: Expanded forms remain inside one column of a three-column action grid
+on Observation Details and Appointment pages.
+Work: Render expanded forms across available content width or in an accessible
+dialog. Preserve shared palette, typography, spacing, fields and buttons.
+Example: Complete Survey opens a readable form rather than squeezing its fields
+beside the other action buttons.
+Done when: Report and feedback forms are readable at desktop and mobile widths,
+without page overflow, clipped controls or broken keyboard navigation.
+
+5. SHOW THE FULL MEETING TIME BEFORE CONFIRMING AN OBSERVER
+Problem: The accepted-candidate table promises date/time but only receives and
+renders a date.
+Work: Return and display the accepted meeting's start/end times and time zone.
+Example: Show November 10, 10:00-11:15 AM, America/Chicago rather than only
+November 10. This is an illustrative date, not a configured semester value.
+Done when: The confirmation table shows the actual accepted meeting details and
+the confirmed appointment agrees with them.
+
+6. DISTINGUISH FAILED LOADING FROM GENUINELY EMPTY DATA
+Problem: A failed Faculty data load can display No assigned course sections,
+misleading users who have assignments. The page-level fallback hides the error.
+Work: Keep unavailable/error states distinct from successful empty results;
+provide a retry and useful server diagnostics without exposing private details.
+Example: A failed request says Unable to load your courses - retry. Only a
+successful query returning no assignments says No assigned courses.
+Done when: Failed and empty reads have distinct messages and retry can recover.
+
+7. REPLACE HANDWRITTEN FACULTY BUSINESS SQL WITH PRISMA CLIENT
+Problem: Several Faculty reads and writes use pg and handwritten SQL strings.
+Work: Move Faculty business persistence to generated Prisma Client model APIs,
+relation queries and transactions. Preserve permissions, record ownership,
+deadline checks, template/answer retention, atomicity and concurrency protection.
+Review locking/isolation deliberately; do not weaken safeguards during conversion
+or replace SQL strings with Prisma raw-query calls as a substitute for model APIs.
+Example: Load teaching assignments and related course sections through Prisma
+relations instead of a handwritten SELECT with joins.
+SQL inside checked-in Prisma migration files is normal and should remain.
+Done when: In-scope Faculty runtime business reads/writes use Prisma model APIs,
+and relevant access, stale-write and concurrent-action regressions pass.
+
+Verification and scope
+Fix item 1 first to unblock signup testing. Test with separate observee/observer
+accounts: signup -> invitations -> pairing -> appointment -> assessment -> both
+acknowledgements -> read-only review -> feedback. Test feedback during its actual
+configured window. Refresh after writes to verify persistence. Run relevant unit,
+integration, TypeScript and lint checks; report anything not verified.
+History is excluded. Do not reset or reseed application data to perform this work.
+The Faculty workflow migration was applied locally during review; other developer
+databases must apply checked-in pending migrations before testing this branch.

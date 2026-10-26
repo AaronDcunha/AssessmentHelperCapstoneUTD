@@ -10,6 +10,7 @@ export const grants = {
 } as const;
 export type Operation = keyof typeof grants;
 export function authorize(user: AdminUser, operation: Operation) {
+  if (operation === "levels.list" && user.permissions.includes("reports.read")) return;
   if (!grants[operation].every(key => user.permissions.includes(key))) throw new ConfigurationError(403,"FORBIDDEN","Permission denied.");
 }
 export function required<T>(value: T | null): T {

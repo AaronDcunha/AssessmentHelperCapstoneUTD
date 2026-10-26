@@ -22,11 +22,12 @@ export default function AcDashboardPage() {
     <div className="space-y-ah-48 pt-ah-16">
       <CycleSelector />
       <section aria-label="Evaluation cycle summary" className="grid grid-cols-1 gap-ah-16 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Faculty due" value={report.data.summary.facultyDue} className="w-full" />
-        <MetricCard label="Overdue" value={report.data.summary.overdue} tone="danger" className="w-full" />
+        <MetricCard label="Faculty due" value={report.data.summary.facultyDue ?? "—"} className="w-full" />
+        <MetricCard label="Overdue" value={report.data.summary.overdue ?? "—"} tone="danger" className="w-full" />
         <MetricCard label="Unmatched" value={report.data.summary.unmatched} className="w-full" />
         <MetricCard label="Incomplete" value={report.data.summary.incomplete} className="w-full" />
       </section>
+      {!!report.data.summary.needsReview && <p className="text-caption text-muted">{report.data.summary.needsReview} faculty need eligibility review and are excluded from due/overdue totals.</p>}
 
       <section aria-labelledby="needs-attention-heading" className="space-y-ah-16">
         <div className="flex min-h-9 items-center justify-between gap-ah-16">

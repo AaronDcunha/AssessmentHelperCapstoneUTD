@@ -1,0 +1,11 @@
+// Trusted standalone Node workers run on the server. Next's server-only marker is
+// a compile-time browser boundary; it has no runtime work in these processes.
+import { registerHooks } from 'node:module';
+registerHooks({ resolve(specifier, context, nextResolve) {
+  if (specifier === 'server-only') return { url: 'data:text/javascript,export{}', shortCircuit: true };
+  try { return nextResolve(specifier, context); }
+  catch (error) {
+    if (error.code === 'ERR_MODULE_NOT_FOUND' && specifier.startsWith('.') && !/\.[a-z]+$/i.test(specifier)) return nextResolve(specifier + '.ts', context);
+    throw error;
+  }
+} });

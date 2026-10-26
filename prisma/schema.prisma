@@ -27,6 +27,8 @@ model AppUser {
 
   // Notifications received by the user.
   notifications Notification[]
+  facultyIssues FacultyIssue[]
+  feedbackAttachments FeedbackAttachment[]
 
   @@map("app_user")
 }
@@ -299,6 +301,10 @@ model Observation {
   status        String    @default("PENDING")
   scheduledAt   DateTime? @map("scheduled_at")
   completedAt   DateTime? @map("completed_at")
+  workflowRevision Int @default(0) @map("workflow_revision")
+  recommendationGenerationId String? @map("recommendation_generation_id") @db.Uuid
+  recommendationsReleasedAt DateTime? @map("recommendations_released_at") @db.Timestamptz(6)
+  scheduledEndsAt DateTime? @map("scheduled_ends_at") @db.Timestamptz(6)
 
   // Foreign key relationships.
   signup   EvaluationSignup @relation(fields: [signupId, cycleId], references: [signupId, cycleId])
@@ -312,6 +318,8 @@ model Observation {
   // Assessment and feedback.
   signedAssessment SignedAssessment?
   processFeedback  ProcessFeedback[]
+  facultyIssues FacultyIssue[]
+  feedbackAttachments FeedbackAttachment[]
 
   @@map("observation")
 }
@@ -326,6 +334,9 @@ model ObservationCandidate {
   invitedAt     DateTime? @map("invited_at")
   expiresAt     DateTime? @map("expires_at")
   respondedAt   DateTime? @map("responded_at")
+  acceptedOptionId String? @map("accepted_option_id") @db.Uuid
+  acceptedOption ObservationTimeOption? @relation(fields: [acceptedOptionId], references: [timeOptionId], onDelete: Restrict)
+  attempts InvitationAttempt[]
 
   // Foreign key relationships.
   observation Observation @relation(fields: [observationId], references: [observationId])
@@ -342,12 +353,58 @@ model ObservationTimeOption {
   timeOptionId  String   @id @default(uuid()) @map("time_option_id") @db.Uuid
   observationId String   @map("observation_id") @db.Uuid
   preferredDate DateTime @map("preferred_date") @db.Date
+  startsAt DateTime? @map("starts_at") @db.Timestamptz(6)
+  endsAt DateTime? @map("ends_at") @db.Timestamptz(6)
+  timeZone String? @map("time_zone")
+  location String?
+  acceptedCandidates ObservationCandidate[]
 
   // Each preferred date belongs to an observation.
   observation Observation @relation(fields: [observationId], references: [observationId])
 
   @@unique([observationId, preferredDate])
   @@map("observation_time_option")
+}
+
+model InvitationAttempt {
+  attemptId String @id @default(uuid()) @map("attempt_id") @db.Uuid
+  candidateId String @map("candidate_id") @db.Uuid
+  number Int
+  invitedAt DateTime @map("invited_at") @db.Timestamptz(6)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+  respondedAt DateTime? @map("responded_at") @db.Timestamptz(6)
+  status String @default("PENDING")
+  candidate ObservationCandidate @relation(fields: [candidateId], references: [candidateId], onDelete: Restrict)
+  approval LateAcceptanceApproval?
+  @@unique([candidateId, number])
+  @@map("invitation_attempt")
+}
+
+model LateAcceptanceApproval {
+  approvalId String @id @default(uuid()) @map("approval_id") @db.Uuid
+  attemptId String @unique @map("attempt_id") @db.Uuid
+  status String @default("PENDING")
+  reason String?
+  requestedAt DateTime @default(now()) @map("requested_at") @db.Timestamptz(6)
+  decidedAt DateTime? @map("decided_at") @db.Timestamptz(6)
+  decidedBy String? @map("decided_by") @db.Uuid
+  attempt InvitationAttempt @relation(fields: [attemptId], references: [attemptId], onDelete: Restrict)
+  @@map("late_acceptance_approval")
+}
+
+model FacultyIssue {
+  issueId String @id @default(uuid()) @map("issue_id") @db.Uuid
+  observationId String @map("observation_id") @db.Uuid
+  reportedBy String @map("reported_by") @db.Uuid
+  kind String
+  reason String
+  details String
+  status String @default("PENDING")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  observation Observation @relation(fields: [observationId], references: [observationId], onDelete: Restrict)
+  reporter AppUser @relation(fields: [reportedBy], references: [userId], onDelete: Restrict)
+  @@unique([observationId, reportedBy, kind])
+  @@map("faculty_issue")
 }
 
 // Stores assessment templates configured by the Assessment Committee.
@@ -424,6 +481,7 @@ model ProcessFeedback {
   difficulties  String?
   suggestions   String?
   submittedAt   DateTime @default(now()) @map("submitted_at")
+  attachments FeedbackAttachment[]
 
   // Relationships.
   observation Observation @relation(fields: [observationId], references: [observationId])
@@ -432,6 +490,22 @@ model ProcessFeedback {
   // Each professor submits one feedback response per observation and role.
   @@unique([observationId, professorId, feedbackRole])
   @@map("process_feedback")
+}
+
+model FeedbackAttachment {
+  attachmentId String @id @default(uuid()) @map("attachment_id") @db.Uuid
+  ownerId String @map("owner_id") @db.Uuid
+  observationId String @map("observation_id") @db.Uuid
+  feedbackId String? @map("feedback_id") @db.Uuid
+  originalName String @map("original_name")
+  contentType String @map("content_type")
+  sizeBytes Int @map("size_bytes")
+  storageKey String @unique @map("storage_key") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  owner AppUser @relation(fields: [ownerId], references: [userId], onDelete: Restrict)
+  observation Observation @relation(fields: [observationId], references: [observationId], onDelete: Restrict)
+  feedback ProcessFeedback? @relation(fields: [feedbackId], references: [feedbackId], onDelete: Restrict)
+  @@map("feedback_attachment")
 }
 
 // Stores notifications related to evaluation activities.

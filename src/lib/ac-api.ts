@@ -11,8 +11,8 @@ export type Cycle = {
 };
 export type ReportsResponse = {
   cycleId: string; asOf?: string; definitionsVersion?: string;
-  summary: { facultyDue: number; overdue: number; unmatched: number; incomplete: number };
-  byHiringLevel: Array<{ hiringLevelId: string; name: string; due: number; outstanding: number }>;
+  summary: { facultyDue: number | null; overdue: number | null; unmatched: number; incomplete: number; needsReview?: number };
+  byHiringLevel: Array<{ hiringLevelId: string; name: string; due: number | null; outstanding: number; needsReview?: number }>;
   availableViews?: string[];
 };
 export type FacultyStatusItem = {
@@ -23,7 +23,7 @@ export type FacultyStatusItem = {
 export type AttentionItem = {
   id: string; faculty: UserSummary;
   issue: "overdue" | "unmatched" | "incomplete" | "alert" | "expiredApproval";
-  observationStatus: string; observationId?: string | null;
+  observationStatus: string | null; observationId?: string | null;
 };
 export type ObservationMeeting = {
   id: string; sectionId: string; date: string; startsAt: string; endsAt: string;
@@ -50,9 +50,10 @@ export type AssignedObservationTemplate = {
   signatureLabels: { observer: string; observee: string };
 };
 export type ObservationAssessment = {
-  id: string; observationId: string; templateVersionId?: string; status: string; revision: number;
+  id: string; observationId: string; templateVersionId?: string; status: string; revision: number | null;
   answers: Array<{ criterionId: string; value: number | string | null }>;
   comments: Array<{ promptId: string; text: string }>;
+  generalComments?: string | null;
   submittedAt: string | null;
   acknowledgements: Array<{ actorId: string; participantRole: string; acknowledgedAt: string }>;
   allowedActions: string[];
@@ -115,12 +116,13 @@ const cyclePath = (cycleId: string) => `/api/evaluation-cycles/${encodeURICompon
 
 // Keep array-based page components, but unwrap the contract envelope and follow
 // every cursor so filters and "all semesters" do not silently omit later pages.
-async function requestList<T>(path: string): Promise<T[]> {
+async function requestList<T>(path: string, paginated = true): Promise<T[]> {
   const items: T[] = [];
   const seen = new Set<string>();
   let nextPath = path;
   while (true) {
     const page = await requestJson<Page<T>>(nextPath);
+    if (!paginated && page && Array.isArray(page.items) && page.pageInfo === undefined) return page.items;
     if (!page || !Array.isArray(page.items) || typeof page.pageInfo?.hasMore !== "boolean") {
       throw new ApiRequestError("The API returned an invalid list response.");
     }
@@ -147,7 +149,7 @@ export const acApi = {
   getObservation: (observationId: string) => requestJson<ObservationDetail>(`/api/observations/${encodeURIComponent(observationId)}`),
   getObservationTemplate: (observationId: string) => requestJson<AssignedObservationTemplate>(`/api/observations/${encodeURIComponent(observationId)}/template`),
   getObservationAssessment: (observationId: string) => requestJson<ObservationAssessmentResponse>(`/api/observations/${encodeURIComponent(observationId)}/assessment`),
-  getHiringLevels: () => requestList<HiringLevel>("/api/hiring-levels"),
+  getHiringLevels: () => requestList<HiringLevel>("/api/hiring-levels", false),
   createCycle: (body: CycleWrite) => requestJson<Cycle>("/api/evaluation-cycles", { method: "POST", body: JSON.stringify(body) }),
   updateCycle: (cycleId: string, body: Partial<Omit<CycleWrite, "semesterId">> & { expectedRevision: number }) => requestJson<Cycle>(cyclePath(cycleId), { method: "PATCH", body: JSON.stringify(body) }),
   updateCycleSettings: (cycleId: string, body: {
