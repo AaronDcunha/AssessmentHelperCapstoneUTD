@@ -68,7 +68,8 @@ export function buildSeed() {
     const departmentId = stableId(`department:${r.department}`);
     add('department',r.department,{department_id:departmentId,department_name:r.department});
     const semesterId = stableId(`semester:${r.term}`);
-    add('semester',r.term,{semester_id:semesterId,term_code:r.term,term_name:`${{s:'Spring',u:'Summer',f:'Fall'}[r.term[2]]} 20${r.term.slice(0,2)}`});
+    // User-supplied demo boundaries; other semesters remain unconfigured.
+    add('semester',r.term,{semester_id:semesterId,term_code:r.term,term_name:`${{s:'Spring',u:'Summer',f:'Fall'}[r.term[2]]} 20${r.term.slice(0,2)}`,starts_on:r.term === '26f' ? '2026-08-31' : null,ends_on:r.term === '26f' ? '2026-12-16' : null});
     const courseKey = `${r.department}:${r.course_code}`, title = normalizeTitle(r.course_title);
     const previous = titles.get(`${courseKey}:${r.term}`);
     if (previous && previous !== title) throw new Error(`Conflicting titles within term: ${courseKey} ${r.term}`);

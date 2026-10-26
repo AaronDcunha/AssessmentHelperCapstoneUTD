@@ -1,4 +1,11 @@
 ASSESSMENT HELPER IMPLEMENTATION NOTES
+October 26, 2026 demo semester seed dates:
+User supplied Fall 2026 boundaries: August 31 through December 16, 2026.
+Newly seeded Fall 2026 records include those dates; other semesters remain null.
+Reseeding preserves existing semester boundaries and revisions, including AC edits.
+Existing null boundaries are not backfilled by reseeding. The local Fall 2026
+record was configured separately during review. No reset or reseed is required.
+
 October 26, 2026 weekly progress handoff:
 Core Faculty implementation retained; this pass adds focused service regression
 coverage only. No UI, History, schema or application database changes. See the
