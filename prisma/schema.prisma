@@ -411,6 +411,8 @@ model FacultyIssue {
 // A template contains criteria used during classroom observations.
 model ObservationTemplate {
   templateId   String   @id @default(uuid()) @map("template_id") @db.Uuid
+  creationKey  String?  @unique @map("creation_key") @db.Uuid
+  creationHash String?  @map("creation_hash")
   templateName String   @map("template_name")
   revision     Int      @default(0)
   status       String   @default("draft")

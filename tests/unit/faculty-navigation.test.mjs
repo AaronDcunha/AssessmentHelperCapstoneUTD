@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync, existsSync, readdirSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -103,15 +103,14 @@ test("Admin tools require effective permission, not just an Admin label", async 
     currentUser = { ...original, roles: ["Admin"] };
     const layout = load("src/app/(main)/layout.tsx").default;
     assert.deepEqual((await layout({children:null})).props.authorizedSections.map(s=>s.id),["faculty"]);
+    // Temporary fixture grants no longer add demo shortcuts to the product shell.
     currentUser = { ...currentUser, permissions: [...original.permissions, "test:admin"] };
+    assert.deepEqual((await layout({children:null})).props.authorizedSections.map(s=>s.id),["faculty"]);
+    currentUser = { ...currentUser, permissions: [...original.permissions, "users.read"] };
     const sections = (await layout({children:null})).props.authorizedSections;
     assert.deepEqual(sections.map(s=>s.id),["faculty","admin"]);
     const links = sections[1].items.map(item=>item.href);
-    const pages = readdirSync(resolve(root,"src/app/(main)/test"),{recursive:true})
-      .map(path=>String(path).replaceAll('\\','/'))
-      .filter(path=>path==='page.tsx'||path.endsWith('/page.tsx'))
-      .flatMap(path=>path.startsWith('[area]/') ? ['/test/faculty','/test/ac','/test/admin'] : ['/test'+(path==='page.tsx'?'':'/'+path.slice(0,-'/page.tsx'.length))]);
-    assert.deepEqual([...links].sort(),[...pages,'/auth-test'].sort());
+    assert.deepEqual(links,["/admin","/admin/users"]);
     assert.equal(links.length,new Set(links).size);
   } finally { currentUser = original; }
 });

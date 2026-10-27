@@ -23,6 +23,7 @@ Authentication backend: see `AUTH_BACKEND.md` for database-backed login, develop
 | `Implementation_Notes.txt` | Current decisions and remaining implementation questions |
 | `ADMIN_BACKEND.md` | Implemented Admin endpoints, access rules, migration, safeguards and verification |
 | `AC_CONFIGURATION_BACKEND.md` | Implemented configuration endpoints, access rules, migrations, and verification |
+| `AC_CONFIGURATION_FRONTEND.md` | Issue #52 cycle/settings/template editor, unsaved preview, API integration and verification |
 
 | `AC_MONITORING_FRONTEND.md` | AC list/cycle integration, business page guards, deferred work and verification |
 | `PROJECT_STRUCTURE.md` | Proposed directories and responsibilities |

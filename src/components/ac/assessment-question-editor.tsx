@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, type ComponentProps } from "react";
+import { useId, type ComponentProps, type ReactNode } from "react";
 import { Input } from "@/components/ui/form-fields";
 import { TextAction } from "@/components/ui/text-action";
 
@@ -14,12 +14,13 @@ export type AssessmentQuestionEditorProps = Omit<ComponentProps<"div">, "childre
   readOnly?: boolean;
   error?: string;
   hint?: string;
+  children?: ReactNode;
 };
 
 /** Parent owns stable IDs/keys, numbering, validation and saving. Read-only also blocks removal. */
 export function AssessmentQuestionEditor({
   questionId, questionNumber, value, onChange, onRemove,
-  disabled = false, readOnly = false, error, hint, className, ...props
+  disabled = false, readOnly = false, error, hint, className, children, ...props
 }: AssessmentQuestionEditorProps) {
   const instanceId = useId();
   const headingId = `${instanceId}-heading`;
@@ -48,6 +49,7 @@ export function AssessmentQuestionEditor({
         disabled={disabled} readOnly={readOnly} error={error} hint={hint}
         className="h-control-56 px-ah-16 py-ah-16" wrapperClassName="min-h-control-88"
       />
+      {children}
     </div>
   );
 }

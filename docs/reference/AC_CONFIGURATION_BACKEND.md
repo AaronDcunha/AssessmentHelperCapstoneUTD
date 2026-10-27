@@ -68,6 +68,19 @@ Lists return `{items,pageInfo:{nextCursor,hasMore}}`, sorted by UUID ascending. 
 
 Full templates contain `{id,title,status,publishedAt,revision,criteria,commentPrompts,signatureLabels}`. There is no separate version field/model. PATCH supports drafts and published records, following the October 18 decision. Editing a published template does not republish it or change its priority for `/current`. Previously published records remain readable and linked assessments are not reassigned.
 
+October 27 creation retry protection: POST also accepts optional `creationKey` (UUID).
+The editor supplies one key per creation attempt and reuses the exact payload/key on
+retry. A unique nullable `creation_key` and a `creation_hash` bind the request to its
+creator and original content (JSON property order is ignored). Replays return the
+existing template's current representation without rewriting it or its criteria;
+concurrent requests converge on one record. Reusing a key with different content or
+a different creator returns 409 `CREATION_KEY_REUSED`. Existing clients may omit the
+key, but then do not receive retry protection. Keys/hashes are not in public responses.
+Replayed POSTs retain the existing 201 response convention. The additive migration
+`20261027000000_template_creation_idempotency` is applied locally; no reset/reseed.
+The isolated configuration integration suite verifies lost-response recovery,
+concurrent retries, creator/content mismatch, later edits and independent keys.
+
 Each criterion is `{id?,key,prompt,type,required,order,options?,weight?}`. Types are `rating` and `text`; rating options are `{value: integer,label}` with unique values. Criterion keys, supplied IDs and nonnegative integer orders must be unique in the template. There must be 1-100 criteria; rating criteria require 2-20 options. Weight defaults to 1 and must be finite/nonnegative. Text criteria cannot have options.
 
 Supplied arrays replace that section; omitted sections remain unchanged. Preserve criterion IDs when editing existing questions, including order swaps. Foreign IDs are rejected. Removing criteria is blocked once any assessment references the template; create a new template for major changes. Editing existing question text intentionally changes what older linked assessments display. Stored assessment response JSON is not rewritten.

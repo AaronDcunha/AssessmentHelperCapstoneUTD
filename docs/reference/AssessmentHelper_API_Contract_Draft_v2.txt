@@ -400,7 +400,11 @@ GET /api/observation-templates/current (COMPLETED)
   R: most recently published active Template; 404 if none applies.
   Applicability is university-wide; cycleId is not supported (422).
 POST /api/observation-templates (COMPLETED) -- templates.manage, university-wide.
-  B: {title,criteria:Criterion[],commentPrompts,signatureLabels}. R: draft Template.
+  B: {title,criteria:Criterion[],commentPrompts,signatureLabels,creationKey?:UUID}. R: draft Template.
+  Reuse creationKey with the identical original payload to safely retry creation.
+  Returns the existing Template on replay (201); does not overwrite later edits.
+  Keys are unique and bound to the creator/content; mismatch returns 409 CREATION_KEY_REUSED.
+  Omitted keys retain legacy behavior without retry protection.
 PATCH /api/observation-templates/{templateId} (COMPLETED) -- templates.manage.
   B: {expectedRevision,title?,criteria?:Criterion[],commentPrompts?,signatureLabels?}.
   R: Template. Proposed arrays replace supplied sections; omitted sections unchanged.
