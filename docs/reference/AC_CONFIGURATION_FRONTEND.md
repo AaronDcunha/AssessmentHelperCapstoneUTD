@@ -27,6 +27,29 @@ required indicators, comments and signature labels through shared form/rating/Se
 components. Return keeps the editor and its current section. Demonstration responses
 never save a configuration or submit an assessment. No duplicate preview route.
 
+October 27 navigation follow-up: dirty template edits register a shared capture-phase
+link guard, so sidebar and other same-tab internal links ask before discarding edits.
+Cancel stops the click before the client router; confirming leaves normally. Saved
+or unmounted editors remove the guard. Refresh/close retain native unload protection.
+Cancelable Navigation API Back/Forward traversals also ask; browsers that do not
+expose cancelable traversal events cannot provide this same-document history guard.
+No history entries or Next.js router methods are patched. Focused event tests cover
+Stay/Discard, cleanup, modified/new-tab/download/hash clicks, unload and traversals.
+
+October 27 creation retry follow-up: new-template POSTs include a UUID creationKey.
+An uncertain response retains the attempted payload/key in the mounted editor and
+locks fields/Cancel; Retry Save resends that original request to recover its draft.
+Success adopts the returned ID/revision and subsequent saves use PATCH. Confirmed
+initial client rejections permit correction. Protection applies to retries in this
+editor session; deliberately discarding the editor and starting a new template is
+a new creation. Backend/database integration and focused unit checks passed; live
+browser verification of the new retry state has not been run.
+
+October 27 broader verification: the full 171-test unit suite passes with optional
+database query planning enabled (no skipped tests), and the production build passes
+outside the sandbox. Two old navigation assertions were aligned with commit 70941d6's
+intentional removal of demo shortcuts. Product navigation/permissions were unchanged.
+
 ## Reference mapping and frontend choices
 
 12 supplied image files contain 13 screen/state references: 1 dashboard, 2 cycle

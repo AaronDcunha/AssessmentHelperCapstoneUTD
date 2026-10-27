@@ -78,14 +78,15 @@ test("The actual server guard redirects anonymous, Faculty, AC and fixture-only 
   }
 });
 
-test("The shared shell marks /admin active, retains Faculty/test links and uses real identity", async () => {
+test("The shared shell marks /admin active, retains Faculty links, omits demo shortcuts and uses real identity", async () => {
   currentUser = { ...admin, permissions: [...admin.permissions, "test:admin"] };
   const shell = await MainLayout({ children: await Dashboard() });
   const faculty = shell.props.authorizedSections.find(section => section.id === "faculty");
   const adminSection = shell.props.authorizedSections.find(section => section.id === "admin");
   assert.equal(faculty.items.length, 5);
   assert.deepEqual(adminSection.items.slice(0, 4).map(item => item.href), ["/admin", ...plannedRoutes]);
-  assert.deepEqual(adminSection.items.slice(4).map(item => item.href), adminTestPages.map(item => item.href));
+  assert.equal(adminSection.items.length, 4);
+  assert.ok(!shell.props.authorizedSections.flatMap(section => section.items).some(item => adminTestPages.some(testPage => testPage.href === item.href)));
   const { acPermissions, canAccessAcPage } = load("src/lib/ac-permissions.ts");
   const acSection = shell.props.authorizedSections.find(section => section.id === "ac");
   const acIds = ["ac.dashboard", "ac.cycles", "ac.faculty", "ac.progress", "ac.template", "ac.reports", "ac.semester"];

@@ -30,6 +30,8 @@ try {
   await migrationPool.query(initial);
   await migrationPool.query(await readFile(new URL('../../prisma/migrations/20261023000000_ac_configuration/migration.sql',import.meta.url),'utf8'));
   await migrationPool.query(await readFile(new URL('../../prisma/migrations/20261025000000_admin_backend/migration.sql',import.meta.url),'utf8'));
+  await migrationPool.query(await readFile(new URL('../../prisma/migrations/20261026000000_faculty_workflows/migration.sql',import.meta.url),'utf8'));
+  await migrationPool.query(await readFile(new URL('../../prisma/migrations/20261027000000_template_creation_idempotency/migration.sql',import.meta.url),'utf8'));
   await prisma.semester.createMany({data:[{semesterId,termCode:'26f',termName:'Fall 2026'},{semesterId:otherSemesterId,termCode:'27s',termName:'Spring 2027'}]});
   await prisma.observationTemplate.create({data:{templateId:legacyTemplateId,templateName:'Existing published template',status:'published',isActive:true,publishedAt:new Date('2026-10-19T00:00:00Z'),
     criteria:{create:{criterionId:legacyCriterionId,criterionKey:legacyCriterionId,criterionText:'Existing question',questionType:'RATING',minRating:1,maxRating:5,displayOrder:1,
@@ -72,6 +74,24 @@ try {
     {key:'notes',prompt:'Notes',type:'text',required:false,order:1}];
   const template=await service.createTemplate(prisma,ac,{title:'Test template',criteria:questions,commentPrompts:[],signatureLabels:{observer:'Observer',observee:'Observee'}});
   assert.equal(template.status,'draft'); assert.equal(template.criteria.length,2);
+  const keyedInput={creationKey:randomUUID(),title:'Recoverable draft',criteria:questions,commentPrompts:[{prompt:'Notes',required:false,order:0}]};
+  // The first response is deliberately ignored, as if the connection dropped
+  // after commit. A retry must return the same template and generated child IDs.
+  const committed=await service.createTemplate(prisma,ac,keyedInput);
+  const recovered=await service.createTemplate(prisma,ac,{...keyedInput});
+  assert.deepEqual(recovered,committed);
+  assert.equal((await service.createTemplate(prisma,ac,{commentPrompts:keyedInput.commentPrompts,criteria:questions,title:keyedInput.title,creationKey:keyedInput.creationKey})).id,committed.id);
+  await assert.rejects(()=>service.createTemplate(prisma,ac,{...keyedInput,creationKey:'invalid'}),e=>e.status===422);
+  assert.equal(await prisma.observationTemplate.count({where:{creationKey:keyedInput.creationKey}}),1);
+  await assert.rejects(()=>service.createTemplate(prisma,ac,{...keyedInput,title:'Different draft'}),e=>e.status===409 && e.code==='CREATION_KEY_REUSED');
+  await assert.rejects(()=>service.createTemplate(prisma,{...ac,id:randomUUID()},keyedInput),e=>e.status===409 && e.code==='CREATION_KEY_REUSED');
+  const concurrentInput={...keyedInput,creationKey:randomUUID()};
+  const simultaneous=await Promise.all([service.createTemplate(prisma,ac,concurrentInput),service.createTemplate(prisma,ac,concurrentInput)]);
+  assert.equal(simultaneous[0].id,simultaneous[1].id);
+  assert.equal(await prisma.observationTemplate.count({where:{creationKey:concurrentInput.creationKey}}),1);
+  await service.updateTemplate(prisma,ac,recovered.id,{expectedRevision:0,title:'Edited after creation'});
+  assert.equal((await service.createTemplate(prisma,ac,keyedInput)).title,'Edited after creation');
+  assert.equal((await service.createTemplate(prisma,ac,{...keyedInput,creationKey:randomUUID()})).id===recovered.id,false);
   await assert.rejects(()=>query.getTemplate(prisma,faculty,template.id),e=>e.status===404);
   assert(!(await query.getTemplates(prisma,faculty,new URL('http://test'))).items.some(t=>t.id===template.id));
   const swapped=await service.updateTemplate(prisma,ac,template.id,{expectedRevision:0,criteria:template.criteria.map((c,i)=>({...c,order:1-i}))});

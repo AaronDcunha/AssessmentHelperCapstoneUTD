@@ -7,7 +7,8 @@ import { useApiResource } from "@/components/ac/use-api-resource";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/form-fields";
 import { Section } from "@/components/ui/section";
-import { acApi, type ObservationTemplate, type TemplateSummary } from "@/lib/ac-api";
+import { guardUnsavedNavigation } from "@/lib/unsaved-navigation";
+import { acApi, ApiRequestError, type ObservationTemplate, type ObservationTemplateWrite, type TemplateSummary } from "@/lib/ac-api";
 import { configurationError, moveItem, moveQuestion, newTemplate, templateDraft, templatePayload, type EditorCriterion, type TemplateDraft } from "@/lib/ac-configuration";
 
 const EMPTY: TemplateSummary[] = [];
@@ -81,15 +82,16 @@ function TemplateForm({ initial, onSaved, onDirty, onBusy, reload }: { initial: 
   const [message, setMessage] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [conflict, setConflict] = useState(false);
+  const creationAttempt = useRef<(ObservationTemplateWrite & { creationKey: string }) | null>(null);
+  const [creationUncertain, setCreationUncertain] = useState(false);
   const busy = useRef(false);
   const active = useRef(true);
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const dirty = JSON.stringify(draft) !== JSON.stringify(baseline);
   useEffect(() => { onDirty(dirty); }, [dirty, onDirty]);
   useEffect(() => {
-    const warn = (event: BeforeUnloadEvent) => { if (dirty) event.preventDefault(); };
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
+    if (!dirty) return;
+    return guardUnsavedNavigation(window, document, "Discard unsaved template changes?");
   }, [dirty]);
 
   function edit(action: (current: TemplateDraft) => TemplateDraft) { setDraft(action); setMessage(null); setSuccess(false); }
@@ -110,14 +112,22 @@ function TemplateForm({ initial, onSaved, onDirty, onBusy, reload }: { initial: 
     if (busy.current) return;
     setMessage(null); setSuccess(false); setConflict(false);
     try {
-      const payload = templatePayload(draft);
+      const payload = creationAttempt.current ?? templatePayload(draft);
       if (publish && (!saved || dirty)) throw new Error("Save your current changes before publishing this draft.");
       if (publish && !window.confirm("Publish this saved template for Faculty use?")) return;
       busy.current = true; setSaving(true); onBusy(true);
+      if (!saved && !creationAttempt.current) creationAttempt.current = { ...payload, creationKey: crypto.randomUUID() };
       const result = publish ? await acApi.publishTemplate(saved!.id, saved!.revision)
-        : saved ? await acApi.updateTemplate(saved.id, { ...payload, expectedRevision: saved.revision }) : await acApi.createTemplate(payload);
-      if (active.current) { accept(result); setSuccess(true); setMessage(publish ? "Template published." : result.status === "draft" ? "Draft saved. Publish when ready for Faculty use." : "Published template changes saved."); }
-    } catch (error) { if (active.current) { setMessage(configurationError(error)); setConflict((error as { status?: number }).status === 409); } }
+        : saved ? await acApi.updateTemplate(saved.id, { ...payload, expectedRevision: saved.revision }) : await acApi.createTemplate(creationAttempt.current!);
+      creationAttempt.current = null;
+      if (active.current) { setCreationUncertain(false); accept(result); setSuccess(true); setMessage(publish ? "Template published." : result.status === "draft" ? "Draft saved. Publish when ready for Faculty use." : "Published template changes saved."); }
+    } catch (error) { if (active.current) {
+      const uncertain = !saved && creationAttempt.current !== null && (creationUncertain || !(error instanceof ApiRequestError) || !error.status || error.status >= 500);
+      setCreationUncertain(uncertain);
+      if (!uncertain) creationAttempt.current = null;
+      setMessage(uncertain ? `${configurationError(error)} Creation could not be confirmed. Retry Save to recover the same draft safely. Fields are locked until the result is confirmed.` : configurationError(error));
+      setConflict((error as { status?: number }).status === 409);
+    } }
     finally { busy.current = false; if (active.current) { setSaving(false); onBusy(false); } }
   }
 
@@ -138,7 +148,7 @@ function TemplateForm({ initial, onSaved, onDirty, onBusy, reload }: { initial: 
       {saved && <span className="text-caption text-muted">Revision {saved.revision}</span>}
     </div>
     {saved?.status === "published" && <p className="text-caption text-warning">Saving edits changes this published template in place, including what linked assessments display. Removing referenced questions is restricted by the server.</p>}
-    <fieldset disabled={saving} className="min-w-0 space-y-ah-24">
+    <fieldset disabled={saving || creationUncertain} className="min-w-0 space-y-ah-24">
       <Input label="Template title" maxLength={2000} value={draft.title} onChange={event => edit(current => ({ ...current, title: event.target.value }))} />
       <div role="tabpanel" id="template-panel" aria-labelledby={`template-tab-${section}`} className="space-y-ah-16">
         <h3 className="text-section">{tabs[section]}</h3>
@@ -183,11 +193,11 @@ function TemplateForm({ initial, onSaved, onDirty, onBusy, reload }: { initial: 
     {conflict && <Button variant="secondary" disabled={saving} onClick={reload}>Reload latest template (discard edits)</Button>}
     <div className="flex flex-wrap items-center justify-between gap-ah-16">
       <div className="flex flex-wrap gap-ah-12">
-        <Button variant="secondary" disabled={saving} onClick={() => { if (!dirty || window.confirm("Discard unsaved template changes?")) { setDraft(baseline); setMessage(null); setConflict(false); } }}>Cancel</Button>
+        <Button variant="secondary" disabled={saving || creationUncertain} onClick={() => { if (!dirty || window.confirm("Discard unsaved template changes?")) { setDraft(baseline); setMessage(null); setConflict(false); } }}>Cancel</Button>
         {section > 0 && <Button variant="secondary" disabled={saving} onClick={() => setSection(value => value - 1)}>← Previous section</Button>}
       </div>
       <div className="flex flex-wrap gap-ah-12">
-        <Button disabled={saving} onClick={() => save()}>{saving ? "Saving…" : "Save template"}</Button>
+        <Button disabled={saving} onClick={() => save()}>{saving ? "Saving…" : creationUncertain ? "Retry Save" : "Save template"}</Button>
         {saved?.status === "draft" && <Button variant="secondary" disabled={saving || dirty} onClick={() => save(true)}>Publish template</Button>}
         {section < 2 && <Button variant="secondary" disabled={saving} onClick={() => setSection(value => value + 1)}>Next section →</Button>}
       </div>

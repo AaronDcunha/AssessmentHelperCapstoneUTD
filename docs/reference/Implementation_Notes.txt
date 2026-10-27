@@ -1,4 +1,28 @@
 ASSESSMENT HELPER IMPLEMENTATION NOTES
+October 27, 2026 full branch verification:
+Commit 70941d6 deliberately removed demo/test shortcuts from the product sidebar.
+Updated two stale navigation tests to assert business permissions, absence of demo
+shortcuts and no product access from test:admin alone; production navigation is
+unchanged. All 171 unit tests pass with TEST_DATABASE_PLANS=true (zero skips),
+including read-only local PostgreSQL EXPLAIN checks. Production npm run build
+passes outside the restricted sandbox; the sandbox run stalled in compilation.
+This supersedes older notes that the shared shell retains all test/demo links;
+the direct test routes and their access checks remain available.
+
+October 27, 2026 template creation retry protection:
+Template POST accepts an optional UUID creationKey. Editor retries preserve the
+original payload/key; uncertain outcomes lock edits until confirmed. Database unique
+keys converge repeated/concurrent requests on one draft; creator/content mismatch
+returns 409. Migration 20261027000000_template_creation_idempotency is deployed
+locally without reset/reseed. Existing null keys remain supported. See configuration
+backend/frontend references for contracts, checks and editor-session limits.
+
+October 27, 2026 template navigation guard:
+Unsaved template changes now prompt before sidebar/same-tab internal-link navigation.
+Successful saves and unmount remove protection; refresh/close keep native warnings.
+Cancelable Navigation API history traversals are guarded where the browser supports
+them. See AC_CONFIGURATION_FRONTEND.md for scope and browser limitations.
+
 October 26, 2026 AC Configuration Frontend (issue #52):
 Cycle forms and semester settings now use the implemented configuration payloads,
 real semester choices, revisions and semester-zone deadline conversion. Template

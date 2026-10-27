@@ -160,7 +160,7 @@ export const acApi = {
   getCurrentTemplate: () => requestJson<ObservationTemplate>("/api/observation-templates/current"),
   getTemplates: () => requestList<TemplateSummary>("/api/observation-templates"),
   getTemplate: (templateId: string) => requestJson<ObservationTemplate>(`/api/observation-templates/${encodeURIComponent(templateId)}`),
-  createTemplate: (body: ObservationTemplateWrite) => requestJson<ObservationTemplate>("/api/observation-templates", { method: "POST", body: JSON.stringify(body) }),
+  createTemplate: (body: ObservationTemplateWrite & { creationKey?: string }) => requestJson<ObservationTemplate>("/api/observation-templates", { method: "POST", body: JSON.stringify(body) }),
   updateTemplate: (templateId: string, body: ObservationTemplateWrite & { expectedRevision: number }) => requestJson<ObservationTemplate>(`/api/observation-templates/${encodeURIComponent(templateId)}`, { method: "PATCH", body: JSON.stringify(body) }),
   publishTemplate: (templateId: string, expectedRevision: number) => requestJson<ObservationTemplate>(`/api/observation-templates/${encodeURIComponent(templateId)}/publish`, { method: "POST", body: JSON.stringify({ expectedRevision }) }),
 };
