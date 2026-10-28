@@ -20,7 +20,7 @@ export const facultyPageHeaders = {
   [facultyRoutes.observations]: { title: "Observations", facultyLayout: true },
   [facultyRoutes.history]: {
     title: "Observation History",
-    subtitle: "Review completed observations and submitted forms.",
+    subtitle: "Review your observations across semesters.",
     facultyLayout: true,
   },
   [facultyRoutes.signup]: { title: "Sign Up for Observation", facultyLayout: true },
