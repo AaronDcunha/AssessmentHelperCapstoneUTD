@@ -69,7 +69,7 @@ for (const role of ["faculty", "ac", "admin"]) {
   assert.equal(history.status, 200);
   assert.match(history.headers.get("cache-control"), /no-store/);
   const payload = await history.json();
-  assert.equal(payload.dataSource, "demo");
+  assert.equal(payload.dataSource, undefined);
   assert.deepEqual(payload.items, []);
   assert.deepEqual(payload.pageInfo, { hasMore: false, nextCursor: null });
   const filtered = await (

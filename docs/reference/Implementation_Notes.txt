@@ -650,3 +650,14 @@ provider remains development-only until the separate endpoint implementation.
 October 28 History sample removal: the development own-observation route now
 returns an empty list instead of generated demo observations. Fixtures remain
 for isolated unit tests only; real database reads remain follow-up work.
+
+October 28, 2026 database-backed own-observation endpoint (supersedes History prototype):
+GET /api/me/observations now uses Prisma reads with observations.read.own and
+session-derived observee/selected-observer membership, including for AC/Admin.
+Cycle, semester, participation, exact stored status and existing AC assessment
+categories filter in the database. UUID keyset pagination defaults to 20/max 100;
+cursors are checked within the same caller/filter scope. All responses are private,
+no-store with structured errors. No dummy records, schema changes or mutations.
+The endpoint is shared across History, Dashboard and active Observations; it does
+not impose a current-cycle or completed-only rule. Existing Dashboard aggregates
+remain unchanged. See PERSONAL_OBSERVATIONS_BACKEND.md for the contract and tests.

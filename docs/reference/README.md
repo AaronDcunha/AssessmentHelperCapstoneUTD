@@ -49,3 +49,6 @@ The TXT extracts aid reading; use the Word originals when table structure or for
 ## Maintaining this guide
 
 Record agreed changes in `Implementation_Notes.txt` and update affected guidance, API drafts, and schema designs together. Distinguish confirmed decisions from proposals. No documentation edit alone implements a feature.
+
+Personal observation list: see `PERSONAL_OBSERVATIONS_BACKEND.md` for implemented
+GET /api/me/observations, personal ownership, database filters, pagination and tests.

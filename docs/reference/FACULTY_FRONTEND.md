@@ -76,3 +76,9 @@ compilation succeeded; final build validation is blocked by existing optional
 route-context type signatures in unrelated Admin/AC backend HTTP wrappers.
 Turbopack separately failed while spawning its CSS processing worker. Browser
 visual inspection has not been performed for this pass.
+
+October 28 endpoint implementation supersedes the development-provider limitation
+above: History now receives real personal observation rows from PostgreSQL through
+GET /api/me/observations. See PERSONAL_OBSERVATIONS_BACKEND.md. Mock login identities
+still have no records; the endpoint does not seed sample observations. Dashboard
+and active workflow aggregates are unchanged but may reuse this list endpoint.
