@@ -70,25 +70,13 @@ for (const role of ["faculty", "ac", "admin"]) {
   assert.match(history.headers.get("cache-control"), /no-store/);
   const payload = await history.json();
   assert.equal(payload.dataSource, "demo");
-  assert.equal(payload.items.length, 4);
-  assert.equal(payload.pageInfo.hasMore, false);
-  assert.equal(payload.items[0].section.course.code, "CS 4485");
-  assert.equal(payload.items[0].section.sectionNumber, "001");
-  assert.deepEqual(payload.items[0].participation, ["observee"]);
-  assert.equal(payload.items[0].observer.name, "Professor A");
+  assert.deepEqual(payload.items, []);
+  assert.deepEqual(payload.pageInfo, { hasMore: false, nextCursor: null });
   const filtered = await (
     await request("/api/me/observations?participation=observer&limit=1")
   ).json();
-  assert.equal(filtered.items.length, 1);
-  assert.equal(filtered.pageInfo.hasMore, true);
-  const next = await (
-    await request(
-      `/api/me/observations?participation=observer&limit=1&cursor=${encodeURIComponent(filtered.pageInfo.nextCursor)}`,
-    )
-  ).json();
-  assert.equal(next.items.length, 1);
-  assert.equal(next.pageInfo.hasMore, false);
-  assert.notEqual(next.items[0].id, filtered.items[0].id);
+  assert.deepEqual(filtered.items, []);
+  assert.deepEqual(filtered.pageInfo, { hasMore: false, nextCursor: null });
   const badQuery = await request("/api/me/observations?userId=someone-else");
   assert.equal(badQuery.status, 400);
   assert.equal((await badQuery.json()).error.code, "INVALID_QUERY");
@@ -102,5 +90,5 @@ for (const role of ["faculty", "ac", "admin"]) {
   assert.equal((await request("/api/me/observations")).status, 401);
 }
 console.log(
-  "Passed: history page/API authentication, three roles, session-scoped dummy records, no-store, rejected identity parameters, and logout.",
+  "Passed: history page/API authentication, three roles, no dummy records, no-store, rejected identity parameters, and logout.",
 );

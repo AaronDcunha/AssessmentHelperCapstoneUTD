@@ -12,83 +12,49 @@ const compiled = ts.transpileModule(source, {
 const { parseSubmittedObservationForm: parse } = await import(
   `data:text/javascript;base64,${Buffer.from(compiled.outputText).toString("base64")}`
 );
+
 function resources() {
   return {
-    template: {
-      templateId: "t1",
-      templateName: "Teaching observation",
-      criteria: [
-        { criterionId: "q2", templateId: "t1", criterionText: "Comments", displayOrder: 2 },
-        { criterionId: "q1", templateId: "t1", criterionText: "First question", displayOrder: 1 },
-      ],
-    },
-    assessment: {
-      observationId: "o1",
-      templateId: "t1",
-      assessment: {
-        observationId: "o1",
-        templateId: "t1",
-        responses: { q1: 4, q2: "Recorded comment" },
-        isLocked: true,
-        observerSignedAt: "2026-10-18T11:00:00Z",
-        observeeSignedAt: "2026-10-18T12:00:00Z",
-        completedAt: "2026-10-18T12:00:00Z",
-      },
-    },
+    template: { id: "t1", title: "Teaching observation", criteria: [
+      { id: "q2", prompt: "Comments", order: 2 }, { id: "q1", prompt: "First question", order: 1 },
+    ], commentPrompts: [{ id: "p1", prompt: "Strengths", order: 1 }] },
+    assessment: { observationId: "o1", templateVersionId: "t1", assessment: {
+      observationId: "o1", templateVersionId: "t1", status: "locked", submittedAt: null,
+      answers: [{ criterionId: "q1", value: 0 }, { criterionId: "q2", value: "Recorded comment" }],
+      comments: [{ promptId: "p1", text: "Clear explanations" }], generalComments: "Additional context",
+    } },
   };
 }
-test("Haris fields determine displayed answers and current criterion order without mutating inputs", () => {
-  const input = resources(),
-    before = structuredClone(input);
-  assert.deepEqual(
-    parse("o1", input).questions.map(({ id, answer }) => ({ id, answer })),
-    [
-      { id: "q1", answer: "4" },
-      { id: "q2", answer: "Recorded comment" },
-    ],
-  );
+test("current endpoint shapes preserve ordered answers, zero ratings, and comments without invented timestamps", () => {
+  const input = resources(), before = structuredClone(input), result = parse("o1", input);
+  assert.equal(result.title, "Teaching observation");
+  assert.equal(result.completedAt, null);
+  assert.deepEqual(result.questions.map(q => q.answer), ["0", "Recorded comment", "Clear explanations", "Additional context"]);
   assert.deepEqual(input, before);
-  input.template.criteria[1].criterionText = "Edited current template question";
-  assert.equal(parse("o1", input).questions[0].prompt, "Edited current template question");
 });
-test("another observation/template/criterion cannot be displayed", () => {
+test("another observation or assigned template cannot be displayed", () => {
   assert.throws(() => parse("other", resources()));
-  for (const edit of [
-    (r) => (r.assessment.templateId = "other"),
-    (r) => (r.assessment.assessment.templateId = "other"),
-    (r) => (r.template.templateId = "other"),
-    (r) => (r.template.criteria[0].templateId = "other"),
-  ]) {
-    const input = resources();
-    edit(input);
-    assert.throws(() => parse("o1", input));
+  for (const edit of [r => r.assessment.templateVersionId = "other", r => r.assessment.assessment.templateVersionId = "other", r => r.template.id = "other"]) {
+    const input = resources(); edit(input); assert.throws(() => parse("o1", input));
   }
 });
-test("absent/unlocked/incomplete records are not labeled completed", () => {
-  const input = resources();
-  input.assessment.assessment.isLocked = false;
-  assert.equal(parse("o1", input), null);
-  input.assessment.assessment.isLocked = true;
-  input.assessment.assessment.completedAt = null;
-  assert.equal(parse("o1", input), null);
-  input.assessment.assessment = null;
-  assert.equal(parse("o1", input), null);
+test("absent, draft and submitted forms are not presented as finalized", () => {
+  for (const status of ["draft", "submitted"]) { const input = resources(); input.assessment.assessment.status = status; assert.equal(parse("o1", input), null); }
+  const input = resources(); input.assessment.assessment = null; assert.equal(parse("o1", input), null);
 });
-test("unknown JSON layouts, bad signatures, duplicate criteria and answers fail closed", () => {
+test("malformed answers, duplicates, unknown criteria and invalid dates fail closed", () => {
   for (const edit of [
-    (r) => (r.assessment.assessment.responses = [{ criterionId: "q1", value: 4 }]),
-    (r) => (r.assessment.assessment.responses.unknown = 1),
-    (r) => (r.assessment.assessment.responses.q1 = {}),
-    (r) => (r.assessment.assessment.observerSignedAt = null),
-    (r) => r.template.criteria.push({ ...r.template.criteria[0] }),
-  ]) {
-    const input = resources();
-    edit(input);
-    assert.throws(() => parse("o1", input));
-  }
+    r => r.assessment.assessment.answers[0].value = {},
+    r => r.assessment.assessment.answers[0].criterionId = "other",
+    r => r.assessment.assessment.answers.push(r.assessment.assessment.answers[0]),
+    r => r.template.criteria.push(r.template.criteria[0]),
+    r => r.assessment.assessment.submittedAt = "not-a-date",
+    r => r.assessment.assessment.comments[0].promptId = "unknown",
+    r => r.assessment.assessment.status = "unexpected",
+  ]) { const input = resources(); edit(input); assert.throws(() => parse("o1", input)); }
 });
-test("missing answers remain missing without fabricated scores or labels", () => {
-  const input = resources();
-  input.assessment.assessment.responses = {};
-  assert.ok(parse("o1", input).questions.every(({ answer }) => answer === "No answer recorded"));
+test("missing answers stay missing and an actual submission date is retained", () => {
+  const input = resources(); input.assessment.assessment.answers = []; input.assessment.assessment.submittedAt = "2026-10-18T12:00:00Z";
+  const result = parse("o1", input); assert.equal(result.completedAt, "2026-10-18T12:00:00Z");
+  assert.ok(result.questions.slice(0, 2).every(q => q.answer === "No answer recorded"));
 });

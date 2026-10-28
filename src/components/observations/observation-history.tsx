@@ -46,10 +46,12 @@ export function ObservationHistory({
   records,
   initialState = "ready",
   onRetry,
+  errorMessage,
 }: {
   records: readonly ObservationHistoryRecord[];
   initialState?: HistoryPreviewState;
   onRetry?: () => void;
+  errorMessage?: string;
 }) {
   const [filters, setFilters] = useState(noFilters);
   const [sort, setSort] = useState<HistorySort>({ key: "semester", direction: "desc" });
@@ -381,7 +383,7 @@ export function ObservationHistory({
               {viewState === "error" && (
                 <tr>
                   <td colSpan={6} className={styles.stateCell}>
-                    <p role="alert">Observation history could not be loaded. Please try again.</p>
+                    <p role="alert">{errorMessage ?? "Observation history could not be loaded. Please try again."}</p>
                     <Button variant="secondary" onClick={onRetry ?? (() => router.refresh())}>
                       Try again
                     </Button>
@@ -436,10 +438,10 @@ export function ObservationHistory({
               >
                 <h3 className="text-section">{form.title}</h3>
                 <p className="text-caption text-muted">
-                  Completed{" "}
-                  <time dateTime={form.completedAt}>
+                  Submitted{" "}
+                  {form.completedAt ? <time dateTime={form.completedAt}>
                     {new Date(form.completedAt).toLocaleString()}
-                  </time>
+                  </time> : "Date unavailable"}
                 </p>
                 <dl className="space-y-ah-16">
                   {form.questions.map((item) => (

@@ -632,3 +632,21 @@ History UI and current main's Faculty workflows, shared shell and authorization.
 Removed the unused FacultyHistoryScreen duplicate. The own-observation API
 remains an opt-in development prototype; real records, submitted-form alignment,
 notifications, shared delivery/email and alerts belong to the next endpoint branch.
+
+October 28, 2026 History frontend endpoint alignment:
+History retains its existing toolbar/table and uses shared typography, radius,
+color and border tokens without custom surface shadows. It now renders in all
+build modes; preview query overrides remain development-only. The existing
+GET /api/me/observations client handles private paginated reads, cancellation,
+loading/empty/denied/error states and retry. Its list adapter accepts the current
+nested semester response without requiring the old redundant semesterId.
+The submitted-form reader now consumes existing observation assessment/template
+endpoints: templateVersionId, id/title/order, answer/comment arrays, and general
+comments. It displays locked forms only, rejects mismatched or malformed data,
+and shows unavailable timestamps without inventing completion dates.
+No backend, authentication, schema or database changes are included. The own-list
+provider remains development-only until the separate endpoint implementation.
+
+October 28 History sample removal: the development own-observation route now
+returns an empty list instead of generated demo observations. Fixtures remain
+for isolated unit tests only; real database reads remain follow-up work.

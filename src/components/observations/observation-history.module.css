@@ -12,19 +12,19 @@
 }
 .roleTabs {
   display: inline-flex;
-  padding: 3px;
+  padding: 4px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-ah-8);
   flex-shrink: 0;
   background: var(--surface);
 }
 .roleTabs button {
-  padding: 5px 14px;
+  padding: 8px 16px;
   min-height: 30px;
   color: var(--muted);
-  font-size: 13px;
-  line-height: 20px;
-  border-radius: 5px;
+  font-size: var(--text-label);
+  line-height: var(--text-label--line-height);
+  border-radius: var(--radius-ah-8);
   font-weight: 500;
 }
 .roleTabs button[aria-pressed="true"] {
@@ -65,11 +65,11 @@
 }
 .search input {
   height: 38px;
-  border-radius: 6px;
+  border-radius: var(--radius-ah-8);
   padding: 8px 10px 8px 34px;
   background: var(--surface);
-  font-size: 13px;
-  line-height: 20px;
+  font-size: var(--text-label);
+  line-height: var(--text-label--line-height);
 }
 .search::before {
   content: "";
@@ -103,8 +103,8 @@
   height: 38px;
   min-height: 38px;
   padding: 7px 11px;
-  border-radius: 6px;
-  font-size: 13px;
+  border-radius: var(--radius-ah-8);
+  font-size: var(--text-label);
   font-weight: 500;
   gap: 8px;
   white-space: nowrap;
@@ -125,9 +125,8 @@
   width: min(340px, calc(100vw - 48px));
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 18px;
-  box-shadow: 0 12px 32px rgb(25 35 41 / 12%);
+  border-radius: var(--radius-ah-12);
+  padding: 16px;
 }
 .pickerHeading {
   display: flex;
@@ -136,14 +135,14 @@
   padding-bottom: 16px;
 }
 .pickerHeading strong {
-  font-size: 15px;
-  line-height: 22px;
+  font-size: var(--text-body);
+  line-height: var(--text-body--line-height);
   font-weight: 600;
 }
 .pickerHeading > span {
   color: var(--muted);
-  font-size: 12px;
-  line-height: 17px;
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
 }
 .semesterGrid {
   display: grid;
@@ -160,17 +159,17 @@
   aspect-ratio: 1;
   padding: 8px 4px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-ah-8);
   color: var(--foreground);
   background: var(--surface);
-  font-size: 14px;
-  line-height: 20px;
+  font-size: var(--text-label);
+  line-height: var(--text-label--line-height);
   font-weight: 500;
 }
 .semesterTile small {
   color: var(--muted);
-  font-size: 12px;
-  line-height: 18px;
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
   font-weight: 400;
 }
 .semesterTile:hover:not(:disabled) {
@@ -181,7 +180,6 @@
   border-color: var(--sidebar);
   background: var(--light);
   color: var(--sidebar);
-  box-shadow: inset 0 0 0 1px var(--sidebar);
 }
 .semesterTile:disabled {
   background: var(--neutral-bg);
@@ -199,8 +197,8 @@
   gap: 10px;
   min-height: 46px;
   padding: 10px 12px;
-  border-radius: 6px;
-  font-size: 14px;
+  border-radius: var(--radius-ah-8);
+  font-size: var(--text-label);
   text-align: left;
 }
 .statusOptions button:hover {
@@ -213,7 +211,7 @@
 .statusCount {
   margin-left: auto;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-caption);
 }
 .check {
   width: 14px;
@@ -237,10 +235,9 @@
 .tableScroll {
   width: 100%;
   overflow-x: auto;
-  border: 1px solid color-mix(in srgb, var(--border) 78%, var(--muted));
-  border-radius: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-ah-8);
   background: var(--surface);
-  box-shadow: 0 1px 3px color-mix(in srgb, var(--foreground) 5%, transparent);
 }
 .tableScroll:focus-visible {
   outline-offset: 3px;
@@ -259,14 +256,14 @@
   padding: 10px 12px;
   text-align: center;
   vertical-align: middle;
-  background: color-mix(in srgb, var(--background) 78%, var(--border));
+  background: var(--neutral-bg);
   border-bottom: 1px solid var(--border);
   color: var(--muted);
-  font-size: 11px;
-  line-height: 16px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.025em;
+  font-size: var(--text-label);
+  line-height: var(--text-label--line-height);
+  font-weight: var(--text-label--font-weight);
+  text-transform: none;
+  letter-spacing: 0;
 }
 .table th > div,
 .table td > div {
@@ -281,25 +278,25 @@
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   color: var(--foreground);
-  font-size: 14px;
-  line-height: 20px;
+  font-size: var(--text-body);
+  line-height: var(--text-body--line-height);
   font-weight: 400;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   overflow-wrap: anywhere;
 }
 .table td:first-child {
-  font-weight: 600;
+  font-weight: var(--text-label--font-weight);
 }
 .table td:nth-child(2),
 .table td:nth-child(3) {
-  font-size: 13px;
+  font-size: var(--text-label);
   color: var(--muted);
 }
 .table tbody tr:last-child td {
   border-bottom: none;
 }
 .table tbody tr:hover td {
-  background: color-mix(in srgb, var(--surface) 65%, var(--neutral-bg));
+  background: var(--background);
 }
 .sortButton {
   position: relative;
@@ -339,13 +336,13 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: var(--text-label);
 }
 .table .viewForm {
   min-height: 34px;
   padding: 6px 12px;
-  font-size: 13px;
-  line-height: 20px;
+  font-size: var(--text-label);
+  line-height: var(--text-label--line-height);
   font-weight: 500;
   white-space: nowrap;
   background: var(--surface);
@@ -378,7 +375,7 @@
   width: 88px;
   max-width: 100%;
   height: 34px;
-  border-radius: 6px;
+  border-radius: var(--radius-ah-8);
 }
 .skeletonRow td:nth-child(3) .skeleton {
   width: 62%;
@@ -391,7 +388,7 @@
 }
 .formSkeleton {
   display: grid;
-  gap: 18px;
+  gap: 16px;
   padding-block: 16px;
 }
 .formSkeleton .skeleton {
@@ -416,15 +413,15 @@
 .resultCount {
   margin-top: 16px;
   color: var(--muted);
-  font-size: 12px;
-  line-height: 20px;
+  font-size: var(--text-caption);
+  line-height: var(--text-label--line-height);
 }
 .clearFilters {
   min-width: 0;
   min-height: 38px;
   padding: 0 4px;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: var(--text-caption);
 }
 @media (min-width: 1440px) {
   .table td {
@@ -432,7 +429,7 @@
   }
   .table th {
     height: 52px;
-    font-size: 12px;
+    font-size: var(--text-caption);
   }
 }
 @media (max-width: 767px) {
@@ -469,7 +466,6 @@
 .search input:focus-visible {
   outline: 1px solid var(--sidebar);
   outline-offset: 1px;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--light) 60%, transparent);
 }
 
 .roleTabs {
@@ -485,10 +481,10 @@
 }
 .roleIndicator {
   position: absolute;
-  top: 3px;
-  bottom: 3px;
+  top: 4px;
+  bottom: 4px;
   left: 0;
-  border-radius: 5px;
+  border-radius: var(--radius-ah-8);
   background: var(--light);
   opacity: 0;
   pointer-events: none;

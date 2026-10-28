@@ -140,3 +140,9 @@ test("invalid/duplicate observations and inconsistent semester labels fail close
   ])
     assert.throws(() => parse(value));
 });
+
+test("current backend observation shape accepts the nested semester without a redundant semesterId", () => {
+  const record = structuredClone(get(user, enabled)[0]);
+  delete record.section.semesterId;
+  assert.equal(parse({ items: [record] })[0].semester, record.section.semester.name);
+});

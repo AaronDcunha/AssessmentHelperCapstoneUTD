@@ -15,6 +15,7 @@ export function ConnectedObservationHistory({
   const [result, setResult] = useState<{
     state: HistoryPreviewState;
     records: ObservationHistoryRecord[];
+    errorMessage?: string;
   }>({ state: "loading", records: [] });
 
   useEffect(() => {
@@ -30,6 +31,7 @@ export function ConnectedObservationHistory({
             state:
               error instanceof ObservationApiError && error.status === 403 ? "denied" : "error",
             records: [],
+            errorMessage: error instanceof ObservationApiError ? error.message : undefined,
           });
       }
     }
@@ -41,6 +43,7 @@ export function ConnectedObservationHistory({
     <ObservationHistory
       records={stateOverride === "empty" ? [] : result.records}
       initialState={stateOverride && stateOverride !== "empty" ? stateOverride : result.state}
+      errorMessage={result.errorMessage}
       onRetry={() => {
         setResult({ state: "loading", records: [] });
         setAttempt((value) => value + 1);

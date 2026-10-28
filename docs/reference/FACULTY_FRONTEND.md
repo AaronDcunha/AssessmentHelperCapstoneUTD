@@ -56,3 +56,23 @@ The earlier correction pass checked the original 10 canonical Faculty routes and
 The History browser check passed at desktop and mobile sizes: actual sidebar mouse clicks reached `/observations/history`, the page returned HTTP 200, History was the active item, all three filters and five table columns rendered, role changes updated the result count, reload/direct access worked, keyboard focus remained visible, and no page overflow occurred. Captures are in `.next/history-check/` as temporary build artifacts.
 
 The dashboard and related rendered pages were visually inspected against the supplied Figma references. Sample records/semester/identity in those references cannot be treated as real Faculty records. The anonymous profile, missing AC/Admin authorization, missing non-dashboard cycle subtitle, and record-empty/disabled states are intentional integration limitations. The History page follows screenshot 12's filter/table layout with a real empty state rather than its sample records.
+
+### October 28 History frontend alignment
+The History UI now uses shared typography, radii and surface tokens and removes
+custom shadows. It renders outside development and handles endpoint failures
+through its normal retry/error states; preview state overrides are development-only.
+Its list adapter supports the current nested semester shape. Its form dialog reads
+the existing assessment/template contracts, including answer arrays, configured
+comments and general comments. Missing submission timestamps display as unavailable.
+Draft/submitted forms are not presented as finalized. The own-observation list
+backend remains a development provider pending the separate endpoint branch.
+
+Validation for the October 28 frontend pass: lint passed; the full Node suite
+passed with one existing skipped test, and the focused adapter/API regression
+suite passed all 23 tests. The existing History HTTP integration test passed
+against localhost (authentication, three roles, ownership-scoped development
+records, no-store, rejected identity parameters and logout). Webpack production
+compilation succeeded; final build validation is blocked by existing optional
+route-context type signatures in unrelated Admin/AC backend HTTP wrappers.
+Turbopack separately failed while spawning its CSS processing worker. Browser
+visual inspection has not been performed for this pass.

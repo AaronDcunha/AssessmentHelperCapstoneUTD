@@ -31,7 +31,7 @@ export function parseObservationHistoryResponse(value: unknown): ObservationHist
     )
       throw new Error("Invalid participation.");
     const participation = record.participation[0] as "observee" | "observer";
-    if (text(section.semesterId) !== text(semester.id)) throw new Error("Mismatched semester.");
+    if (section.semesterId !== undefined && text(section.semesterId) !== text(semester.id)) throw new Error("Mismatched semester.");
     const other =
       participation === "observer"
         ? object(record.observee)

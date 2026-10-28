@@ -1,6 +1,5 @@
 import { checkApiPermission } from "@/server/permissions";
 import {
-  getDemoObservationHistory,
   ObservationQueryError,
   queryPersonalObservations,
 } from "@/server/queries/demo-observation-history";
@@ -35,7 +34,8 @@ export async function GET(request: Request) {
   }
   try {
     return Response.json(
-      queryPersonalObservations(getDemoObservationHistory(user), new URL(request.url).searchParams),
+      // No sample records in the live UI. Database reads belong to the endpoint follow-up.
+      queryPersonalObservations([], new URL(request.url).searchParams),
       { headers },
     );
   } catch (error) {
