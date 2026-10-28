@@ -1,26 +1,60 @@
 import { ButtonLink } from "@/components/ui/button";
 import { facultyRoutes } from "@/components/observations/faculty-routes";
+import { requirePermission } from "@/server/permissions";
+import { DashboardForbidden, getFacultyDashboard, type FacultyDashboard } from "@/server/queries/faculty-dashboard";
+import { redirect } from "next/navigation";
+import { FacultyCycleSelector } from "@/components/observations/faculty-cycle-selector";
 
-export default function FacultyDashboardPage() {
+export const dynamic = "force-dynamic";
+
+const evaluationLabels = { due: "Due", overdue: "Overdue", notDue: "Not due", unknown: "Unknown", ineligible: "Ineligible" };
+
+export default async function FacultyDashboardPage() {
+  const user = await requirePermission("profile.read.own");
+  let dashboard: FacultyDashboard | null = null;
+  try {
+    dashboard = await getFacultyDashboard(user);
+  } catch (error) {
+    if (error instanceof DashboardForbidden) redirect("/forbidden");
+    // A read failure is unavailable data, never a fabricated zero or empty history.
+  }
+  const observation = dashboard?.currentObservation;
+  const lastEvaluation = dashboard?.evaluation.lastCompletedEvaluation;
+  const observationLabel = !dashboard || !dashboard.access.observations || dashboard.pendingObserverRequestCount === null ? "Unavailable"
+    : observation ? observation.status.replaceAll("_", " ").toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase())
+    : "No current observation";
+
   return (
     <div className="space-y-ah-24">
+      <FacultyCycleSelector dashboard={dashboard} />
       <section
         aria-label="Dashboard status"
         className="grid grid-cols-1 gap-ah-16 md:grid-cols-3"
       >
         <article className="flex min-h-[148px] flex-col justify-center gap-ah-8 rounded-ah-8 border border-border bg-surface p-ah-24">
           <p className="text-body text-muted">Evaluation status</p>
-          <p className="text-metric text-ink">Due</p>
+          <p className="text-metric text-ink" title={dashboard?.evaluation.reason}>
+            {dashboard?.access.evaluation ? evaluationLabels[dashboard.evaluation.status] : "Unavailable"}
+          </p>
+          <p className="text-caption text-muted">
+            Last completed: {lastEvaluation?.semester ?? (dashboard?.access.evaluation ? "None recorded" : "Unavailable")}
+          </p>
+          {dashboard?.evaluation.status === "unknown" && <p className="text-caption text-muted">{dashboard.evaluation.reason}</p>}
         </article>
 
         <article className="flex min-h-[148px] flex-col justify-center gap-ah-8 rounded-ah-8 border border-border bg-surface p-ah-24">
           <p className="text-body text-muted">Current observation</p>
-          <p className="text-section text-ink">Confirmed</p>
+          <p className="text-section text-ink">{observationLabel}</p>
+          {dashboard?.cycleReason && <p className="text-caption text-muted">{dashboard.cycleReason}</p>}
+          {observation && <p className="text-caption text-muted">{observation.course}.{observation.section} · {observation.participation === "observee" ? "As Observee" : "As Observer"}</p>}
+          {observation?.scheduledAt && <time dateTime={observation.scheduledAt} className="text-caption text-muted">{new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: dashboard?.cycle?.timeZone ?? "America/Chicago" }).format(new Date(observation.scheduledAt))}</time>}
         </article>
 
         <article className="flex min-h-[148px] flex-col justify-center gap-ah-8 rounded-ah-8 border border-border bg-surface p-ah-24">
           <p className="text-body text-muted">Observer requests</p>
-          <p className="text-section text-ink">2 pending</p>
+          <p className="text-section text-ink">
+            {dashboard?.pendingObserverRequestCount != null ? `${dashboard.pendingObserverRequestCount} pending` : "Unavailable"}
+          </p>
         </article>
       </section>
 
@@ -46,12 +80,16 @@ export default function FacultyDashboardPage() {
           Recent activity
         </h2>
         <div className="space-y-ah-16 rounded-ah-8 border border-border bg-surface p-ah-24">
-          <p className="text-body text-ink">
-            Your evaluation is due this semester.
-          </p>
-          <p className="text-body text-ink">
-            Two observer requests are awaiting a response.
-          </p>
+          {!dashboard ? <p className="text-body text-muted" role="status">Dashboard data is temporarily unavailable. Please try again later.</p>
+            : !dashboard.access.activity ? <p className="text-body text-muted">Recent activity is not available with your current permissions.</p>
+            : dashboard.recentActivity.length === 0 ? <p className="text-body text-muted">No recent activity.</p>
+            : dashboard.recentActivity.map((activity) => <article key={activity.id} className="space-y-ah-4">
+              <p className="text-label text-ink">{activity.title}</p>
+              <p className="text-body text-ink">{activity.message}</p>
+              <time dateTime={activity.createdAt} className="text-caption text-muted">
+                {new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "America/Chicago" }).format(new Date(activity.createdAt))}
+              </time>
+            </article>)}
         </div>
       </section>
     </div>

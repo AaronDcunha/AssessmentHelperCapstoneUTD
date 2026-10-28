@@ -1,4 +1,5 @@
 import { SignupScreen } from "@/components/observations/faculty-screens";
+import { facultyPageData } from "@/server/queries/faculty-page-data";
 
-export default function Page() { return <SignupScreen />; }
+export default async function Page() { const { data } = await facultyPageData(); return <SignupScreen data={data} />; }
 

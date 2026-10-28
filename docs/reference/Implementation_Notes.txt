@@ -1,4 +1,251 @@
 ASSESSMENT HELPER IMPLEMENTATION NOTES
+October 27, 2026 full branch verification:
+Commit 70941d6 deliberately removed demo/test shortcuts from the product sidebar.
+Updated two stale navigation tests to assert business permissions, absence of demo
+shortcuts and no product access from test:admin alone; production navigation is
+unchanged. All 171 unit tests pass with TEST_DATABASE_PLANS=true (zero skips),
+including read-only local PostgreSQL EXPLAIN checks. Production npm run build
+passes outside the restricted sandbox; the sandbox run stalled in compilation.
+This supersedes older notes that the shared shell retains all test/demo links;
+the direct test routes and their access checks remain available.
+
+October 27, 2026 template creation retry protection:
+Template POST accepts an optional UUID creationKey. Editor retries preserve the
+original payload/key; uncertain outcomes lock edits until confirmed. Database unique
+keys converge repeated/concurrent requests on one draft; creator/content mismatch
+returns 409. Migration 20261027000000_template_creation_idempotency is deployed
+locally without reset/reseed. Existing null keys remain supported. See configuration
+backend/frontend references for contracts, checks and editor-session limits.
+
+October 27, 2026 template navigation guard:
+Unsaved template changes now prompt before sidebar/same-tab internal-link navigation.
+Successful saves and unmount remove protection; refresh/close keep native warnings.
+Cancelable Navigation API history traversals are guarded where the browser supports
+them. See AC_CONFIGURATION_FRONTEND.md for scope and browser limitations.
+
+October 26, 2026 AC Configuration Frontend (issue #52):
+Cycle forms and semester settings now use the implemented configuration payloads,
+real semester choices, revisions and semester-zone deadline conversion. Template
+editing supports drafts/published records, all three sections, preserved IDs/custom
+scales, save/publication and unsaved preview. No backend/schema/seed, Faculty,
+History, Admin or monitoring changes. See AC_CONFIGURATION_FRONTEND.md for reference
+mapping, frontend assumptions and controlled verification; no real configuration
+records were changed for demonstrations. This supersedes older configuration-form
+frontend deferrals, without changing the implemented backend contract.
+
+October 26, 2026 demo semester seed dates:
+User supplied Fall 2026 boundaries: August 31 through December 16, 2026.
+Newly seeded Fall 2026 records include those dates; other semesters remain null.
+Reseeding preserves existing semester boundaries and revisions, including AC edits.
+Existing null boundaries are not backfilled by reseeding. The local Fall 2026
+record was configured separately during review. No reset or reseed is required.
+
+October 26, 2026 weekly progress handoff:
+Core Faculty implementation retained; this pass adds focused service regression
+coverage only. No UI, History, schema or application database changes. See the
+weekly handoff in FACULTY_DASHBOARD_BACKEND.md for fresh check results, remaining
+configuration/AC integration work and working assumptions awaiting team confirmation.
+Do not treat earlier populated/concurrency/build results as rerun in this pass.
+
+October 26, 2026 Faculty workflow completion (supersedes earlier blocked Faculty notes):
+Current user authorized documented assumptions and necessary additive migrations.
+Eligibility uses current rank intervals, prior evaluation/teaching/hire evidence,
+first-semester exclusion and voluntary signup; missing all evidence stays Unknown.
+Relevant cycles and active participant observations have verified explicit selectors.
+Generation/release, initial invitations, accepted meeting references, transactional
+final pairing/cancellation, retained attempts, automatic bounded resends, expired
+acceptance requests and AC review APIs now work. Reuse configuration/Admin services.
+Observer-private drafts, separate acknowledgements and final locking retain assigned
+templates and validate actual options/prompts. Non-occurrence/committee reports,
+participant feedback and private owner-only evidence persist. Assumptions: initial
+evaluation after first semester; current rank for intervals; UUID-ordered matching
+of up to five compatible same-department/level signed-up candidates; 48-hour windows
+capped by observation deadline; uncontacted candidates precede a second automatic
+window; AC may explicitly reopen the latest unsuperseded expired window. Reports
+follow appointment start and precede acknowledgements; feedback uses required 1-5
+satisfaction and optional difficulties/suggestions once per observation/role.
+Private evidence: PDF/PNG/JPEG, 5 MiB, three uploads per participant/observation.
+These are surfaced assumptions, not KPI, retention or AC privacy policies.
+Migration 20261026000000_faculty_workflows is deployed without reset/reseed; existing
+counts remain 539 users and zero downstream business records. Actual Fall 2026
+semester dates remain null and require AC configuration. No dates were fabricated.
+Run jobs:faculty separately for expiry/resends. Exact contracts, assumptions and
+verification are in FACULTY_DASHBOARD_BACKEND.md. History remains completely unchanged.
+
+October 26, 2026 Faculty integration with main (supersedes earlier Faculty configuration assumptions):
+Reuse the shared Prisma configuration cycle scope for own teaching/signups/selected
+observations/candidacies, including AC/Admin using Faculty screens. A sole relevant
+nonclosed valid cycle supplies context; multiple cycles leave dependent actions
+unavailable with an explanation. Automatic Faculty cycle selection is not agreed.
+Calendar options use configured semester startsOn/endsOn/timeZone, retain the
+exclusive observation-deadline date, and block when boundaries are missing. No
+holiday exceptions or new eligibility policy are invented. Existing missing-history
+signup restrictions remain pending agreement; current Admin interval/hire-date
+settings are inputs, not a complete eligibility service.
+First assessment save uses the latest published active template by publishedAt,
+then UUID descending. Retain assigned templates, actual labeled rating options,
+comment prompts and signature labels. Reject intermediate values absent from sparse
+scales; include template revisions/options/prompts in stale-write protection.
+No new schema/migration, reseed, authentication or History change is introduced.
+Selected candidate dates and recommendation-release persistence remain absent.
+Required invitation acceptance/final pairing/resends/expired approval and report,
+survey and alert gaps are not resolved by configuration. UC2/UC4/UC5 already define
+voluntary signup, first-semester exclusion, 48-hour initial windows, final pairing,
+and separate acknowledgement/finalization; missing-data eligibility, overlapping
+cycles, retry/cutoff/races, report permissions/timing/effects, survey details and
+alert lifecycle still need agreement. See FACULTY_DASHBOARD_BACKEND.md.
+
+October 26 AC integration follow-up: rebased #55 onto current main. Hiring-level
+lookup unwraps the Admin items response; reports.read permits this read-only
+lookup without granting hiring-level mutation access. Assessment reads also accept the Faculty
+writer responses {answers:{criterionId:value},comments:string,promptAnswers:{id:text}};
+return ID-keyed answer/comment arrays and preserve the free comment as generalComments.
+The Faculty workflow added issue/expired-acceptance records; #55 attention currently
+exposes overdue/unmatched/incomplete only, with alert/expiredApproval marked unavailable.
+The October 25 schema-absence explanation below is historical, not current schema status.
+
+October 25, 2026 AC monitoring backend (#55):
+The five cycle report/attention/faculty-status/observations/metrics reads and three
+observation detail/template/assessment reads use the shared Prisma Client and
+current business grants. Lists use UUID cursor pagination; AC reporting is
+university-wide, with optional department/hiring-level filters. Participants have
+own-observation access only. Attention returns overdue faculty and observation issues: unmatched
+means no selected observer on an unfinished non-cancelled record; incomplete means
+a scheduled/past record with an observer and no locked assessment. These operational
+definitions do not establish non-occurrence. Observation filters accept the frontend
+in-progress/complete/incomplete/unmatched values and stored uppercase statuses.
+Faculty lastEvaluation resolves the last completed observation in an earlier term
+and returns its own semester:{id,name}. Eligibility uses the current hiring-level
+interval and completed evaluation terms, excluding cancelled records and future terms.
+The professor's process explanation allows annual evaluations in Spring or Fall of
+the next calendar year; its two-year example is Spring 2025 -> due Spring 2027,
+overdue Fall 2027. Current-cycle completion restarts the interval. First-semester
+hires are excluded when configured semester dates establish that fact. Without
+history, the first required evaluation date remains unresolved: show Needs review,
+also used for unknown terms and unresolved two-year summer boundaries. Reports
+count these separately, excluding them from due/overdue totals. Due filters, hiring-
+level breakdowns and overdue attention use this same calculation. Sources: professor
+process_explanation_to_all (1).docx and current CS 4485 project Google Doc
+1o-_pRKhNvYHcNcdtE_PDLqty7tLI0NgqsDc04donL08 (read October 25), which confirms
+current hiring-level/interval changes affect status and second semester is earliest
+eligibility, not a confirmed first due date. October 25 user
+override: local development metrics now return fixed dummy KPI values, labelled
+source:demo and formulaVersion:demo in the API. These are not database calculations;
+production returns null values with reasons until formulas are agreed. Existing
+KPI cards display the supplied demo values; due/overdue fields use database counts.
+Alert/expired-approval attention
+is explicitly unavailable because the schema has no corresponding records.
+Assessment reads use the exact linked template, including inactive historical
+templates; only the selected observer can read an unlocked response pending a
+visibility decision. Locked responses are available to participants/authorized AC.
+Stored responses must use {answers:[{criterionId,value}],comments:[{promptId,text}]};
+unrecognized legacy formats return 409 rather than silently dropping answers.
+The schema has no assessment revision/submission timestamp: reads return null for
+those fields and make no save/finalize actions available. Recorded acknowledgements
+are mapped to their actual participant. No schema or lifecycle changes are added.
+Meeting options combine stored preferred dates with class schedules in the semester
+time zone; an appointment is matched by its stored start instant. Unmatched appointment
+metadata is reported unavailable, without inventing an end time or location.
+
+October 25 user deletion follow-up (supersedes user-DELETE-pending notes):
+User requested DELETE /api/users/{userId}. Implemented using Prisma Client in a Serializable transaction, requiring users.manage and same origin. No body; empty 204 success, 404 missing account. Self-deletion and loss of the last active managing Admin return 409. Teaching, signup, selected-observer, candidate and feedback references block deletion (409); use deactivation instead. Only an unreferenced profile, credentials, role links and owned notifications are removed with the account. History is never cascaded/anonymized. No migration is required. Existing frontend Delete User is connected. Isolated real-database verification passed, including rollback and session/account lookup invalidation.
+
+October 25 authentication/account provisioning correction (supersedes no-credentials/future-SSO creation notes):
+User requested Prisma-only runtime authentication and local login for new Admin-created accounts. Account/credential/grant reads now use Prisma Client. New accounts receive normalized firstname_lastname (first/last word), or a single name word; collisions append _2, _3, etc. Initial password 123 is stored only as a randomly salted scrypt hash, in the same transaction as the account/profile/roles. Existing seeded logins are preserved; existing null usernames are not backfilled. Name edits do not reset credentials. API request/response formats remain unchanged. No schema change is needed for this correction.
+
+October 25, 2026 Admin backend:
+The 13 requested user/role/permission/hiring-level/department handlers are now
+implemented using Prisma queries and Serializable services. See ADMIN_BACKEND.md
+for exact permissions, validation, migrations, concurrency and verification.
+User/Role/HiringLevel revisions and HiringLevel active status are persisted.
+New user records have null usernames and no credentials (future SSO); existing
+seeded logins remain unchanged. No user DELETE or custom-role CRUD is implemented.
+Admin inherits AC/Faculty and AC inherits Faculty dynamically; direct grants remain
+separate and existing seeded grants are preserved. Conservative implementation
+safeguards prevent self admin lockout and loss of the last active managing Admin;
+in-use hiring levels cannot be deleted. Positive whole intervals use the database
+integer range. Department code/name map to the existing imported departmentName.
+These implementation choices were surfaced during this task; see the backend
+handoff for exact definitions. They supersede older pending-Admin backend notes.
+The full unit suite and expanded Admin tests passed (120 total), along with TypeScript,
+lint and production build on retry. Next.js reported an existing security advisory.
+Local PostgreSQL was unavailable;
+database integration and deployment of the new migration remain unverified.
+
+October 24, 2026 configuration/frontend integration:
+The configuration backend and AC/Admin frontends coexist in this branch.
+Configuration endpoints marked COMPLETED in the API draft are implemented;
+monitoring, assessment and Admin business handlers remain pending. Earlier
+frontend-only statements about missing configuration APIs describe their original
+branch scope, not the combined branch. The confirmed faculty-status semester
+response and boolean accountStatus contract are retained. Configuration template
+IDs identify editable records; no separate version model is introduced.
+
+October 23, 2026 persistence clarification:
+Use generated Prisma Client model APIs and Prisma transactions for configuration
+queries and mutations, not hand-written SQL or raw-query escape hatches. The
+existing authentication/seed implementation is outside this refactor. Generate
+the client with npm run db:generate; dev/build pre-scripts also generate it.
+
+October 23, 2026 AC Configuration backend (supersedes relevant draft proposals):
+Configuration permissions apply university-wide, without department filtering.
+Implement the listed cycle/semester-settings/template endpoints and the draft
+template publish endpoint. One cycle per semester is required; AC may edit passed
+deadlines and reopen periods. Enforce signup < observation < feedback. Semester
+boundaries/timezone and optimistic revisions are persisted; imported boundaries
+remain null until configured. Settings save semester and cycle atomically.
+Keep draft/publish templates, but allow in-place question edits to published
+templates per October 18. New templates begin as drafts; publish activates them.
+Current template is the most recently published active record, university-wide.
+Do not implement separate versions. Preserve criterion IDs and stored answers;
+block criterion removal once assessments reference the template. Faculty can read
+published templates and relevant cycles; management requires current database
+cycles.manage/templates.manage grants. See AC_CONFIGURATION_BACKEND.md for the
+implemented contracts, filters, security, revisions, migration and checks.
+
+October 23, 2026 observation tracking detail follow-up:
+Render the existing GET /api/observations/{observationId} contract's progress array,
+observation.scheduledMeeting and proposedMeetings in the read-only detail page.
+Preserve backend progress ordering/states, display completion timestamps, and show
+meeting dates/times/locations using the supplied IANA time zone. Keep proposed
+options separate from the scheduled appointment. Missing/invalid zone metadata
+falls back explicitly to UTC. Missing progress/meeting data has empty states.
+No new endpoint, backend handler, database or schema change is introduced.
+
+October 23, 2026 confirmed faculty-status response change:
+GET /api/evaluation-cycles/{cycleId}/faculty-status now specifies
+lastEvaluation:{semester:{id,name},completedAt}|null, replacing the old nested
+semesterId field. The backend must join the last completed evaluation to its
+existing Semester record and map termName to name. No new database column is
+needed. Keep lastEvaluation null when history is absent; do not substitute the
+selected cycle's semester. URL, filters, pagination and other fields are unchanged.
+The frontend Last evaluation column now displays semester.name, with a dash if
+missing, rather than a UUID. The backend endpoint itself is not implemented in
+this frontend branch. See the API draft section 8 and AC_MONITORING_FRONTEND.md.
+
+October 23, 2026 AC read-only assessment follow-up:
+The user requested the assessment view after previously deferring it. Observation
+details now load the observation's assessment and exact assigned template, map
+answers/comments by ID, and display recorded acknowledgements without mutation
+actions. Enable assessment requests only for the assessments.read grant returned
+by the server page guard. Backend handlers must still enforce that permission,
+record scope, and draft visibility. Null assessments and denied/missing endpoints
+show unavailable/empty states. No assessment backend/schema/migration is added.
+KPI unavailable values remain zero per the user's instruction. Faculty-status
+semester naming follows the confirmed response change recorded above.
+
+October 23, 2026 AC monitoring frontend review fixes:
+Consume paginated API list envelopes and follow continuation cursors. Replace
+the invented current-cycle path ID with actual authorized cycle selection. Select
+a sole cycle automatically; with multiple cycles, require the user to choose.
+No cycles means no cycle-specific requests. Share selection across AC pages and
+retain All semesters on Observation Progress using actual IDs. Use business
+permissions for every AC page guard and sidebar entry, never test:ac. Check nested
+detail/edit routes directly. API authorization remains a backend responsibility.
+Unavailable metrics/zero presentation remains deferred; the assessment follow-up
+above supersedes its earlier deferral. No database/schema/API-handler changes are part of these
+frontend fixes. See AC_MONITORING_FRONTEND.md for the access matrix and tests.
+
 October 18 integration: shared main layout requires login and supplies user identity
 to AppShell. All /test pages and /auth-test require temporary test:admin permission.
 Access denial redirects to /forbidden. Test APIs retain role-specific probes;
@@ -197,3 +444,191 @@ five Faculty links, shared layout, current login/database auth, and Admin tools.
 The dummy provider supports current AccountUser shapes, remains explicitly
 opt-in development data, and performs no database reads, writes, migrations,
 or seeding. Existing database/auth/schema/dashboard work is retained from main.
+October 19, 2026 Faculty dashboard backend (supersedes dashboard preview values):
+/dashboard now reads the signed-in user's own PostgreSQL data through the existing
+pg pool, with a read-only /api/me/dashboard aggregate. Sections enforce existing
+own-profile/evaluation/observation/notification grants independently. Responses
+are private/no-store; no History/navigation, authentication, schema, seed, package,
+or workflow mutation changes are included.
+Provisional current cycle: earliest observation deadline among well-ordered cycles
+whose feedback deadline has not passed. No opening/active flag exists in the schema.
+Evaluation uses the last locked, both-signed Observee assessment semester plus the
+current rank interval. Missing history/invalid data remains Unknown, without
+inferring eligibility from missing hire dates. First-semester/rank-history/signup
+policies remain unresolved. Current work prefers Observee before selected-Observer
+records in that cycle. Pending requests must be unanswered/unexpired and not paired,
+cancelled or completed. Activity is five latest own notifications, never fabricated.
+See FACULTY_DASHBOARD_BACKEND.md for exact temporary rules, API scope, and checks.
+
+October 19, 2026 Faculty dashboard workflow follow-up (current user scope):
+Include linked Faculty evaluation, signup, current observation/appointment,
+incoming requests and web form. History frontend, backend and navigation are
+explicitly excluded and unchanged. Existing uncommitted dashboard work is retained.
+Own assigned sections, weekly schedules, current-cycle signup, proposed dates and
+active incoming invitations now have authorized reads. Calendar options recur from
+stored weekly meetings from server-local today to before the observation deadline,
+in America/Chicago; past-started meetings and ambiguous multi-meeting dates are
+excluded. No semester boundaries/holiday exceptions exist; display this limitation,
+do not claim an authoritative academic calendar, and do not invent exceptions.
+Signup uses existing uniqueness, current-cycle ownership/deadline checks, and an
+atomic signup/observation/date transaction. Until missing-history/first-semester
+eligibility is agreed, require a completed evaluation in a prior semester; seeded
+missing-history accounts remain blocked instead of silently becoming eligible.
+Invitation decline rechecks own recipient, active window and pairing under locks;
+it records the response and the observee notification in one transaction.
+The user explicitly chose separate assessment acknowledgements followed by locking:
+the assigned observer saves drafts and submits/acknowledges first; the observee
+reviews and acknowledges independently. Derive the participant and timestamps from
+the server, freeze answers after observer submission, and atomically lock/complete
+after both acknowledgements. Reject stale form revisions and edits after locking.
+Templates/criteria come from stored data; use the assessment's existing template or
+the newest active template for its first save, then retain that template reference.
+No schema, migrations, dependencies, seed or auth changes are made. Remaining gaps:
+accepted candidate date and recommendation-release state lack schema fields;
+incomplete-report storage/window, survey questions/scale, and alert reason/lifecycle
+rules remain unspecified. Those actions stay unavailable with an explanation.
+October 23, 2026 Admin Dashboard frontend (Issue #50, Dashboard only):
+/admin uses the shared shell and requires users.read on the server. Navigation
+uses the same effective grant; role labels and test:admin alone do not grant
+product access. Administration links and sidebar entries point to /admin/users,
+/admin/roles, and /admin/hiring-levels, filtered by their respective read grants.
+Destination-page implementations are described below. Existing Faculty navigation and
+Admin test shortcuts remain. The Dashboard has no business API call or invented
+identity data. Its spacious layout and plain Section follow Figma PDF 26. The
+shared Figma semester display was added in the final fidelity cleanup below.
+
+October 23, 2026 Users list frontend (Issue #50, list only):
+/admin/users requires users.read and calls GET /api/users with the draft filters
+and cursor pagination. Missing endpoints show explicit errors, without sample
+users. Role options use paginated GET /api/roles when roles.read is granted, with
+loaded-user roles as a fallback. Account-status suggestions use returned values;
+the filter also accepts an exact API value because the draft defines no enum.
+Create/Edit links require users.manage; their implementation is described below.
+Search is debounced; old requests are cancelled and cannot replace newer results.
+
+October 23, 2026 Create/Edit User frontend (Issue #50, PDF 28):
+/admin/users/new and /admin/users/[userId] require users.manage server-side and
+share one form. GET/POST/PATCH/DELETE /api/users and PUT /api/users/{id}/roles
+use the draft contract; no backend handlers, account provisioning, schema or
+seed changes are included. Role replacement preserves the entire selected set.
+Detail PATCH and role PUT are separate: use each returned revision, report partial
+success, and retain pending edits for retry. Network/ambiguous successful-write
+responses pause further writes until an explicit edit reload; uncertain creates
+require checking the Users list to avoid duplicate creation. Deletion requires
+confirmation and a verified 204. Backend retention/self/last-admin policy is pending.
+Role and department catalogs follow cursor pagination. Hiring levels use the
+documented {items} response. Account-status strings/transition rules have no agreed
+enum; Prisma's isActive boolean is not mapped to invented API strings. Offer only
+exact statuses observed in the first users-list page plus the current edit value.
+Create cannot submit without an API-provided status. Faculty profiles are optional;
+supplied profiles require department/hiring level. No role-to-profile inference or
+automatic role removal is implemented. Hire date is optional; clearing an existing
+date/profile awaits a nullable API contract. Revision strings and safe nonnegative
+integers are accepted as opaque tokens; missing revisions block edit writes.
+Business endpoints remain unavailable locally, so populated CRUD verification uses
+test-only browser interception, never fake production responses or database writes.
+Run node --test tests/unit/*.test.mjs for API, revision, partial-save and guard tests.
+Optional browser regression: start npm run dev -- --hostname localhost and an
+isolated headless Chrome/Edge with --remote-debugging-port=9223, then run
+node tests/e2e/admin-user-form.mjs. It uses ignored seeded credentials privately,
+intercepts business APIs in one browser target, and writes screenshots to OS temp.
+
+October 23, 2026 Roles & Permissions frontend (Issue #50, PDF 29):
+/admin/roles requires roles.read server-side. Write controls require the effective
+role-permissions.manage grant, not roles.manage or an Admin display name. Backend
+API authorization remains mandatory, including permissions.read for the catalog
+where required. No auth, business API handlers, schema or seed changes are included.
+GET /api/roles follows cursor pagination and retains complete permissionKeys and
+API-provided revisions. GET /api/permissions uses its documented {items} catalog.
+The Figma matrix uses returned names/keys; illustrative labels and Shared/TBD cells
+do not establish grants. Cells show direct assignments, not inferred inherited access.
+Per-role Save sends only PUT /api/roles/{roleId}/permissions with the full selected
+permissionKeys and expectedRevision. Other roles' pending edits remain untouched.
+Unknown existing assignments stay visible/read-only and are retained on writes.
+Cancel affects only its role. Saves are serialized, never automatically retried,
+and never claim atomic updates across roles. PUT effectivePermissionKeys are shown
+separately as returned by the server, not copied into direct grants or other roles.
+Conflicts/uncertain writes require explicit reload of that role. Reload merges
+local additions/removals with current direct grants and revision, preserving
+concurrent additions and other pending roles. Removed/unverifiable roles stay
+blocked with their edits retained. 401/403 disable all further writes on the page.
+Shared Admin JSON transport was extracted from the user form without changing its
+public imports; existing Create/Edit unit/browser checks cover the shared behavior.
+Run node --test tests/unit/*.test.mjs and optional node tests/e2e/admin-roles.mjs
+against localhost development server and isolated headless Chrome/Edge CDP port
+9223. Browser fixtures intercept business APIs only in that target; no production
+sample grants or database writes are introduced. Local business APIs remain missing.
+Inheritance/admin safeguards remain backend policy; no local role-name rules are
+invented. Header subtitle/bell differences were resolved in the final cleanup below.
+
+October 23, 2026 Hiring Levels & Frequency frontend (Issue #50, PDF 30):
+/admin/hiring-levels requires hiring-levels.read server-side; Add/Edit/Remove
+controls require the effective hiring-levels.manage grant. The shared Admin shell,
+Section, fields, Button, TableCell, TextAction and JSON transport are reused.
+The Figma three-column layout retains 80px rows and quiet Edit/Remove actions;
+the documented active boolean is displayed below the hiring-level name.
+GET /api/hiring-levels accepts its explicit {items:HiringLevel[]} response and
+follows global cursor pagination if pageInfo is supplied. Full resources require
+name, positive integer evaluationIntervalYears, active boolean and a usable revision.
+POST sends only name/evaluationIntervalYears; active has no invented create default.
+PATCH sends changed name/evaluationIntervalYears/active fields and expectedRevision
+from the loaded resource. Edit supports active/inactive through that boolean;
+status changes never substitute for DELETE. Remove requires confirmation and a
+verified HTTP 204. In-use/retention conflicts retain the level; no automatic reset,
+reassignment or deactivation is attempted. The DELETE contract defines no revision
+payload, so none is invented. Reloads use the documented list, not a new detail API.
+Validation accepts positive whole years without hardcoding ranks/intervals. The
+backend must decide supported interval ranges and reference/history retention.
+Recoverable failures preserve dialog values. Stale reads are cancelled/ignored,
+writes are serialized and never retried automatically, and 401/403 disable writes.
+Conflicts and uncertain edit/remove outcomes require explicit reload and review
+with the latest revision; unchanged fields adopt concurrent changes while local
+edits are retained. A missing record after an ambiguous deletion is shown as
+unconfirmed, never as a successful deletion. Ambiguous adds retain input and block
+another add in that page session; inspect the reloaded list before creating again
+on a fresh page. Without an idempotency/operation lookup contract, the client cannot
+automatically prove whether an unacknowledged creation committed.
+Unit tests cover API payloads, validation, stale responses, duplicate suppression,
+revision rebasing, in-use/uncertain removal and route/control permissions.
+Optional node tests/e2e/admin-hiring-levels.mjs uses localhost development server
+and isolated headless Chrome/Edge CDP port 9223. Its browser fixtures intercept all
+business API calls; real seeded logins only read account data. No backend handlers,
+schema, seeds, environment or dependencies changed. Live persistence awaits the
+documented backend endpoints. Global subtitle/bell corrections are described below.
+
+October 23, 2026 Admin final Figma fidelity cleanup (Issue #50):
+All six Admin routes (five designs, shared Create/Edit form) use the existing
+Faculty Dashboard semester label, Fall 2026, through shared Admin header metadata.
+This is the established Figma display context, not an API-backed current semester.
+The existing PageHeader bell appears beside the real account avatar and is labelled
+Notifications unavailable; no notification destination or behavior is invented.
+The shell's per-header option preserves Faculty defaults and existing test pages.
+All Faculty/Admin navigation and test/demo links remain intact. No AC product-page
+bindings exist yet; the existing AC access probe is preserved and checked.
+Exact Figma frames 16:2649, 16:2745, 16:2888, 16:3006 and 16:3149 were compared.
+Functional differences remain intentional: user filters/pagination, optional faculty
+fields and complete role assignments, editable direct-grant checkboxes and per-role
+save controls, hiring-level status/actions, API errors/Retry, and responsive wrapping
+or table scrolling. No illustrative identity, status, grants or production data is
+substituted for backend resources. Test/demo navigation makes the sidebar longer
+than the Figma illustration. Create and Edit retain separate descriptive titles.
+Optional node tests/e2e/admin-final-review.mjs checks desktop/mobile populated
+fixtures, real unavailable endpoints, navigation, header/row/control dimensions,
+and Faculty/AC probe regressions using the same isolated browser setup above.
+All business writes are blocked in this read-only review fixture. Existing form,
+role and hiring-level browser tests exercise mutations only through interception.
+
+October 24, 2026 account-status contract correction (supersedes string/status-lookup notes):
+accountStatus is a JSON boolean mapped directly to AppUser.isActive. true displays
+as Active and false as Inactive. Create/Edit always offer both choices, independent
+of existing users, pagination or lookup failures. Create requires an explicit choice.
+POST/PATCH send actual booleans, including false. The Users filter offers All, Active
+and Inactive; its query serializes true/false and omits the parameter for All.
+API response validators reject status strings. No schema or backend handlers changed.
+
+October 28, 2026 Faculty History branch refresh:
+Merged current origin/main into feature/faculty-history, retaining the original
+History UI and current main's Faculty workflows, shared shell and authorization.
+Removed the unused FacultyHistoryScreen duplicate. The own-observation API
+remains an opt-in development prototype; real records, submitted-form alignment,
+notifications, shared delivery/email and alerts belong to the next endpoint branch.

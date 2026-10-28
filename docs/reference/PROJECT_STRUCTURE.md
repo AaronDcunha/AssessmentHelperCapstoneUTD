@@ -1,5 +1,25 @@
 # Project structure and implementation responsibilities
 
+October 26 Faculty completion: own reads live in faculty-* queries; transactional
+release/invitation/approval and participation rules live in faculty-* services.
+Reuse configuration cycle scope and Admin effective permissions. db.ts handles
+Faculty SQL timestamps/dates explicitly as UTC; authentication remains Prisma-based.
+scripts/scheduler.ts is an explicit separate expiry/resend process, not a route-import
+side effect. Private evidence uses storage outside public and database metadata.
+See FACULTY_DASHBOARD_BACKEND.md and the additive Faculty migration. History is excluded.
+
+October 25 authentication correction: database-auth.ts now uses getPrisma() model reads, including credentials and inherited permissions. Admin services atomically provision generated usernames and hashed local credentials. The pg authentication-pool references below are historical. See AUTH_BACKEND.md and ADMIN_BACKEND.md.
+
+October 23 configuration update: cycle reads/mutations, semester lookup and atomic
+settings, and editable draft/published templates are implemented. Shared HTTP
+authorization/validation lives in `src/server/configuration-*.ts`, authorized reads
+in `src/server/queries/configuration.ts`, and transactional writes in
+`src/server/services/configuration.ts`. Configuration uses generated Prisma Client
+model APIs and transactions via `src/server/prisma.ts`; no hand-written queries.
+Prisma also manages schema/migrations. See `AC_CONFIGURATION_BACKEND.md` for the
+current contract. The older versioning suggestions below are superseded for
+templates by the October 18/23 implementation notes.
+
 This is the target organization, not a list of implemented features. As of October 11, 2026, the app has a Next.js starter page, dependencies, local PostgreSQL/Mailpit services, and placeholder directories. Authentication, Prisma models, workflow APIs, dashboards, jobs, and tests remain to be implemented. Inspect the source for current progress.
 
 October 14 update on the authentication backend branch: Auth.js JWT sessions, development-only mock identities, `/api/me`, shared access guards, protected test pages/APIs, and authentication tests are implemented. Database-backed authentication and all business models remain pending. See `AUTH_BACKEND.md`; the mock test permissions do not define the final database permission model.
@@ -46,7 +66,8 @@ assessment-helper-capstoneutd/
       observations/                Invitation and assessment-form components
       ac/                          AC-specific interfaces
     server/
-      db.ts                        Shared Prisma connection
+      db.ts                        Existing authentication pg pool
+      prisma.ts                    Shared Prisma Client for business features
       permissions.ts               Permission, ownership, and scope checks
       services/                    Business rules and transactional mutations
       queries/                     Authorized database reads
@@ -100,3 +121,5 @@ October 19 faculty/auth integration: the shared main layout now authenticates
 and supplies user identity plus permission-filtered Faculty/Admin test navigation.
 Root and successful logins default to /dashboard. Faculty route-family layouts
 enforce read access. Business dashboard data remains preview/empty state.
+
+October 25 Admin update: shared authorization/validation and HTTP handling live in src/server/admin-*.ts; authorized reads in src/server/queries/admin.ts; Serializable writes in src/server/services/admin.ts. See ADMIN_BACKEND.md for the implemented endpoints and remaining SSO/user-deletion limitations.

@@ -14,8 +14,7 @@ export const facultyRoutes = {
 } as const;
 
 export const facultyPageHeaders = {
-  // Screenshot-provided semester is display-only preview content, not an active cycle.
-  [facultyRoutes.dashboard]: { title: "Faculty Dashboard", subtitle: "Fall 2026", facultyLayout: true },
+  [facultyRoutes.dashboard]: { title: "Faculty Dashboard", facultyLayout: true },
   [facultyRoutes.evaluation]: { title: "My Evaluation", facultyLayout: true },
   [facultyRoutes.requests]: { title: "Observer Requests", facultyLayout: true },
   [facultyRoutes.observations]: { title: "Observations", facultyLayout: true },

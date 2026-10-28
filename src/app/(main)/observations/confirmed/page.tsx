@@ -1,3 +1,4 @@
-import { ConfirmedObserversScreen } from "@/components/observations/faculty-screens";
+import { FacultyCandidates } from "@/components/observations/faculty-candidates";
+import { facultyPageData } from "@/server/queries/faculty-page-data";
 
-export default function Page() { return <ConfirmedObserversScreen />; }
+export default async function Page() { const { data } = await facultyPageData(); return <FacultyCandidates data={data} accepted />; }
