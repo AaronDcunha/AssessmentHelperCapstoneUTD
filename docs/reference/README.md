@@ -52,3 +52,6 @@ Record agreed changes in `Implementation_Notes.txt` and update affected guidance
 
 Personal observation list: see `PERSONAL_OBSERVATIONS_BACKEND.md` for implemented
 GET /api/me/observations, personal ownership, database filters, pagination and tests.
+
+Notifications frontend: see NOTIFICATIONS_FRONTEND.md for the Figma-based shared
+page, header bell, read-state API clients and frontend-only verification scope.

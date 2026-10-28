@@ -88,3 +88,8 @@ with the selected observationId. The duplicate History modal is removed. Explici
 record views reuse the shared read-only details/assessment UI and provide Back to
 History; no-ID navigation retains the active Faculty workflow. Endpoint ownership
 checks remain authoritative. No new endpoint or workflow mutation was introduced.
+
+October 28 Notifications frontend: /notifications and the shared bell are now
+implemented against the API contract. This supersedes the earlier no-screen note;
+notification persistence and delivery endpoints remain backend follow-up work.
+See NOTIFICATIONS_FRONTEND.md for the Figma reference, behaviors and verification.

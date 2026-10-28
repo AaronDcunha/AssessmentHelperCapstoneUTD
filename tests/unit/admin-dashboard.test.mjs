@@ -206,18 +206,18 @@ test("All Admin headers preserve their Figma semester context independently of l
     pathname = path;
     const html = renderToStaticMarkup(await MainLayout({ children: null }));
     assert.match(html, new RegExp(`<p[^>]*>${expectedSubtitle}</p>`));
-    assert.match(html, /role="img" aria-label="Notifications unavailable"/);
-    assert.equal((html.match(/aria-label="Notifications unavailable"/g) || []).length, 1);
+    assert.match(html, /href="\/notifications"/);
+    assert.equal((html.match(/href="\/notifications"/g) || []).length, 1);
     assert.match(html, /aria-label="Account options for Admin Account"/);
     assert.equal((html.match(/aria-current="page"/g) || []).length, 1);
   }
 });
 
 test("Admin header options preserve Faculty headers and existing AC test-page defaults", async () => {
-  for (const [path, hasSemester, hasBell] of [["/dashboard", false, true], ["/dashboard/evaluation", false, true], ["/observations", false, true], ["/test/ac", false, false]]) {
+  for (const [path, hasSemester, hasBell] of [["/dashboard", false, true], ["/dashboard/evaluation", false, true], ["/observations", false, true], ["/test/ac", false, true]]) {
     pathname = path;
     const html = renderToStaticMarkup(await MainLayout({ children: null }));
     assert.equal(html.includes("Fall 2026"), hasSemester);
-    assert.equal(html.includes('aria-label="Notifications unavailable"'), hasBell);
+    assert.equal(html.includes('href="/notifications"'), hasBell);
   }
 });

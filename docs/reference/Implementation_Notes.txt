@@ -671,3 +671,14 @@ progress, meeting and assessment components used by AC, with Back to History.
 The page checks observations.read.own and gates assessment loading separately by
 assessment.read.own; the existing observation APIs enforce access to each record.
 Malformed/repeated IDs do not fall back to a different current observation.
+
+October 28, 2026 Notifications frontend (supersedes no-screen/unavailable-bell notes):
+Implemented /notifications from Figma Shared node 16:3270 with the All/Unread
+selector, Mark All Read and Notification/Details/Action table, plus explicit
+individual read/unread, pagination, refresh and loading/empty/error states.
+The shared permission-gated bell links to the page and consumes the unread count
+endpoint; failures show no fabricated count. All four Draft V2 notification APIs
+are called as contracts; no backend handlers, migrations, email or jobs are added.
+Only the existing authorized observation details destination is enabled initially;
+unknown target kinds remain unavailable pending backend mapping agreement.
+See NOTIFICATIONS_FRONTEND.md for API details, permissions, state handling and QA.
