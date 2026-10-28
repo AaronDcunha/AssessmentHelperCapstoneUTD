@@ -510,16 +510,18 @@ GET /api/operations/{operationId} -- OPTIONAL, needed if using 202 async contrac
 
 9. SHARED HEADER NOTIFICATIONS
 ==============================
-GET /api/notifications
+GET /api/notifications (COMPLETED)
   Q: read?:all|unread,after?:incremental cursor; normal cursor/limit pagination.
   R: {items:Notification[],pageInfo,unreadCount,latestCursor}.
-  Own records only; define after vs pagination semantics. Resolve approved targets
-  to routes, not arbitrary trusted external links.
-GET /api/notifications/unread-count
+  Own records only, including AC/Admin. Read grant: notifications.read.own.
+  Newest-first timestamp/UUID keyset cursors; after uses an inclusive timestamp
+  watermark with boundary-ID deduplication. See NOTIFICATIONS_BACKEND.md.
+  Approved observation/acObservation targets are resolved against current access.
+GET /api/notifications/unread-count (COMPLETED)
   R: {unreadCount,asOf}. May be combined with the list response if agreed.
-PATCH /api/notifications/{notificationId}
+PATCH /api/notifications/{notificationId} (COMPLETED)
   B: {read:boolean}. R: Notification. Own record only; server sets readAt.
-POST /api/notifications/mark-all-read
+POST /api/notifications/mark-all-read (COMPLETED)
   B: {}. R: {updatedCount,cutoff,unreadCount}. Server cutoff preserves new arrivals.
 Workflow services create notifications transactionally/idempotently. No browser API
 for inventing system notifications. Header logout continues to use Auth.js.
@@ -642,3 +644,9 @@ reports; AC alerts/non-occurrence; templates; assessment lifecycle; survey/evide
 shared header notifications/reminders; and Admin destination management.
 Test direct authorization, ownership, deadlines, stale revisions, concurrent pairing,
 idempotent retries/jobs, historical templates, private attachments and paginated counts.
+
+October 28 notification implementation: all four inbox/read-state endpoints above
+are completed. Read updates require both notifications.read.own and
+notifications.update.own; shared workflow creation is internal/transactional.
+Email for most/all notifications is planned but explicitly not implemented yet.
+See NOTIFICATIONS_BACKEND.md for snapshot/cutoff semantics and delivery plans.

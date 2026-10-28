@@ -28,3 +28,22 @@
 .filter:disabled {
   background: var(--neutral-bg);
 }
+.table .selectionCell {
+  width: 48px;
+  text-align: center;
+}
+.table .selectedRow td {
+  background: var(--light);
+}
+.messagePreview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.detailDialog[open] {
+  display: flex;
+  flex-direction: column;
+}

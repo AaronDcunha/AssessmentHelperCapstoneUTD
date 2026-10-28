@@ -46,7 +46,7 @@ function fixture() {
     observation: { findUnique: async () => record, findMany: async () => [record], updateMany: write('revision'), update: write('observation') },
     observationCandidate: { findUnique: async () => candidate, update: write('candidate') },
     invitationAttempt: { findFirst: async () => attempt, update: write('attempt') },
-    notification: { create: write('notification') },
+    notification: { upsert: async input => { writes.push({ name: 'notification', input: { data: input.create } }); return input.create; } },
   };
   return { db, record, candidate, attempt, writes };
 }

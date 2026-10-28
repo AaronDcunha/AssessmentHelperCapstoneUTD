@@ -1,11 +1,12 @@
 import { notificationsApi, NotificationRequestError, notifyNotificationChange, type NotificationItem, type ReadFilter } from "./notifications-api";
 
 type Snapshot = {
+  selectedIds: string[]; opened: NotificationItem | null;
   filter: ReadFilter; state: "loading" | "ready" | "error" | "denied" | "signedOut";
   items: NotificationItem[]; unreadCount: number | null; nextCursor: string | null;
   loadingMore: boolean; pending: string | null; error: string | null; notice: string | null; writeBlocked: boolean;
 };
-const initial: Snapshot = { filter: "all", state: "loading", items: [], unreadCount: null, nextCursor: null,
+const initial: Snapshot = { selectedIds: [], opened: null, filter: "all", state: "loading", items: [], unreadCount: null, nextCursor: null,
   loadingMore: false, pending: null, error: null, notice: null, writeBlocked: false };
 
 export function createNotificationsController(api = notificationsApi) {
@@ -17,7 +18,7 @@ export function createNotificationsController(api = notificationsApi) {
     const status = error instanceof NotificationRequestError ? error.status : undefined;
     const errorMessage = error instanceof Error ? error.message : "Notifications are currently unavailable.";
     if (status === 401 || status === 403) {
-      update({ state: status === 401 ? "signedOut" : "denied", items: [], unreadCount: null, nextCursor: null, writeBlocked: true, error: errorMessage });
+      update({ state: status === 401 ? "signedOut" : "denied", items: [], selectedIds: [], opened: null, unreadCount: null, nextCursor: null, writeBlocked: true, error: errorMessage });
       notifyNotificationChange();
     } else update({ error: errorMessage });
   }
@@ -50,8 +51,8 @@ export function createNotificationsController(api = notificationsApi) {
     try {
       if (id !== null) {
         const item = await api.setRead(id, read);
-        update({ items: snapshot.items.flatMap(old => old.id !== id ? [old] : snapshot.filter === "unread" && item.readAt !== null ? [] : [item]),
-          notice: read ? "Notification marked as read." : "Notification marked as unread." });
+        applyItem(item);
+        update({ notice: read ? "Notification marked as read." : "Notification marked as unread." });
         notifyNotificationChange();
         try { const count = await api.unreadCount(); update({ unreadCount: count.unreadCount }); }
         catch (error) { update({ unreadCount: null }); errorState(error); }
@@ -61,7 +62,7 @@ export function createNotificationsController(api = notificationsApi) {
           // The server cutoff protects notifications that arrived after mark-all started.
           if (item.readAt !== null || Date.parse(item.createdAt) > Date.parse(result.cutoff)) return [item];
           return snapshot.filter === "unread" ? [] : [{ ...item, readAt: result.cutoff }];
-        }), unreadCount: result.unreadCount, notice: `${result.updatedCount} ${result.updatedCount === 1 ? "notification" : "notifications"} marked as read.` });
+        }), selectedIds: [], opened: snapshot.opened && snapshot.opened.readAt === null && Date.parse(snapshot.opened.createdAt) <= Date.parse(result.cutoff) ? { ...snapshot.opened, readAt: result.cutoff } : snapshot.opened, unreadCount: result.unreadCount, notice: `${result.updatedCount} ${result.updatedCount === 1 ? "notification" : "notifications"} marked as read.` });
         notifyNotificationChange();
       }
     } catch (error) {
@@ -71,10 +72,51 @@ export function createNotificationsController(api = notificationsApi) {
       errorState(error);
     } finally { update({ pending: null }); }
   }
+  function applyItem(item: NotificationItem) {
+    update({ items: snapshot.items.flatMap(old => old.id !== item.id ? [old] : snapshot.filter === "unread" && item.readAt !== null ? [] : [item]),
+      selectedIds: snapshot.selectedIds.filter(id => id !== item.id), opened: snapshot.opened?.id === item.id ? item : snapshot.opened });
+  }
+  async function markSelectedRead() {
+    if (snapshot.pending || snapshot.loadingMore || snapshot.state !== "ready" || snapshot.writeBlocked) return;
+    const items = snapshot.items.filter(item => snapshot.selectedIds.includes(item.id) && item.readAt === null);
+    if (!items.length) return;
+    update({ pending: "selected", error: null, notice: null,
+      selectedIds: snapshot.selectedIds.filter(id => snapshot.items.some(item => item.id === id && item.readAt === null)) });
+    let changed = 0;
+    try {
+      for (const item of items) {
+        const updated = await api.setRead(item.id, true);
+        applyItem(updated); changed++;
+      }
+    } catch (error) {
+      if (error instanceof NotificationRequestError && error.uncertain) update({ writeBlocked: true, unreadCount: null });
+      errorState(error);
+    } finally {
+      if (changed) update({ notice: `${changed} ${changed === 1 ? "notification" : "notifications"} marked as read.` });
+      if (snapshot.state === "ready") {
+        try { const count = await api.unreadCount(); update({ unreadCount: count.unreadCount }); }
+        catch (error) { update({ unreadCount: null }); errorState(error); }
+      }
+      notifyNotificationChange(); update({ pending: null });
+    }
+  }
   return {
     subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
     getSnapshot: () => snapshot,
     load, loadMore: () => load(snapshot.filter, true), setRead: (id: string, read: boolean) => mutate(id, read), markAllRead: () => mutate(null),
+    markSelectedRead,
+    select: (id: string, checked: boolean) => {
+      if (snapshot.pending || !snapshot.items.some(item => item.id === id)) return;
+      update({ selectedIds: checked ? [...new Set([...snapshot.selectedIds, id])] : snapshot.selectedIds.filter(value => value !== id) });
+    },
+    selectLoaded: (checked: boolean) => { if (!snapshot.pending) update({ selectedIds: checked ? snapshot.items.map(item => item.id) : [] }); },
+    open: async (id: string, markRead: boolean) => {
+      const item = snapshot.items.find(item => item.id === id);
+      if (!item || snapshot.pending) return;
+      update({ opened: item });
+      if (markRead && item.readAt === null) await mutate(id, true);
+    },
+    close: () => update({ opened: null }),
     dispose: () => { controller?.abort(); generation++; },
   };
 }

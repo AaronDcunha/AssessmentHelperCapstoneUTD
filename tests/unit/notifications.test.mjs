@@ -72,3 +72,45 @@ test('uncertain writes block repeats until explicit reload; denied responses cle
   const denied=createNotificationsController({list:async()=>page(),setRead:async()=>{throw new NotificationRequestError('Forbidden',403);}});
   await denied.load();await denied.setRead(id,true);assert.equal(denied.getSnapshot().state,'denied');assert.deepEqual(denied.getSnapshot().items,[]);
 });
+
+test('selection covers loaded rows only and is cleared by filter changes',async()=>{
+ const store=createNotificationsController({list:async(_filter,cursor)=>cursor?page([item('later')],2):page([item()],2,'next')});
+ await store.load();store.selectLoaded(true);assert.deepEqual(store.getSnapshot().selectedIds,[id]);
+ await store.loadMore();assert.deepEqual(store.getSnapshot().selectedIds,[id]);
+ store.select(id+'later',true);assert.equal(store.getSnapshot().selectedIds.length,2);
+ await store.load('unread');assert.deepEqual(store.getSnapshot().selectedIds,[]);
+});
+test('mark selected serializes PATCHes, skips already-read rows and leaves unselected rows unchanged',async()=>{
+ const calls=[];const read={...item('read'),readAt:'2026-10-28T09:00:00Z'};
+ const store=createNotificationsController({list:async()=>page([item(),item('second'),item('untouched'),read],3),
+  setRead:async key=>{calls.push(key);return {...item(key.slice(id.length)),readAt:'2026-10-28T11:00:00Z'};},unreadCount:async()=>({unreadCount:1})});
+ await store.load();store.select(id,true);store.select(id+'second',true);store.select(id+'read',true);
+ await store.markSelectedRead();assert.deepEqual(calls,[id,id+'second']);assert.deepEqual(store.getSnapshot().selectedIds,[]);
+ assert.equal(store.getSnapshot().items.find(x=>x.id===id+'untouched').readAt,null);
+ assert.equal(store.getSnapshot().notice,'2 notifications marked as read.');assert.equal(store.getSnapshot().unreadCount,1);
+});
+test('partial bulk failure preserves successful updates and remaining selection; uncertain writes cannot be replayed',async()=>{
+ const calls=[];
+ const store=createNotificationsController({list:async()=>page([item(),item('second'),item('third')],3),setRead:async key=>{
+  calls.push(key);if(calls.length===2)throw new NotificationRequestError('Unconfirmed',503,true);return {...item(),readAt:'2026-10-28T11:00:00Z'};
+ },unreadCount:async()=>({unreadCount:2})});
+ await store.load();store.selectLoaded(true);await store.markSelectedRead();await store.markSelectedRead();
+ assert.deepEqual(calls,[id,id+'second']);assert.equal(store.getSnapshot().items[0].readAt,'2026-10-28T11:00:00Z');
+ assert.deepEqual(store.getSnapshot().selectedIds,[id+'second',id+'third']);assert.equal(store.getSnapshot().writeBlocked,true);
+ assert.equal(store.getSnapshot().notice,'1 notification marked as read.');assert.equal(store.getSnapshot().error,'Unconfirmed');
+});
+test('opening a message marks it read and retains the full detail when its unread row disappears',async()=>{
+ const full='A long message. '.repeat(50);let calls=0;
+ const store=createNotificationsController({list:async()=>page([{...item(),message:full,target:null}],1),setRead:async()=>{
+  calls++;return {...item(),message:full,target:null,readAt:'2026-10-28T11:00:00Z'};
+ },unreadCount:async()=>({unreadCount:0})});
+ await store.load('unread');await store.open(id,true);assert.equal(calls,1);assert.equal(store.getSnapshot().items.length,0);
+ assert.equal(store.getSnapshot().opened.message,full);assert.ok(store.getSnapshot().opened.readAt);
+ store.close();assert.equal(store.getSnapshot().opened,null);
+});
+test('read-only viewing does not write, while already-read messages are not patched again',async()=>{
+ let writes=0;
+ const store=createNotificationsController({list:async()=>page([item(),{...item('read'),readAt:'2026-10-28T11:00:00Z'}],1),setRead:async()=>{writes++;}});
+ await store.load();await store.open(id,false);assert.equal(store.getSnapshot().opened.id,id);assert.equal(writes,0);
+ await store.open(id+'read',true);assert.equal(writes,0);
+});

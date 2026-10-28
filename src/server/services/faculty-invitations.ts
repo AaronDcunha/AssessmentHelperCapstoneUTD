@@ -7,6 +7,7 @@ import { FacultyActionError } from "./faculty-errors";
 import { meetingOccurrence } from "./faculty-meetings";
 import { facultyDate, type WeeklyMeeting } from "./faculty-calendar";
 import { effectivePermissions } from "../admin-validation";
+import { createWorkflowNotification } from "./notifications";
 import { grantInclude } from "../queries/admin";
 
 type Tx = Prisma.TransactionClient;
@@ -78,14 +79,15 @@ export async function observerAvailable(db: Tx, record: ObservationRecord, profe
   }
   return true;
 }
-async function notify(db: Tx, userId: string, title: string, message: string) {
-  await db.notification.create({ data: { userId, title, message, notificationType: "FACULTY_WORKFLOW" } });
+type NotificationContext = { eventKey: string; observationId: string };
+async function notify(db: Tx, userId: string, title: string, message: string, context: NotificationContext) {
+  await createWorkflowNotification(db, { userId, title, message, type: "FACULTY_WORKFLOW", ...context });
 }
-export async function notifyCommittee(db: Tx, title: string, message: string) {
+export async function notifyCommittee(db: Tx, title: string, message: string, context: NotificationContext) {
   const roles = await db.role.findMany({ include: grantInclude });
   const roleIds = roles.filter(role => effectivePermissions(roles, [role.roleId]).includes("late-acceptance.review")).map(role => role.roleId);
   const recipients = await db.appUser.findMany({ where: { isActive: true, userRoles: { some: { roleId: { in: roleIds } } } }, select: { userId: true } });
-  for (const recipient of recipients) await notify(db, recipient.userId, title, message);
+  for (const recipient of recipients) await notify(db, recipient.userId, title, message, context);
 }
 async function invite(db: Tx, candidateId: string, record: ObservationRecord, now: Date) {
   const latest = await db.invitationAttempt.findFirst({ where: { candidateId }, orderBy: { number: "desc" } });
@@ -93,7 +95,7 @@ async function invite(db: Tx, candidateId: string, record: ObservationRecord, no
   if (expiresAt <= now) throw new FacultyActionError("The invitation deadline has passed.");
   await db.invitationAttempt.create({ data: { candidateId, number: (latest?.number ?? 0) + 1, invitedAt: now, expiresAt } });
   const candidate = await db.observationCandidate.update({ where: { candidateId }, data: { status: "PENDING", invitedAt: now, expiresAt, respondedAt: null, acceptedOptionId: null }, include: { professor: true } });
-  await notify(db, candidate.professor.userId, "Observation invitation", "You have an observation invitation. Choose an available meeting before its response deadline.");
+  await notify(db, candidate.professor.userId, "Observation invitation", "You have an observation invitation. Choose an available meeting before its response deadline.", { eventKey: `invitation:${candidateId}:${(latest?.number ?? 0) + 1}`, observationId: record.observationId });
 }
 
 export async function generateRecommendations(user: Identity, cycleId: string) {
@@ -123,7 +125,7 @@ export async function generateRecommendations(user: Identity, cycleId: string) {
       }
       generatedCount += count;
       await db.observation.update({ where: { observationId: record.observationId }, data: { recommendationGenerationId: generationId } });
-      if (count < 5) await notifyCommittee(db, "Observer list needs attention", `Observation ${record.observationId} has ${count} compatible candidates.`);
+      if (count < 5) await notifyCommittee(db, "Observer list needs attention", `Observation ${record.observationId} has ${count} compatible candidates.`, { eventKey: `recommendation-shortfall:${generationId}:${record.observationId}`, observationId: record.observationId });
     }
     return { generationId, generatedCount };
   });
@@ -141,7 +143,7 @@ export async function declineFacultyInvitation(user: Identity, body: unknown) {
     if (!attempt || attempt.attemptId !== attemptId || record.observerId || candidate.status !== "PENDING" || attempt.status !== "PENDING" || attempt.invitedAt > now || attempt.expiresAt <= now) throw new FacultyActionError("This invitation changed, expired or was already answered.");
     await db.observationCandidate.update({ where: { candidateId }, data: { status: "DECLINED", respondedAt: now } });
     await db.invitationAttempt.update({ where: { attemptId }, data: { status: "DECLINED", respondedAt: now } });
-    await notify(db, record.signup.professor.userId, "Observer request declined", "An invited observer declined your observation request.");
+    await notify(db, record.signup.professor.userId, "Observer request declined", "An invited observer declined your observation request.", { eventKey: `invitation-declined:${attemptId}`, observationId: record.observationId });
     return { message: "Invitation declined." };
   });
 }
@@ -159,7 +161,7 @@ export async function requestLateAcceptance(user: Identity, body: unknown) {
     if (record.observerId || !latest || latest.attemptId !== attemptId || latest.expiresAt > now || !["PENDING", "EXPIRED"].includes(candidate.status)) throw new FacultyActionError("Only the latest expired, unanswered invitation can request approval.");
     if (latest.approval) return { message: "Your approval request is already recorded." };
     await db.lateAcceptanceApproval.create({ data: { attemptId, reason: input.reason as string | undefined } });
-    await notifyCommittee(db, "Expired invitation approval requested", `Review invitation attempt ${attemptId}.`);
+    await notifyCommittee(db, "Expired invitation approval requested", `Review invitation attempt ${attemptId}.`, { eventKey: `late-acceptance:${attemptId}`, observationId: record.observationId });
     return { message: "Approval requested. You cannot accept until AC opens a new response window." };
   });
 }
@@ -224,7 +226,7 @@ export async function processFacultyInvitationExpiry() {
         if (compatible) { await invite(db, candidate.candidateId, record, now); sent++; }
       }
     }
-    if (sent) await notifyCommittee(db, "Observation invitations automatically sent", `${sent} invitations sent for observation ${record.observationId}; no approval is required.`);
+    if (sent) await notifyCommittee(db, "Observation invitations automatically sent", `${sent} invitations sent for observation ${record.observationId}; no approval is required.`, { eventKey: `automatic-invitations:${record.observationId}:${record.workflowRevision}`, observationId: record.observationId });
   });
 }
 export async function releaseRecommendations(user: Identity, cycleId: string, body: unknown) {
@@ -240,7 +242,7 @@ export async function releaseRecommendations(user: Identity, cycleId: string, bo
       if (record.recommendationsReleasedAt) continue; // Retry does not duplicate notifications.
       await touchObservation(db, record);
       await db.observation.update({ where: { observationId: record.observationId }, data: { recommendationsReleasedAt: new Date() } });
-      await notify(db, record.signup.professor.userId, "Observer recommendations ready", "Your released observer recommendations are ready for invitations.");
+      await notify(db, record.signup.professor.userId, "Observer recommendations ready", "Your released observer recommendations are ready for invitations.", { eventKey: `recommendations-released:${record.observationId}`, observationId: record.observationId });
     }
     return { releasedObservationIds: records.map(item => item.observationId) };
   });
@@ -289,7 +291,7 @@ export async function acceptFacultyInvitation(user: Identity, body: unknown) {
     await db.observationTimeOption.update({ where: { timeOptionId: optionId }, data: { startsAt: option.startsAt, endsAt: option.endsAt, timeZone: option.timeZone, location: option.location } });
     await db.observationCandidate.update({ where: { candidateId }, data: { status: "ACCEPTED", acceptedOptionId: optionId, respondedAt: now } });
     await db.invitationAttempt.update({ where: { attemptId }, data: { status: "ACCEPTED", respondedAt: now } });
-    await notify(db, record.signup.professor.userId, "Observer available", "An observer accepted a proposed meeting. Choose a final observer to confirm the appointment.");
+    await notify(db, record.signup.professor.userId, "Observer available", "An observer accepted a proposed meeting. Choose a final observer to confirm the appointment.", { eventKey: `invitation-accepted:${attemptId}`, observationId: record.observationId });
     return { message: "Availability recorded. The observee must select the final observer." };
   });
 }
@@ -311,9 +313,9 @@ export async function selectFacultyObserver(user: Identity, body: unknown) {
     const others = await db.observationCandidate.findMany({ where: { observationId: record.observationId, candidateId: { not: candidateId }, status: { in: ["PENDING", "ACCEPTED", "ELIGIBLE", "EXPIRED"] } }, include: { professor: true } });
     await db.observationCandidate.updateMany({ where: { candidateId: { in: others.map(other => other.candidateId) } }, data: { status: "CANCELLED" } });
     await db.invitationAttempt.updateMany({ where: { candidateId: { in: others.map(other => other.candidateId) }, status: { in: ["PENDING", "ACCEPTED"] } }, data: { status: "CANCELLED" } });
-    for (const other of others.filter(other => other.invitedAt)) await notify(db, other.professor.userId, "Observation invitation closed", "Another observer was selected for this observation.");
-    await notify(db, candidate.professor.userId, "Observation appointment confirmed", "You were selected for the meeting you accepted.");
-    await notify(db, user.id, "Observation appointment confirmed", "Your observer and their selected meeting are confirmed.");
+    for (const other of others.filter(other => other.invitedAt)) await notify(db, other.professor.userId, "Observation invitation closed", "Another observer was selected for this observation.", { eventKey: `invitation-closed:${candidateId}`, observationId: record.observationId });
+    await notify(db, candidate.professor.userId, "Observation appointment confirmed", "You were selected for the meeting you accepted.", { eventKey: `appointment-confirmed:${candidateId}`, observationId: record.observationId });
+    await notify(db, user.id, "Observation appointment confirmed", "Your observer and their selected meeting are confirmed.", { eventKey: `appointment-confirmed:${candidateId}`, observationId: record.observationId });
     return { message: "Observer selected and appointment confirmed. Remaining invitations were cancelled." };
   });
 }

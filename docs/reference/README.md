@@ -55,3 +55,7 @@ GET /api/me/observations, personal ownership, database filters, pagination and t
 
 Notifications frontend: see NOTIFICATIONS_FRONTEND.md for the Figma-based shared
 page, header bell, read-state API clients and frontend-only verification scope.
+
+Notifications backend: see NOTIFICATIONS_BACKEND.md for the four implemented
+personal inbox/read-state APIs, migration, shared creation service and deferred
+email delivery plan. New notification runtime code uses Prisma Client.

@@ -22,9 +22,9 @@ export async function reportFacultyIssue(user: AccountUser, body: unknown) {
     await touchObservation(db, record);
     const existing = await db.facultyIssue.findUnique({ where: { observationId_reportedBy_kind: { observationId: id, reportedBy: user.id, kind: String(input.kind) } } });
     if (existing) return { message: "Your report is already recorded." };
-    await db.facultyIssue.create({ data: { observationId: id, reportedBy: user.id, kind: String(input.kind), reason, details } });
+    const issue = await db.facultyIssue.create({ data: { observationId: id, reportedBy: user.id, kind: String(input.kind), reason, details } });
     if (input.kind === "NOT_OCCURRED") await db.observation.update({ where: { observationId: id }, data: { status: "NOT_OCCURRED" } });
-    await notifyCommittee(db, input.kind === "ALERT" ? "Faculty needs assistance" : "Observation did not occur", `Observation ${id}: ${reason}`);
+    await notifyCommittee(db, input.kind === "ALERT" ? "Faculty needs assistance" : "Observation did not occur", `Observation ${id}: ${reason}`, { eventKey: `faculty-issue:${issue.issueId}`, observationId: id });
     return { message: "Your report was saved and the Assessment Committee was notified." };
   });
 }

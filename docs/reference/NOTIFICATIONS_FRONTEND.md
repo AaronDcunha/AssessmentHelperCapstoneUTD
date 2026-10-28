@@ -54,8 +54,9 @@ present. This reuses the authorized selected-record destination. Unknown/null
 kinds, malformed IDs and unavailable grants show no active destination. API-supplied
 URLs are never used. Additional target kinds must be agreed with the backend and
 mapped to existing record-aware routes before enabling their View links.
-Opening View does not implicitly mark a notification read; explicit read actions
-are separate. Target authorization is always rechecked by destination APIs.
+Opening View displays the complete message in a dialog and marks it read when
+notifications.update.own is granted. Optional authorized destination links appear
+inside the dialog, never as the table action. Target authorization is always rechecked by destination APIs.
 
 ## Verification
 
@@ -78,3 +79,30 @@ source TypeScript checks passed with zero diagnostics. Desktop/mobile browser
 checks passed and screenshots were visually compared with the Figma reference.
 The select surface, table proportions, shared icon sizes and page spacing were
 checked; test-only dates/read actions account for the taller notification rows.
+
+October 28 backend follow-up: all four notification APIs are now implemented;
+see NOTIFICATIONS_BACKEND.md. Approved targets additionally include acObservation
+for existing authorized AC observation details. Email remains planned only.
+
+## Selection and full-message viewing
+
+Row checkboxes and Select all loaded support multi-selection. Mark selected as read
+uses the existing individual PATCH API sequentially, skips already-read rows and
+refreshes the unread count once. It does not call mark-all-read or imply selection
+of unloaded pages. Filter changes/full refresh clear selection. Successful updates
+are removed from selection; partial failure preserves confirmed updates and leaves
+failed/unattempted rows selected. Uncertain writes block further writes until refresh.
+
+The table clamps long messages to two lines. Every notification has a View button
+that opens its full title/message/date in an accessible native dialog, including
+when target is null or unsupported. Opening unread messages marks them read when
+permitted; the dialog remains open even if the row disappears from the Unread view.
+Read-only users may view without a PATCH. Read failures remain visible without
+claiming success. The dialog has optional authorized destination actions, Escape
+handling, focus restoration and a scrolling message area with visible Close.
+
+Selection/detail validation: 227 unit tests passed, one existing skip. Source
+TypeScript checks and lint passed. Isolated desktop/mobile browser checks passed
+for selection, partial updates, two-line previews, automatic read marking, full
+message dialogs with/without destinations, Unread-row removal, Escape/focus
+restoration and mobile Close visibility. No account notifications were modified.

@@ -128,3 +128,9 @@ October 28 personal observation list: authorized Prisma reads and response mappi
 live in src/server/queries/personal-observations.ts. The thin /api/me/observations
 route supplies session identity and structured private responses. See
 PERSONAL_OBSERVATIONS_BACKEND.md; existing Faculty pg aggregates are unchanged.
+
+October 28 Notifications backend: shared validation/HTTP handling lives in
+notification-validation.ts and notifications-http.ts, authorized inbox reads in
+queries/notifications.ts, and read-state/shared creation in services/notifications.ts.
+Route adapters are thin and Prisma operations use repeatable-read transactions.
+Email delivery remains a documented future service/job; no mail implementation.

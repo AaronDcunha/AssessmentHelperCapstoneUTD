@@ -682,3 +682,25 @@ are called as contracts; no backend handlers, migrations, email or jobs are adde
 Only the existing authorized observation details destination is enabled initially;
 unknown target kinds remain unavailable pending backend mapping agreement.
 See NOTIFICATIONS_FRONTEND.md for API details, permissions, state handling and QA.
+
+October 28, 2026 Notifications backend (supersedes frontend-only endpoint status):
+All four notification endpoints now use Prisma with personal inbox ownership,
+read/update permissions, structured private responses, cursor pagination and
+snapshot/cutoff-safe read-state mutations. Destination/event metadata and inbox
+indexes were added in 20261028000000_notifications and applied locally without
+reset. Shared transaction-aware/idempotent in-app creation is used by the existing
+Prisma Faculty workflow producers; legacy SQL writers remain in their original
+atomic transactions. See NOTIFICATIONS_BACKEND.md for scope and verification.
+User clarification: email is planned for most/all workflow notifications, but do
+not implement its backend yet. No email sending, outbox, job or SMTP work is added.
+
+October 28 notification interaction update (current user direction):
+Notifications support selecting loaded rows and marking only the selection read
+through sequential existing PATCH calls. Confirmed changes are retained on partial
+failure; failed/unattempted selections remain and uncertain writes require refresh.
+All View controls open a full-message dialog and mark unread messages read when
+permitted. Table messages are truncated to two lines. Optional authorized record
+links appear inside the dialog, including no link when no destination is mapped.
+The open message survives removal from the Unread filter; read-only users may view
+without a write request. Long dialogs scroll the message with Close kept visible.
+No endpoint/schema/email changes are introduced by this frontend update.

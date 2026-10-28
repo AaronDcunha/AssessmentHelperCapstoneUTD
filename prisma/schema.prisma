@@ -523,8 +523,15 @@ model Notification {
   createdAt        DateTime  @default(now()) @map("created_at")
   readAt           DateTime? @map("read_at")
 
+  targetKind       String?   @map("target_kind")
+  targetId         String?   @map("target_id") @db.Uuid
+  eventKey         String?   @map("event_key")
+
   // Each notification belongs to one user.
   user AppUser @relation(fields: [userId], references: [userId])
 
+  @@unique([userId, eventKey])
+  @@index([userId, createdAt, notificationId])
+  @@index([userId, isRead])
   @@map("notification")
 }
