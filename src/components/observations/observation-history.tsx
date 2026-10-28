@@ -1,19 +1,15 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/form-fields";
 import { TableCell } from "@/components/ui/table";
 import { TextAction } from "@/components/ui/text-action";
-import { Button } from "@/components/ui/button";
+import { Button, ButtonLink } from "@/components/ui/button";
 import { UpIcon, DownIcon } from "@/components/ui/icons";
 import { HistoryFilterPicker } from "./history-filter-picker";
 import { useHistoryToolbarMotion } from "./use-history-toolbar-motion";
-import { getObservationFormResources, ObservationApiError } from "@/lib/observations-api";
-import {
-  parseSubmittedObservationForm,
-  type SubmittedObservationForm,
-} from "@/lib/observation-form";
+import { facultyRoutes } from "./faculty-routes";
 import {
   filterObservationHistory,
   sortObservationHistory,
@@ -57,12 +53,6 @@ export function ObservationHistory({
   const [sort, setSort] = useState<HistorySort>({ key: "semester", direction: "desc" });
   const router = useRouter();
   const toolbar = useHistoryToolbarMotion();
-  const [selected, setSelected] = useState<ObservationHistoryRecord | null>(null);
-  const [form, setForm] = useState<SubmittedObservationForm | null>(null);
-  const [formMessage, setFormMessage] = useState("");
-  const [formAttempt, setFormAttempt] = useState(0);
-  const dialog = useRef<HTMLDialogElement>(null);
-  const dialogTitle = useId();
   const viewState = initialState;
   const disabled = viewState !== "ready";
   const visibleRecords = sortObservationHistory(filterObservationHistory(records, filters), sort);
@@ -85,40 +75,6 @@ export function ObservationHistory({
         ? `${selectedSemesters.length} semesters`
         : "Semester";
 
-  useEffect(() => {
-    if (!selected) return;
-    const observationId = selected.id;
-    const controller = new AbortController();
-    async function loadForm() {
-      try {
-        const resources = await getObservationFormResources(observationId, {
-          signal: controller.signal,
-        });
-        const submitted = parseSubmittedObservationForm(observationId, resources);
-        if (controller.signal.aborted) return;
-        setForm(submitted);
-        setFormMessage(submitted ? "" : "The submitted form is not available yet.");
-      } catch (error) {
-        if (controller.signal.aborted) return;
-        setFormMessage(
-          error instanceof ObservationApiError && error.status === 404
-            ? "The submitted form is not available yet."
-            : error instanceof ObservationApiError
-              ? error.message
-              : "The submitted form could not be loaded. Please try again.",
-        );
-      }
-    }
-    void loadForm();
-    return () => controller.abort();
-  }, [selected, formAttempt]);
-
-  function viewRecord(record: ObservationHistoryRecord) {
-    setForm(null);
-    setFormMessage("");
-    setSelected(record);
-    dialog.current?.showModal();
-  }
   function toggleSemester(semester: string) {
     setFilters((previous) => ({
       ...previous,
@@ -346,14 +302,14 @@ export function ObservationHistory({
                       </span>
                     </TableCell>
                     <TableCell>
-                      <Button
+                      <ButtonLink
                         variant="secondary"
                         className={styles.viewForm}
-                        onClick={() => viewRecord(record)}
-                        aria-label={`View Form for ${record.courseSection}, ${record.semester}, ${record.participation}`}
+                        href={`${facultyRoutes.details}?observationId=${encodeURIComponent(record.id)}`}
+                        aria-label={`View details for ${record.courseSection}, ${record.semester}, ${record.participation}`}
                       >
-                        View Form
-                      </Button>
+                        View details
+                      </ButtonLink>
                     </TableCell>
                   </tr>
                 ))}
@@ -408,85 +364,7 @@ export function ObservationHistory({
           ? `${visibleRecords.length} ${visibleRecords.length === 1 ? "observation" : "observations"}${hasFilters ? ` of ${records.length}` : ""}`
           : ""}
       </p>
-      <dialog
-        ref={dialog}
-        aria-labelledby={dialogTitle}
-        onClose={() => setSelected(null)}
-        className="m-auto max-h-[calc(100dvh-32px)] w-[min(560px,calc(100vw-32px))] overflow-y-auto rounded-ah-12 border border-border bg-surface p-ah-32 text-ink backdrop:bg-ink/40"
-      >
-        <h2 id={dialogTitle} className="text-section">
-          Observation record
-        </h2>
-        {selected && (
-          <>
-            <dl className="my-ah-24 grid grid-cols-2 gap-x-ah-24 gap-y-ah-16 text-body">
-              <dt className="text-muted">Semester</dt>
-              <dd>{selected.semester}</dd>
-              <dt className="text-muted">Role</dt>
-              <dd>{selected.participation === "observer" ? "Observer" : "Observee"}</dd>
-              <dt className="text-muted">Course / Section</dt>
-              <dd>{selected.courseSection}</dd>
-              <dt className="text-muted">Other professor</dt>
-              <dd>{selected.otherProfessor}</dd>
-              <dt className="text-muted">Status</dt>
-              <dd>{selected.statusLabel}</dd>
-            </dl>
-            {form && (
-              <section
-                aria-label="Submitted assessment"
-                className="space-y-ah-16 border-t border-border pt-ah-16"
-              >
-                <h3 className="text-section">{form.title}</h3>
-                <p className="text-caption text-muted">
-                  Submitted{" "}
-                  {form.completedAt ? <time dateTime={form.completedAt}>
-                    {new Date(form.completedAt).toLocaleString()}
-                  </time> : "Date unavailable"}
-                </p>
-                <dl className="space-y-ah-16">
-                  {form.questions.map((item) => (
-                    <div key={item.id}>
-                      <dt className="text-label">{item.prompt}</dt>
-                      <dd className="mt-ah-4 whitespace-pre-wrap break-words text-body">
-                        {item.answer}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              </section>
-            )}
-            {!form && !formMessage && (
-              <div
-                role="status"
-                aria-label="Loading submitted form"
-                className={styles.formSkeleton}
-              >
-                <span aria-hidden="true" className={`${styles.skeleton} ${styles.skeletonText}`} />
-                <span aria-hidden="true" className={`${styles.skeleton} ${styles.skeletonText}`} />
-                <span aria-hidden="true" className={`${styles.skeleton} ${styles.skeletonText}`} />
-              </div>
-            )}
-            {formMessage && (
-              <p role="status" className="text-body text-muted">
-                {formMessage}
-              </p>
-            )}
-            {formMessage && (
-              <TextAction
-                onClick={() => {
-                  setFormMessage("");
-                  setFormAttempt((attempt) => attempt + 1);
-                }}
-              >
-                Try again
-              </TextAction>
-            )}
-          </>
-        )}
-        <form method="dialog" className="mt-ah-24 flex justify-end">
-          <Button type="submit">Close</Button>
-        </form>
-      </dialog>
+
     </div>
   );
 }

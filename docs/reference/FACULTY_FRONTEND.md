@@ -82,3 +82,9 @@ above: History now receives real personal observation rows from PostgreSQL throu
 GET /api/me/observations. See PERSONAL_OBSERVATIONS_BACKEND.md. Mock login identities
 still have no records; the endpoint does not seed sample observations. Dashboard
 and active workflow aggregates are unchanged but may reuse this list endpoint.
+
+History's View details action now opens the existing /observations/details route
+with the selected observationId. The duplicate History modal is removed. Explicit
+record views reuse the shared read-only details/assessment UI and provide Back to
+History; no-ID navigation retains the active Faculty workflow. Endpoint ownership
+checks remain authoritative. No new endpoint or workflow mutation was introduced.
