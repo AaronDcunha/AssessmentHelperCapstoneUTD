@@ -134,7 +134,7 @@ export async function getFacultyDashboard(user: AccountUser, options: { now?: Da
   if (access.activity) {
     const activity = await db.query<ActivityRow>(`
       SELECT notification_id AS id, title, message, created_at AS "createdAt"
-      FROM public.notification WHERE user_id = $1
+      FROM public.notification WHERE user_id = $1 AND in_app_enabled = true
       ORDER BY created_at DESC, notification_id ASC LIMIT 5`, [user.id]);
     result.recentActivity = activity.rows.map((row) => ({ ...row, createdAt: row.createdAt.toISOString() }));
   }

@@ -1,6 +1,8 @@
 import "server-only";
 import type { AccountUser } from "../account-auth";
 import { facultyTransaction, notifyCommittee, requireFacultyGrants, touchObservation, workflowId, workflowInput, workflowObservation } from "./faculty-invitations";
+import { createObservationAlert } from "./alerts";
+import { ConfigurationError } from "../configuration-validation";
 import { FacultyActionError } from "./faculty-actions";
 
 export async function reportFacultyIssue(user: AccountUser, body: unknown) {
@@ -9,6 +11,12 @@ export async function reportFacultyIssue(user: AccountUser, body: unknown) {
   if (!["ALERT", "NOT_OCCURRED"].includes(String(input.kind)) || typeof input.reason !== "string" || !input.reason.trim() || input.reason.length > 2000
     || typeof input.details !== "string" || input.details.length > 20000) throw new FacultyActionError("Provide a reason and valid details.", 400);
   const reason = input.reason.trim(), details = input.details;
+  if(input.kind === "ALERT") {
+    try { return await facultyTransaction(async db => {
+      const result = await createObservationAlert(db, user, id, { reasonCode: "OTHER", reason, details });
+      return { message: result.created ? "Your alert was saved and the Assessment Committee was notified." : "Your alert is already recorded.", alert: result.alert };
+    }); } catch(error) { if(error instanceof ConfigurationError) throw new FacultyActionError(error.message,error.status); throw error; }
+  }
   return facultyTransaction(async db => {
     const record = await workflowObservation(db, id);
     const observee = record.signup.professor.userId === user.id;

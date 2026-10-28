@@ -1,5 +1,6 @@
 export type NotificationItem = {
   id: string; type: string; title: string; message: string; createdAt: string; readAt: string | null;
+  sender?: { id: string; name: string } | null;
   target: { kind: string; id: string } | null;
 };
 export type NotificationPage = {
@@ -40,7 +41,8 @@ function cursor(value: unknown): string | null { return value === null ? null : 
 export function parseNotification(value: unknown): NotificationItem {
   const n = record(value), target = n.target === null ? null : record(n.target);
   if (typeof n.message !== "string") throw new Error("Invalid notification message.");
-  return { id: text(n.id), type: text(n.type), title: text(n.title), message: n.message,
+  const sender = n.sender == null ? null : record(n.sender);
+  return { sender: sender ? { id: text(sender.id), name: text(sender.name) } : null, id: text(n.id), type: text(n.type), title: text(n.title), message: n.message,
     createdAt: timestamp(n.createdAt), readAt: n.readAt === null ? null : timestamp(n.readAt),
     target: target ? { kind: text(target.kind), id: text(target.id) } : null };
 }

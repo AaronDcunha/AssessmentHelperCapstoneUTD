@@ -75,7 +75,7 @@ async function click(text) {
 const observationId='11111111-1111-4111-8111-111111111111';
 const titles=['Observer invitation received','Observer accepted','Observation reminder','Form submitted','Evaluation cycle opened'];
 const messages=['Professor A invited you to observe CS 4485.','Professor B accepted your observation request.','Your scheduled observation is approaching.','The observation form has been submitted.','Fall 2026 evaluation signup is available. '+('This message includes additional guidance and important details. '.repeat(30))+'Full message ends here.'];
-const initial=titles.map((title,i)=>({id:'n'+i,type:'workflow',title,message:messages[i],createdAt:i===4?'2026-10-28T13:00:00Z':'2026-10-28T10:00:00Z',readAt:null,target:i===4?null:{kind:'observation',id:observationId}}));
+const initial=titles.map((title,i)=>({id:'n'+i,type:'workflow',title,message:messages[i],createdAt:i===4?'2026-10-28T13:00:00Z':'2026-10-28T10:00:00Z',readAt:null,sender:i===0?{id:observationId,name:'Faculty Sender'}:null,target:i===4?null:{kind:'observation',id:observationId}}));
 let records=structuredClone(initial),mode='normal',writes=[],fixtureFailure;
 const unread=()=>records.filter(n=>n.readAt===null).length;
 handlers.set('Fetch.requestPaused',async event=>{
@@ -127,6 +127,7 @@ try{
  await evaluate(`const view=[...document.querySelectorAll('button')].find(e=>e.getAttribute('aria-label')?.startsWith('View:'));view.focus();view.click();`);
  await wait(`document.querySelector('dialog').open&&document.querySelector('dialog [role=status]')?.textContent==='Read'`);
  assert.equal(await evaluate('location.pathname'),'/notifications');
+ assert.equal(await evaluate(`document.querySelector('dialog').textContent.includes('From: Faculty Sender')`),true);
  assert.equal(await evaluate(`document.querySelector('dialog a').getAttribute('href')`),'/observations/details?observationId='+observationId);
  await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:true}).then(r=>writeFileSync(join(tmpdir(),'assessment-notification-detail-desktop.png'),Buffer.from(r.data,'base64')));
  await click('Close');await wait(`!document.querySelector('dialog').open&&document.querySelector('dialog').textContent.trim()===''`);

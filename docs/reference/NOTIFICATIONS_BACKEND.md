@@ -1,7 +1,7 @@
 # Notifications backend
 
 Implemented October 28, 2026. All new notification endpoint reads/writes use
-Prisma Client. Email delivery is explicitly deferred at the user's request.
+Prisma Client. Email delivery now uses the separate worker in EMAIL_DELIVERY.md.
 
 ## Endpoints and authorization
 
@@ -92,28 +92,14 @@ workflow state transitions and report semantics were not changed.
 Legacy SQL-based Faculty acknowledgement/decline writers remain atomic in their
 existing transactions. Their rows are listed/counted/updated by these Prisma APIs,
 but remain without guessed destination metadata. They were not moved to a separate
-Prisma transaction, which would break workflow/notification atomicity. Moving those
-writers onto the common transaction boundary is part of the later delivery work.
-No email is queued, sent, backfilled or retried by any code in this change.
+Prisma transaction, which would break workflow/notification atomicity. An INSERT-only database trigger now queues email in their existing transaction;
+see EMAIL_DELIVERY.md. Historical rows are not backfilled.
 
-## Email plan — not implemented
+## Email delivery
 
-Most or all workflow notifications are expected to have an email counterpart;
-confirm the event/channel matrix before enabling delivery. Keep type and eventKey
-as the common event identity and reuse notification content/context instead of
-creating a second independent notification pipeline.
-
-A future additive outbox/delivery table should reference the notification and have
-unique notification/channel identity, delivery status, attempts, next-attempt time,
-and sanitized failure metadata. Enqueue it inside the same workflow transaction.
-A separate trusted job should send email after commit and record delivery/retries;
-SMTP failure must not roll back the workflow or remove its in-app notification.
-Bring legacy Faculty writers onto this boundary before enabling email for them.
-Read/unread changes must never create emails, and rollout must not automatically
-send historical notifications. Agree templates, recipients, channel exceptions,
-retry/backoff/terminal-failure policy and operational controls in that later task.
-There is no new public email endpoint, SMTP transport, email scheduler, delivery
-schema or email configuration in the current implementation.
+Email delivery is implemented by a transactional outbox and separate Mailpit SMTP
+worker. See [EMAIL_DELIVERY.md](EMAIL_DELIVERY.md) for setup, channels, retries,
+legacy transaction coverage and operational limits. No public email endpoint exists.
 
 ## Verification
 
@@ -132,3 +118,9 @@ schema or email configuration in the current implementation.
 - Existing populated Faculty regression passed all 15 check groups in a disposable
   database, including invitation retries, report notifications and acknowledgement
   atomicity. No email was sent in any test.
+
+Alert sender update: an additive sender:{id,name}|null response field is resolved
+from the matching FacultyIssue reporter and event key under current observation
+access. Existing alert notifications gain this metadata without a migration or
+message rewrite. Notification previews/dialogs show From; alert context shows
+Submitted by from createdBy. Unrecorded senders are not guessed or labeled System.

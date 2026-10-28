@@ -57,5 +57,11 @@ Notifications frontend: see NOTIFICATIONS_FRONTEND.md for the Figma-based shared
 page, header bell, read-state API clients and frontend-only verification scope.
 
 Notifications backend: see NOTIFICATIONS_BACKEND.md for the four implemented
-personal inbox/read-state APIs, migration, shared creation service and deferred
-email delivery plan. New notification runtime code uses Prisma Client.
+personal inbox/read-state APIs, migration and shared creation service. New notification runtime code uses Prisma Client.
+
+Alerts/reminders: see ALERTS_REMINDERS_BACKEND.md for the implemented observation
+alert create, cycle alert list, individual alert read/update, and AC cycle reminder
+endpoint, their frontend wiring and permissions.
+
+Email delivery: see EMAIL_DELIVERY.md for the transactional outbox, separate SMTP
+worker, Mailpit setup, channel selection, retry handling and tests.

@@ -134,3 +134,20 @@ notification-validation.ts and notifications-http.ts, authorized inbox reads in
 queries/notifications.ts, and read-state/shared creation in services/notifications.ts.
 Route adapters are thin and Prisma operations use repeatable-read transactions.
 Email delivery remains a documented future service/job; no mail implementation.
+
+October 28 alerts/reminders: authorized reads are in queries/alerts.ts, workflow
+mutations in services/alerts.ts and services/cycle-reminders.ts, and boundary
+validation/HTTP adapters in alert-reminder-*.ts. Existing AC report filter helpers
+are reused. One Serializable Prisma transaction owns each alert/reminder mutation;
+email jobs remain unimplemented by explicit user instruction.
+
+
+October 28 email delivery (supersedes earlier deferred-email notes):
+New workflow notifications now default to both inApp and email. Additive migration
+20261028020000_notification_email uses an INSERT-only trigger to atomically enqueue
+both Prisma and existing pg writers, with no historical backfill or read-action
+emails. A separate Prisma/Nodemailer job sends through local Mailpit, using
+noreply_course_evaluation@assessmenthelper.edu, with claim leases and bounded
+retries. AC reminders support email-only, inApp-only or both; channel choices are
+in the idempotency hash. The frontend sends both and reports email as queued.
+No public mail endpoint. See EMAIL_DELIVERY.md for setup and delivery limits.

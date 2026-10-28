@@ -23,7 +23,7 @@ export const acPermissions = [
   'cycles.read', 'cycles.manage', 'signups.read', 'observations.read',
   'recommendations.generate', 'recommendations.release', 'recommendations.regenerate',
   'late-acceptance.review', 'templates.read', 'templates.manage',
-  'assessments.read', 'reports.read', 'metrics.read', 'notifications.send',
+  'assessments.read', 'reports.read', 'metrics.read', 'notifications.send', 'alerts.manage',
 ];
 export const adminPermissions = [
   'users.read', 'users.manage', 'roles.read', 'roles.manage',

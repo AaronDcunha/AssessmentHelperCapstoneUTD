@@ -153,7 +153,9 @@ Approval = {id,candidateId,attemptId,observationId,status,requestedAt,decidedAt,
 Attachment = {id,originalName,contentType,sizeBytes,status,createdAt}.
 Feedback = {id,cycleId,templateVersionId,submittedAt,answers,difficulties?,suggestions?,
   attachments:Attachment[]}; reviewer visibility is unresolved.
-Notification = {id,type,title,message,createdAt,readAt,target:{kind,id}|null}.
+Notification = {id,type,title,message,createdAt,readAt,target:{kind,id}|null,
+  sender?:{id,name}|null}. Sender metadata is resolved server-side when recorded
+  and authorized; it is not accepted in read-state mutation bodies.
 Role = {id,key,name,description?,permissionKeys:string[],revision}.
 HiringLevel = {id,name,evaluationIntervalYears,active,revision}.
 Status enums, lifecycle transitions and privacy rules must be agreed before coding.
@@ -382,15 +384,15 @@ POST /api/observations/{observationId}/incomplete-report -- own observee.
   R: {reportId,observationId,reportedBy,reportedAt,reason,details?,revision}.
   Required by Report Not Completed action. Timing/correction/state effects TBD;
   non-occurrence is not the same as an unsubmitted form.
-POST /api/observations/{observationId}/alerts -- NEW; own observee.
+POST /api/observations/{observationId}/alerts (COMPLETED); own observee.
   B: {reasonCode,details}. R: Alert with pending status.
   Attach observation/candidate context server-side; persist AC work item/notification.
   Agree reason codes, limits and pending-alert deduplication; demo reasons are samples.
-GET /api/evaluation-cycles/{cycleId}/alerts -- NEW; scoped AC/Admin.
+GET /api/evaluation-cycles/{cycleId}/alerts (COMPLETED); scoped AC/Admin.
   Q: status?,type?,departmentId?. R: List<Alert>.
-GET /api/alerts/{alertId} -- own observee or scoped AC/Admin.
+GET /api/alerts/{alertId} (COMPLETED); own observee or scoped AC/Admin.
   R: Alert plus context,createdBy:User|null,allowedActions:string[].
-PATCH /api/alerts/{alertId} -- CONDITIONAL resolution flow; scoped AC/Admin.
+PATCH /api/alerts/{alertId} (COMPLETED); acknowledged then resolved, scoped AC/Admin.
   B: {status:'acknowledged'|'resolved',resolutionNote?,expectedRevision}. R: Alert.
   Agree lifecycle/re-alert rules. No automatic manual observer replacement.
 
@@ -499,10 +501,12 @@ GET /api/evaluation-cycles/{cycleId}/metrics -- scoped AC/Admin.
     unavailableReason?}]}.
   Operational counts are live; final KPIs follow feedback deadline. Return unavailable
   rather than invented values. All KPI formulas/denominators remain to be agreed.
-POST /api/evaluation-cycles/{cycleId}/notifications -- scoped AC/Admin reminders.
+POST /api/evaluation-cycles/{cycleId}/notifications (COMPLETED); scoped AC/Admin reminders.
   B: {kind,recipientFilter:{evaluationStatus?,observationStatus?,departmentId?,
     hiringLevelId?,professorIds?},channels?:('inApp'|'email')[],message?}.
-  R: {operationId,recipientCount,notificationCount,status} if queued.
+  R: {dispatchId,recipientCount,notificationCount,emailQueuedCount,status:"completed"}.
+  Completed means dispatch committed; email is queued for the separate SMTP job.
+  Omitted channels default to inApp and email. Email-only is hidden from the inbox.
   Server authorizes recipients; agree templates, channel policy and retries.
 GET /api/operations/{operationId} -- OPTIONAL, needed if using 202 async contracts.
   R: {id,type,status,createdAt,completedAt,summary?,error?:{code,message}}.
@@ -650,3 +654,13 @@ are completed. Read updates require both notifications.read.own and
 notifications.update.own; shared workflow creation is internal/transactional.
 Email for most/all notifications is planned but explicitly not implemented yet.
 See NOTIFICATIONS_BACKEND.md for snapshot/cutoff semantics and delivery plans.
+
+October 28 alert/reminder implementation: see ALERTS_REMINDERS_BACKEND.md.
+Alerts use OTHER plus free-text reason, revision-checked pending -> acknowledged
+-> resolved, and existing observation/reporter duplicate protection. AC writes
+require alerts.manage with observations.read. Reminders reuse report predicates,
+require notifications.send/cycles.read (plus filter read grants), support optional
+Idempotency-Key, persist in-app synchronously and queue email transactionally.
+The email worker uses Mailpit locally; see EMAIL_DELIVERY.md. No optional
+operations endpoint is needed. This supersedes older reason/lifecycle/template TBD notes for
+the implemented generic in-app scope.

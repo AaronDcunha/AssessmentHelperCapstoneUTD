@@ -1,5 +1,6 @@
 "use client";
 
+import { ReminderControl } from "@/components/ac/reminder-control";
 import { useCallback, useState } from "react";
 import { CycleSelector, useAcCycle } from "@/components/ac/cycle-context";
 import { useApiResource } from "@/components/ac/use-api-resource";
@@ -10,7 +11,7 @@ import { acApi, type FacultyStatusItem, type HiringLevel, userDisplayName } from
 const EMPTY_ROWS: FacultyStatusItem[] = [];
 const EMPTY_LEVELS: HiringLevel[] = [];
 
-export default function FacultyDuePage() {
+export default function FacultyDuePage({canSendReminders=false}:{canSendReminders?:boolean} = {}) {
   const cycleId = useAcCycle().selectedCycle?.id;
   const [hiringLevelId, setHiringLevelId] = useState("all");
   const [evaluationStatus, setEvaluationStatus] = useState("all");
@@ -31,6 +32,7 @@ export default function FacultyDuePage() {
         </Select>
       </div>
 
+      <ReminderControl cycleId={cycleId} canSend={canSendReminders} recipientFilter={{...(hiringLevelId!=="all"?{hiringLevelId}:{}),...(evaluationStatus!=="all"?{evaluationStatus}:{})}} />
       <div className="overflow-x-auto rounded-ah-8 border border-border bg-surface">
         <table className="w-full min-w-[760px] table-fixed border-collapse">
           <thead><tr className="h-[80px] bg-canvas">

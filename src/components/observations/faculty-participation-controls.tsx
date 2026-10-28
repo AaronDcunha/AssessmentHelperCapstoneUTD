@@ -1,8 +1,10 @@
 "use client";
+import { notifyNotificationChange } from "@/lib/notifications-api";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/form-fields";
+import { acApi } from "@/lib/ac-api";
 import { postFacultyAction } from "./faculty-api";
 import type { FacultyWorkflow } from "@/server/queries/faculty-workflow";
 
@@ -11,7 +13,7 @@ export function FacultyIssueControl({ observationId, kind }: { observationId: st
   return <div className="space-y-ah-16"><Button variant="secondary" onClick={() => setOpened(!opened)}>{kind === "ALERT" ? "Alert Assessment Committee" : "Report Not Completed"}</Button>
     {opened && <form className="space-y-ah-16 rounded-ah-8 border border-border bg-surface p-ah-24" onSubmit={async event => {
       event.preventDefault(); if (pending) return; setPending(true); setMessage("");
-      try { const result = await postFacultyAction<{ message: string }>("issues", { observationId, kind, reason, details }); setMessage(result.message); setOpened(false); router.refresh(); }
+      try { const result = kind === "ALERT" ? await acApi.createObservationAlert(observationId, { reasonCode: "OTHER", reason, details }).then(() => ({ message: "Your alert was saved and the Assessment Committee was notified." })) : await postFacultyAction<{ message: string }>("issues", { observationId, kind, reason, details }); notifyNotificationChange(); setMessage(result.message); setOpened(false); router.refresh(); }
       catch (error) { setMessage(error instanceof Error ? error.message : "The report could not be saved."); }
       finally { setPending(false); }
     }}><Input label="Reason" required maxLength={2000} value={reason} onChange={event => setReason(event.target.value)} /><Textarea label="Details" maxLength={20000} value={details} onChange={event => setDetails(event.target.value)} /><Button type="submit" disabled={pending}>Submit Report</Button></form>}

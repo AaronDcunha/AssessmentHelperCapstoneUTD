@@ -704,3 +704,34 @@ links appear inside the dialog, including no link when no destination is mapped.
 The open message survives removal from the Unread filter; read-only users may view
 without a write request. Long dialogs scroll the message with Close kept visible.
 No endpoint/schema/email changes are introduced by this frontend update.
+
+October 28, 2026 remaining task endpoints:
+Added the three canonical Alert create/list/detail reads/writes plus conditional
+PATCH, and the single AC cycle reminder POST. User confirmed acknowledgement then
+resolution and preserving free-text alert reasons. The existing Faculty issue
+ALERT path delegates to the canonical service. AC context/reminder controls use the
+same endpoints, with no duplicate History or reminder API. Notification/email
+separation is retained: inApp only; email requests return EMAIL_NOT_ENABLED without
+partial sending. 20261028010000_alerts_reminders was applied locally without reset.
+See ALERTS_REMINDERS_BACKEND.md for permissions, lifecycle, filters, idempotency,
+verified behavior and existing unrelated schema/build limitations.
+
+October 28 alert sender visibility:
+Notification responses now add optional sender:{id,name}|null. Faculty alert
+notifications resolve it from their exact faculty-issue event key and the stored
+reporter, only when current observation/alert access permits it. This works for
+already-created alerts without editing notification messages or guessing names.
+The notification table/detail dialog show From, and alert context shows Submitted
+by using createdBy. Other notifications with no recorded sender say Sender not
+recorded in the dialog. No client-supplied sender is accepted by write endpoints.
+
+
+October 28 email delivery (supersedes earlier deferred-email notes):
+New workflow notifications now default to both inApp and email. Additive migration
+20261028020000_notification_email uses an INSERT-only trigger to atomically enqueue
+both Prisma and existing pg writers, with no historical backfill or read-action
+emails. A separate Prisma/Nodemailer job sends through local Mailpit, using
+noreply_course_evaluation@assessmenthelper.edu, with claim leases and bounded
+retries. AC reminders support email-only, inApp-only or both; channel choices are
+in the idempotency hash. The frontend sends both and reports email as queued.
+No public mail endpoint. See EMAIL_DELIVERY.md for setup and delivery limits.

@@ -114,3 +114,10 @@ test('read-only viewing does not write, while already-read messages are not patc
  await store.load();await store.open(id,false);assert.equal(store.getSnapshot().opened.id,id);assert.equal(writes,0);
  await store.open(id+'read',true);assert.equal(writes,0);
 });
+
+test('notification responses preserve recorded senders and accept older records without sender metadata',()=>{
+ const sender={id,name:'Faculty Sender'};
+ assert.deepEqual(parseNotificationPage(page([{...item(),sender}])).items[0].sender,sender);
+ assert.equal(parseNotificationPage(page([item()])).items[0].sender,null);
+ assert.throws(()=>parseNotificationPage(page([{...item(),sender:{id,name:''}}])));
+});

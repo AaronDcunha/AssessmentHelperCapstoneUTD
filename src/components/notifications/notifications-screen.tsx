@@ -82,6 +82,7 @@ export function NotificationsScreen({ permissions }: { permissions: readonly str
                     {item.readAt === null && <span className="mt-ah-8 size-2 shrink-0 rounded-ah-pill bg-accent" aria-label="Unread" role="img" />}
                     <div className="min-w-0 space-y-ah-4">
                       <p className={item.readAt === null ? "font-semibold" : undefined}>{item.title}</p>
+                      {item.sender && <p className="text-caption text-muted">From: {item.sender.name}</p>}
                       <time className="block text-caption text-muted" dateTime={item.createdAt}>{notificationDate(item.createdAt)}</time>
                       {canUpdate && <TextAction className={styles.readAction} disabled={updatesDisabled} aria-busy={state.pending === item.id}
                         aria-label={`${item.readAt === null ? "Mark as read" : "Mark as unread"}: ${item.title}`}
@@ -111,6 +112,7 @@ export function NotificationsScreen({ permissions }: { permissions: readonly str
       {state.opened && <div className="flex min-h-0 flex-1 flex-col gap-ah-24">
         <div className="shrink-0 space-y-ah-8">
           <h2 id={dialogTitle} className="break-words text-section">{state.opened.title}</h2>
+          <p className="text-body text-muted">From: {state.opened.sender?.name ?? "Sender not recorded"}</p>
           <p className="text-caption text-muted"><time dateTime={state.opened.createdAt}>{notificationDate(state.opened.createdAt)}</time></p>
           <p role="status" className="text-caption text-muted">{state.pending === state.opened.id ? "Marking as read…" : state.opened.readAt === null ? "Unread" : "Read"}</p>
           {!canUpdate && <p className="text-caption text-muted">You do not have permission to change the read status.</p>}
