@@ -363,9 +363,13 @@ and notify AC informationally. Retry limits/timing/cutoff remain unresolved.
 
 5. OBSERVATIONS AND AC ALERTS
 =============================
-GET /api/me/observations
+GET /api/me/observations (COMPLETED)
   Q: cycleId?,semesterId?,participation?:observer|observee,status?,assessmentStatus?.
-  R: List<Observation>. Supports dashboard/history; define current-observation rule.
+  R: List<Observation>. Own observee/selected-observer records only, including AC/Admin.
+  Filters intersect; status matches stored uppercase values; assessmentStatus uses
+  NOT_STARTED/IN_PROGRESS/COMPLETED (no assessment/unlocked/locked).
+  UUID cursor pagination: default 20, max 100; private/no-store. No implicit current
+  cycle or completed-only rule. See PERSONAL_OBSERVATIONS_BACKEND.md.
 GET /api/observations/{observationId}
   R: {observation:Observation,proposedMeetings:Meeting[],progress:[{key,label,state,
     completedAt}],pendingAlert:Alert|null,templateVersionId}.

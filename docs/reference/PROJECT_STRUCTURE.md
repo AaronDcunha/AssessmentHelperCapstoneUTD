@@ -123,3 +123,8 @@ Root and successful logins default to /dashboard. Faculty route-family layouts
 enforce read access. Business dashboard data remains preview/empty state.
 
 October 25 Admin update: shared authorization/validation and HTTP handling live in src/server/admin-*.ts; authorized reads in src/server/queries/admin.ts; Serializable writes in src/server/services/admin.ts. See ADMIN_BACKEND.md for the implemented endpoints and remaining SSO/user-deletion limitations.
+
+October 28 personal observation list: authorized Prisma reads and response mapping
+live in src/server/queries/personal-observations.ts. The thin /api/me/observations
+route supplies session identity and structured private responses. See
+PERSONAL_OBSERVATIONS_BACKEND.md; existing Faculty pg aggregates are unchanged.

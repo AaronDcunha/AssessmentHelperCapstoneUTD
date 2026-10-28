@@ -417,6 +417,33 @@ October 19, 2026 Admin navigation update: temporarily include direct links to
 all existing component preview pages and Faculty/AC/Admin role probes under
 Admin, including Alert AC. All links require test:admin and retain route guards.
 
+October 18 local history integration (user-reported meeting direction):
+An authenticated history backend may return dummy data while Haris imports data.
+The initial GET /api/me/observation-history prototype was superseded on
+October 19 by GET /api/me/observations (see alignment note below).
+Database history and submitted forms remain separate from this dummy backend.
+
+October 19 history alignment (local, user-authorized):
+History now uses Aaron's GET /api/me/observations list/filter envelope instead
+of a separate history endpoint. The dummy provider follows Haris PR #49 at
+d3c4587: AppUser and Professor IDs are distinct; ownership is through the
+signup's professor or selected observer. This is not a running Prisma query.
+Unmodeled draft revision/lifecycle fields remain null; section.semester is an
+additive name lookup beyond the API draft's section fields.
+For template reads, Haris's October 18 clarification supersedes the earlier
+version-preservation guidance: current questions may be edited in place and
+older linked assessments may show changed question text. The reader uses
+templateId/responses; the responses Json layout still requires agreement
+with the form writer. No real submitted-form API is implemented here.
+
+October 19 History integration with updated main 33d84e7:
+The user's approved dummy-backend scope supersedes the earlier History-only
+empty-state restriction for this feature. Use /observations/history and the
+existing observations.read.own grant. /history only redirects; preserve the
+five Faculty links, shared layout, current login/database auth, and Admin tools.
+The dummy provider supports current AccountUser shapes, remains explicitly
+opt-in development data, and performs no database reads, writes, migrations,
+or seeding. Existing database/auth/schema/dashboard work is retained from main.
 October 19, 2026 Faculty dashboard backend (supersedes dashboard preview values):
 /dashboard now reads the signed-in user's own PostgreSQL data through the existing
 pg pool, with a read-only /api/me/dashboard aggregate. Sections enforce existing
@@ -598,3 +625,49 @@ of existing users, pagination or lookup failures. Create requires an explicit ch
 POST/PATCH send actual booleans, including false. The Users filter offers All, Active
 and Inactive; its query serializes true/false and omits the parameter for All.
 API response validators reject status strings. No schema or backend handlers changed.
+
+October 28, 2026 Faculty History branch refresh:
+Merged current origin/main into feature/faculty-history, retaining the original
+History UI and current main's Faculty workflows, shared shell and authorization.
+Removed the unused FacultyHistoryScreen duplicate. The own-observation API
+remains an opt-in development prototype; real records, submitted-form alignment,
+notifications, shared delivery/email and alerts belong to the next endpoint branch.
+
+October 28, 2026 History frontend endpoint alignment:
+History retains its existing toolbar/table and uses shared typography, radius,
+color and border tokens without custom surface shadows. It now renders in all
+build modes; preview query overrides remain development-only. The existing
+GET /api/me/observations client handles private paginated reads, cancellation,
+loading/empty/denied/error states and retry. Its list adapter accepts the current
+nested semester response without requiring the old redundant semesterId.
+The submitted-form reader now consumes existing observation assessment/template
+endpoints: templateVersionId, id/title/order, answer/comment arrays, and general
+comments. It displays locked forms only, rejects mismatched or malformed data,
+and shows unavailable timestamps without inventing completion dates.
+No backend, authentication, schema or database changes are included. The own-list
+provider remains development-only until the separate endpoint implementation.
+
+October 28 History sample removal: the development own-observation route now
+returns an empty list instead of generated demo observations. Fixtures remain
+for isolated unit tests only; real database reads remain follow-up work.
+
+October 28, 2026 database-backed own-observation endpoint (supersedes History prototype):
+GET /api/me/observations now uses Prisma reads with observations.read.own and
+session-derived observee/selected-observer membership, including for AC/Admin.
+Cycle, semester, participation, exact stored status and existing AC assessment
+categories filter in the database. UUID keyset pagination defaults to 20/max 100;
+cursors are checked within the same caller/filter scope. All responses are private,
+no-store with structured errors. No dummy records, schema changes or mutations.
+The endpoint is shared across History, Dashboard and active Observations; it does
+not impose a current-cycle or completed-only rule. Existing Dashboard aggregates
+remain unchanged. See PERSONAL_OBSERVATIONS_BACKEND.md for the contract and tests.
+
+October 28 History detail navigation:
+History now links View details to /observations/details?observationId=<selected ID>
+instead of opening its duplicate record/form modal. The existing Faculty details
+route accepts a specific ID for read-only historical viewing; without an ID it
+retains the active workflow. Selected-record views reuse the shared observation
+progress, meeting and assessment components used by AC, with Back to History.
+The page checks observations.read.own and gates assessment loading separately by
+assessment.read.own; the existing observation APIs enforce access to each record.
+Malformed/repeated IDs do not fall back to a different current observation.

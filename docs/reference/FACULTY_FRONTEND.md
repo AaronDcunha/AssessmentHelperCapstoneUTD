@@ -26,7 +26,7 @@ The recommended/accepted tables share presentation only. Details and Appointment
 
 ## History, notifications, identity and scope
 
-The sidebar contains Dashboard, My Evaluation, Observer Requests, Observations, and **History**. History now links to `/observations/history` and uses the existing active-link matching. The user explicitly authorized this simple read-only frontend after the earlier exclusion; no other page behavior or navigation authorization changed. Records remain empty until an authorized server query is available. The client component may receive only authorized past records, not all faculty records for client-side access filtering. Semester/status choices derive from those records rather than invented dates or lifecycle states. Form links require an actual authorized destination; no record URL is guessed.
+The sidebar contains Dashboard, My Evaluation, Observer Requests, Observations, and **History**. History now links to `/observations/history` and uses the existing active-link matching. The user explicitly authorized this simple read-only frontend after the earlier exclusion; no other page behavior or navigation authorization changed. The retained feature/faculty-history implementation uses ConnectedObservationHistory and ObservationHistory, backed by the opt-in development-only GET /api/me/observations prototype. The unused FacultyHistoryScreen duplicate has been removed. Real database records and submitted-form contract alignment remain follow-up work on a separate endpoint branch. The client component may receive only authorized past records, not all faculty records for client-side access filtering. Semester/status choices derive from those records rather than invented dates or lifecycle states. Form links require an actual authorized destination; no record URL is guessed.
 
 No notification screen/route exists despite its inclusion in the reference sitemap. The header retains the accessible unavailable-notifications indicator instead of inventing a URL/action. In-app notifications are required MVP integration work; automated email is a stretch goal, not working behavior.
 
@@ -56,3 +56,35 @@ The earlier correction pass checked the original 10 canonical Faculty routes and
 The History browser check passed at desktop and mobile sizes: actual sidebar mouse clicks reached `/observations/history`, the page returned HTTP 200, History was the active item, all three filters and five table columns rendered, role changes updated the result count, reload/direct access worked, keyboard focus remained visible, and no page overflow occurred. Captures are in `.next/history-check/` as temporary build artifacts.
 
 The dashboard and related rendered pages were visually inspected against the supplied Figma references. Sample records/semester/identity in those references cannot be treated as real Faculty records. The anonymous profile, missing AC/Admin authorization, missing non-dashboard cycle subtitle, and record-empty/disabled states are intentional integration limitations. The History page follows screenshot 12's filter/table layout with a real empty state rather than its sample records.
+
+### October 28 History frontend alignment
+The History UI now uses shared typography, radii and surface tokens and removes
+custom shadows. It renders outside development and handles endpoint failures
+through its normal retry/error states; preview state overrides are development-only.
+Its list adapter supports the current nested semester shape. Its form dialog reads
+the existing assessment/template contracts, including answer arrays, configured
+comments and general comments. Missing submission timestamps display as unavailable.
+Draft/submitted forms are not presented as finalized. The own-observation list
+backend remains a development provider pending the separate endpoint branch.
+
+Validation for the October 28 frontend pass: lint passed; the full Node suite
+passed with one existing skipped test, and the focused adapter/API regression
+suite passed all 23 tests. The existing History HTTP integration test passed
+against localhost (authentication, three roles, ownership-scoped development
+records, no-store, rejected identity parameters and logout). Webpack production
+compilation succeeded; final build validation is blocked by existing optional
+route-context type signatures in unrelated Admin/AC backend HTTP wrappers.
+Turbopack separately failed while spawning its CSS processing worker. Browser
+visual inspection has not been performed for this pass.
+
+October 28 endpoint implementation supersedes the development-provider limitation
+above: History now receives real personal observation rows from PostgreSQL through
+GET /api/me/observations. See PERSONAL_OBSERVATIONS_BACKEND.md. Mock login identities
+still have no records; the endpoint does not seed sample observations. Dashboard
+and active workflow aggregates are unchanged but may reuse this list endpoint.
+
+History's View details action now opens the existing /observations/details route
+with the selected observationId. The duplicate History modal is removed. Explicit
+record views reuse the shared read-only details/assessment UI and provide Back to
+History; no-ID navigation retains the active Faculty workflow. Endpoint ownership
+checks remain authoritative. No new endpoint or workflow mutation was introduced.
