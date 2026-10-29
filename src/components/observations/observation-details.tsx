@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertContext } from "@/components/ac/alert-context";
-import { useCallback } from "react";
+import { useCallback, type ReactNode } from "react";
 import { useApiResource } from "@/components/ac/use-api-resource";
 import { Section } from "@/components/ui/section";
 import { ObservationAssessmentPanel } from "@/components/ac/observation-assessment-panel";
@@ -11,7 +11,7 @@ import { acApi, type ObservationDetail, userDisplayName } from "@/lib/ac-api";
 
 const EMPTY_DETAIL: ObservationDetail = { observation: { id: "" }, progress: [], proposedMeetings: [] };
 
-export function ObservationDetails({ observationId, canReadAssessment, backHref = "/ac/observations", backLabel = "Back to Observation Progress", alertId }: { observationId: string; canReadAssessment: boolean; backHref?: string; backLabel?: string; alertId?: string }) {
+export function ObservationDetails({ observationId, canReadAssessment, backHref = "/ac/observations", backLabel = "Back to Observation Progress", alertId, children }: { observationId: string; canReadAssessment: boolean; backHref?: string; backLabel?: string; alertId?: string; children?: ReactNode }) {
   const result = useApiResource(useCallback(() => acApi.getObservation(observationId), [observationId]), EMPTY_DETAIL);
   const observation = result.data.observation;
   return (
@@ -27,10 +27,11 @@ export function ObservationDetails({ observationId, canReadAssessment, backHref 
         </dl>
       )}
     </Section>
-    {!result.loading && !result.error && (alertId ?? result.data.pendingAlert?.id) && <AlertContext observationId={observationId} alertId={(alertId ?? result.data.pendingAlert?.id)!} />}
+    {!result.loading && !result.error && alertId && <AlertContext observationId={observationId} alertId={alertId} />}
     {!result.loading && !result.error && <ObservationTrackingDetails detail={result.data} />}
     {!result.loading && !result.error && (canReadAssessment ? <ObservationAssessmentPanel observationId={observationId} /> :
       <Section title="Assessment"><p className="text-body text-muted">You do not have permission to view assessments.</p></Section>)}
+    {!result.loading && !result.error && children}
     </div>
   );
 }

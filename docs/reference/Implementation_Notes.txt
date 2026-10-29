@@ -735,3 +735,63 @@ noreply_course_evaluation@assessmenthelper.edu, with claim leases and bounded
 retries. AC reminders support email-only, inApp-only or both; channel choices are
 in the idempotency hash. The frontend sends both and reports email as queued.
 No public mail endpoint. See EMAIL_DELIVERY.md for setup and delivery limits.
+
+
+October 28 multiple alerts (user-confirmed):
+Faculty can submit multiple separate alerts for one observation, even while another
+is pending. Each keeps its own acknowledgement/resolution history and notifications.
+The optional UUID creationKey deduplicates retries of one submission, not all alerts
+for an observation. Different content with a reused key returns 409. The form retains
+the key across errors and generates a new key after success. Migration
+20261028030000_multiple_observation_alerts preserves existing reports and leaves
+NOT_OCCURRED deduplication intact.
+
+
+October 28 faculty messages (supersedes alert lifecycle):
+Faculty alerts are simple messages to AC, with no acknowledgement/resolution
+workflow. PATCH /api/alerts/{alertId} is removed (405); lifecycle fields are omitted
+from GET responses and status filtering is unsupported. Old records/audit fields
+are retained. Every active AC account receives one in-app notification and queued
+email, independently of alerts.manage. Admin and custom committee roles with
+observations.read plus notifications.send remain included. Duplicate role membership
+does not duplicate delivery. Messages include sender and full text; observation
+access remains independently enforced. Multiple messages/retry keys remain supported.
+
+
+October 28 unified Faculty observation details:
+The current no-ID details route resolves the selected workflow observation and
+uses the same ObservationDetails component/API as History. Cycle/observation
+selectors and active form, non-occurrence, feedback, recommendation, pairing and
+AC-message actions remain. Actions display only after the authorized details read
+succeeds. History stays read-only. Assessment loading uses the current own grant;
+proposed meeting options retain the shared labels, locations and time zones.
+
+October 28 observation details display: Faculty messages are no longer automatically embedded in current or History observation details. Messages remain in Notifications. Explicit AC View message links still show the selected message context.
+
+
+
+October 28 signup navigation: the signup route redirects to current observation
+details when the authorized selected-cycle workflow already contains a signup.
+The form also guards against displaying another submission for an existing signup,
+and successful signup replaces the page with observation details. My Evaluation
+and Observations switch their signup link to View Observation Details when signed
+up. Existing database uniqueness, transaction locks and duplicate API rejection
+remain enforced. This does not block signup for another cycle.
+
+
+October 28 dashboard previews and evaluation display:
+Recent activity normalizes whitespace and truncates messages at 180 Unicode
+characters, with a two-line visual limit and a Notifications link for full text.
+My Evaluation displays Signed up for an existing selected-cycle signup, and
+Completed when the latest completed evaluation belongs to the selected semester.
+Signing up is not completion; annual/biennial due calculations, AC reporting and
+backend eligibility rules are unchanged. The UI explains pending completion.
+
+
+October 28 dashboard signup status correction:
+Dashboard now reads hasCurrentSignup through Prisma for the signed-in faculty
+member and selected cycle under signups.read.own. Dashboard and My Evaluation
+share the same Signed up / Completed / requirement-label display helper. The
+dashboard signup shortcut also becomes View Observation Details after signup.
+Observer participation alone never implies an own signup, and a missing grant or
+cycle is not treated as an unsigned state. Eligibility/due rules are unchanged.

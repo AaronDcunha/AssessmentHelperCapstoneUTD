@@ -151,3 +151,23 @@ noreply_course_evaluation@assessmenthelper.edu, with claim leases and bounded
 retries. AC reminders support email-only, inApp-only or both; channel choices are
 in the idempotency hash. The frontend sends both and reports email as queued.
 No public mail endpoint. See EMAIL_DELIVERY.md for setup and delivery limits.
+
+
+October 28 faculty messages (supersedes alert lifecycle):
+Faculty alerts are simple messages to AC, with no acknowledgement/resolution
+workflow. PATCH /api/alerts/{alertId} is removed (405); lifecycle fields are omitted
+from GET responses and status filtering is unsupported. Old records/audit fields
+are retained. Every active AC account receives one in-app notification and queued
+email, independently of alerts.manage. Admin and custom committee roles with
+observations.read plus notifications.send remain included. Duplicate role membership
+does not duplicate delivery. Messages include sender and full text; observation
+access remains independently enforced. Multiple messages/retry keys remain supported.
+
+
+October 28 unified Faculty observation details:
+The current no-ID details route resolves the selected workflow observation and
+uses the same ObservationDetails component/API as History. Cycle/observation
+selectors and active form, non-occurrence, feedback, recommendation, pairing and
+AC-message actions remain. Actions display only after the authorized details read
+succeeds. History stays read-only. Assessment loading uses the current own grant;
+proposed meeting options retain the shared labels, locations and time zones.

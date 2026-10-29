@@ -5,14 +5,14 @@ export type AlertDatabase=Pick<Prisma.TransactionClient,"facultyIssue"|"observat
 export const alertInclude={reporter:{select:{userId:true,fullName:true}},observation:{include:{signup:{include:{professor:{include:{user:{select:{userId:true,fullName:true}}}},section:{include:{course:true,semester:true}}}},observer:{include:{user:{select:{userId:true,fullName:true}}}},candidates:{include:{professor:{include:{user:{select:{userId:true,fullName:true}}}}}}}}} as const;
 export type AlertRow=Prisma.FacultyIssueGetPayload<{include:typeof alertInclude}>;
 export function alertResource(a:AlertRow,user:ConfigurationUser){
- const o=a.observation,s=o.signup.section;const manage=user.permissions.includes("alerts.manage")&&user.permissions.includes("observations.read");
- return {id:a.issueId,observationId:a.observationId,cycleId:o.cycleId,type:"ALERT",status:a.status.toLowerCase(),reasonCode:"OTHER",reason:a.reason,details:a.details,
-  createdAt:a.createdAt.toISOString(),revision:a.revision,acknowledgedAt:a.acknowledgedAt?.toISOString()??null,resolvedAt:a.resolvedAt?.toISOString()??null,resolutionNote:a.resolutionNote,
+ const o=a.observation,s=o.signup.section;
+ return {id:a.issueId,observationId:a.observationId,cycleId:o.cycleId,type:"ALERT",reasonCode:"OTHER",reason:a.reason,details:a.details,
+  createdAt:a.createdAt.toISOString(),
   createdBy:{id:a.reporter.userId,name:a.reporter.fullName},
   context:{observee:{id:o.signup.professor.userId,name:o.signup.professor.user.fullName},observer:o.observer?{id:o.observer.userId,name:o.observer.user.fullName}:null,
    section:{id:s.sectionId,course:s.course.courseCode,sectionNumber:s.sectionCode,semester:{id:s.semesterId,name:s.semester.termName}},observationStatus:o.status,
    candidates:(user.permissions.includes("observations.read")||o.recommendationsReleasedAt?o.candidates:[]).map(c=>({id:c.candidateId,name:c.professor.user.fullName,status:c.status}))},
-  allowedActions:manage?(a.status==="PENDING"?["acknowledge"]:a.status==="ACKNOWLEDGED"?["resolve"]:[]):[]};
+  allowedActions:[]};
 }
 export async function getAlert(db:AlertDatabase,user:ConfigurationUser,id:string){
  const broad=user.permissions.includes("observations.read");
@@ -23,7 +23,7 @@ export async function getAlert(db:AlertDatabase,user:ConfigurationUser,id:string
 export async function getCycleAlerts(db:AlertDatabase,user:ConfigurationUser,cycleId:string,url:URL){
  workflowGrant(user,"observations.read");uuid(cycleId);const f=alertFilters(url),{limit,cursor}=pagination(url);
  if(!await db.evaluationCycle.findUnique({where:{cycleId},select:{cycleId:true}}))throw new ConfigurationError(404,"NOT_FOUND","Evaluation cycle not found.");
- const where:Prisma.FacultyIssueWhereInput={kind:"ALERT",...(f.status?{status:f.status}:{}),observation:{cycleId,...(f.departmentId?{signup:{professor:{departmentId:f.departmentId}}}:{})}};
+ const where:Prisma.FacultyIssueWhereInput={kind:"ALERT",observation:{cycleId,...(f.departmentId?{signup:{professor:{departmentId:f.departmentId}}}:{})}};
  if(cursor&&!await db.facultyIssue.findFirst({where:{AND:[where,{issueId:cursor}]},select:{issueId:true}}))throw new ConfigurationError(400,"INVALID_CURSOR","Invalid alert cursor.");
  const rows=await db.facultyIssue.findMany({where:{AND:[where,...(cursor?[{issueId:{gt:cursor}}]:[])]},include:alertInclude,orderBy:{issueId:"asc"},take:limit+1});
  const items=rows.slice(0,limit).map(a=>alertResource(a,user)),hasMore=rows.length>limit;

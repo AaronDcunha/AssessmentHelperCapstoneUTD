@@ -225,7 +225,7 @@ export async function getObservation(db: Connection, user: ConfigurationUser, ob
   const o = await db.observation.findFirst({ where: { observationId: uuid(observationId),
     ...(broad ? {} : { OR: [{ signup: { professor: { userId: user.id } } }, { observer: { userId: user.id } }] }) },
     include: { ...observationInclude, timeOptions: { orderBy: { preferredDate: "asc" } },
-      facultyIssues: { where: { kind: "ALERT", status: { not: "RESOLVED" } }, select: { issueId: true }, orderBy: { createdAt: "desc" }, take: 1 },
+      facultyIssues: { where: { kind: "ALERT" }, select: { issueId: true }, orderBy: { createdAt: "desc" }, take: 1 },
       signedAssessment: { include: { template: { include: { criteria: { orderBy: { displayOrder: "asc" } } } } } } } });
   if (!o) throw new ConfigurationError(404, "NOT_FOUND", "Observation not found.");
   const a = o.signedAssessment;

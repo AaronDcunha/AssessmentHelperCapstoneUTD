@@ -74,7 +74,7 @@ const cycleId='11111111-1111-4111-8111-111111111111',observationId='22222222-222
 const cycle={id:cycleId,semester:{id:cycleId,name:'Fall 2026'},signupDeadline:null,observationDeadline:null,feedbackDeadline:null};
 let alert={id:alertId,observationId,cycleId,type:'ALERT',status:'pending',reasonCode:'OTHER',reason:'Need observer assistance',details:'Full faculty explanation.',createdAt:'2026-10-28T12:00:00Z',revision:0,resolutionNote:null,allowedActions:['acknowledge'],context:{observee:{name:'Test Faculty'},observer:null,section:{course:'CS 4485',sectionNumber:'001',semester:{name:'Fall 2026'}},observationStatus:'PENDING',candidates:[{id:'candidate',name:'Candidate One',status:'PENDING'}]}};
 const observation={id:observationId,observee:{id:'faculty',name:'Test Faculty'},observer:null,status:'PENDING',assessmentStatus:'NOT_STARTED',section:{course:{code:'CS 4485'}},scheduledMeeting:null};
-let fixtureFailure,reminders=[],updates=[];
+let fixtureFailure,reminders=[];
 handlers.set('Fetch.requestPaused',async event=>{
  try{
   const path=new URL(event.request.url).pathname,method=event.request.method;let body,status=200;
@@ -83,10 +83,7 @@ handlers.set('Fetch.requestPaused',async event=>{
   else if(path==='/api/notifications/unread-count')body={unreadCount:0,asOf:'2026-10-28T12:00:00Z'};
   else if(path.endsWith('/observations')&&path.includes('/evaluation-cycles/'))body={items:[observation],pageInfo:{hasMore:false,nextCursor:null}};
   else if(path.endsWith('/alerts')&&path.includes('/evaluation-cycles/'))body={items:[alert],pageInfo:{hasMore:false,nextCursor:null}};
-  else if(path==='/api/alerts/'+alertId&&method==='PATCH'){
-   const input=JSON.parse(event.request.postData);assert.equal(input.expectedRevision,alert.revision);updates.push(input);
-   alert={...alert,status:input.status,revision:alert.revision+1,resolutionNote:input.resolutionNote??null,allowedActions:input.status==='acknowledged'?['resolve']:[]};body=alert;
-  }else if(path==='/api/alerts/'+alertId)body=alert;
+  else if(path==='/api/alerts/'+alertId&&method==='PATCH'){throw new Error('Message lifecycle writes must not occur');}else if(path==='/api/alerts/'+alertId)body=alert;
   else if(path==='/api/observations/'+observationId)body={observation,proposedMeetings:[],progress:[],pendingAlert:{id:alertId}};
   else if(path.endsWith('/assessment'))body={observationId,assessment:null,allowedActions:[]};
   else throw new Error('Unexpected fixture route '+path);
@@ -101,15 +98,12 @@ try{
  await click('Send reminder');
  await evaluate(`(()=>{const e=document.querySelector('main textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(e,'Please review your tasks.');e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
  await click('Send to matching faculty');await wait(`document.querySelector('main').textContent.includes('Reminder delivered in-app to 2 faculty members.')`);assert.equal(reminders.length,1);await wait(`document.querySelector('main').textContent.includes('2 emails queued.')`);
- await evaluate(`[...document.querySelectorAll('main a')].find(e=>e.textContent==='View alert').click()`);
+ await evaluate(`[...document.querySelectorAll('main a')].find(e=>e.textContent==='View message').click()`);
  await wait(`location.pathname==='/ac/observations/${observationId}'&&document.querySelector('main').textContent.includes('Full faculty explanation.')`);
  assert.equal(await evaluate(`document.querySelector('main').textContent.includes('Candidate One')`),true);
- await click('Acknowledge alert');await wait(`[...document.querySelectorAll('button')].some(e=>e.textContent==='Resolve alert')`);
- await evaluate(`(()=>{const e=document.querySelector('main textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(e,'Assistance provided.');e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
- await click('Resolve alert');await wait(`document.querySelector('main').textContent.includes('Resolution: Assistance provided.')`);
- assert.deepEqual(updates.map(x=>x.status),['acknowledged','resolved']);assert.equal(alert.revision,2);
+ assert.equal(await evaluate("[...document.querySelectorAll('button')].some(e=>/Acknowledge alert|Resolve alert/.test(e.textContent))"),false);
  await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:true}).then(r=>writeFileSync(join(tmpdir(),'assessment-alert-context-desktop.png'),Buffer.from(r.data,'base64')));
  await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);
  if(fixtureFailure)throw fixtureFailure;
- console.log('Passed AC browser integration: cycle alert list, correct observation/alert context, current candidates, acknowledge then resolve with revision/note, in-app/email reminder control with idempotency key, and mobile overflow. Every business API was intercepted; no real reminders or emails were sent.');
+ console.log('Passed AC browser integration: cycle alert list, correct observation/alert context, current candidates, read-only message context without acknowledgement/resolution controls, in-app/email reminder control with idempotency key, and mobile overflow. Every business API was intercepted; no real reminders or emails were sent.');
 }finally{await send('Fetch.disable');socket.close();await fetch(debug+'/json/close/'+target.id);}

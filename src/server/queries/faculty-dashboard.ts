@@ -16,6 +16,7 @@ type ActivityRow = { id: string; title: string; message: string; createdAt: Date
 export type FacultyDashboard = {
   asOf: string;
   hasFacultyProfile: boolean;
+  hasCurrentSignup: boolean | null;
   cycleReason: string | null;
   availableCycles: { id: string; name: string }[];
   availableObservations: { id: string; label: string }[];
@@ -39,7 +40,7 @@ export async function getFacultyDashboard(user: AccountUser, options: { now?: Da
     activity: user.permissions.includes("notifications.read.own"),
   };
   const result: FacultyDashboard = {
-    asOf: now.toISOString(), hasFacultyProfile: false, cycle: null, cycleReason: null, availableCycles: [], availableObservations: [],
+    asOf: now.toISOString(), hasFacultyProfile: false, hasCurrentSignup: null, cycle: null, cycleReason: null, availableCycles: [], availableObservations: [],
     evaluation: { status: "unknown", reason: access.evaluation ? "No faculty profile is available." : "Evaluation status is not available with your current permissions.", hiringLevel: null, lastCompletedEvaluation: null },
     currentObservation: null, pendingObserverRequestCount: access.observations ? 0 : null,
     recentActivity: [], access,
@@ -67,6 +68,11 @@ export async function getFacultyDashboard(user: AccountUser, options: { now?: Da
       : "No single valid relevant evaluation cycle is available.";
     if (!cycle && (cycles.length > 1 || chosen || selected)) result.pendingObserverRequestCount = null;
     if (cycle) result.cycle = { ...cycle, signupDeadline: cycle.signupDeadline.toISOString(), observationDeadline: cycle.observationDeadline.toISOString(), feedbackDeadline: cycle.feedbackDeadline.toISOString() };
+    if (cycle && user.permissions.includes("signups.read.own")) {
+      result.hasCurrentSignup = !!await getPrisma().evaluationSignup.findFirst({
+        where: { cycleId: cycle.id, professor: { userId: user.id } }, select: { signupId: true },
+      });
+    }
 
     if (access.evaluation) {
       const evaluation = await db.query<EvaluationRow>(`

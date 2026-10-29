@@ -1,16 +1,15 @@
 # Alert and AC reminder endpoints
 
 Implemented October 28, 2026. All new runtime persistence uses Prisma Client.
-Email delivery remains explicitly deferred; no SMTP, outbox or mail job was added.
+Email delivery now uses the transactional outbox and separate Mailpit worker; see EMAIL_DELIVERY.md.
 
 ## Endpoints
 
 | Method and route | Access and behavior |
 | --- | --- |
-| POST /api/observations/{observationId}/alerts | Own observee only; requires observations.read.own and invitations.send.own. Creates a pending alert and handler notifications in one transaction. Returns 201 for creation, 200 for an existing alert. |
-| GET /api/evaluation-cycles/{cycleId}/alerts | observations.read; current AC university-wide scope. Supports status, type, departmentId, cursor, limit. |
+| POST /api/observations/{observationId}/alerts | Own observee only; requires observations.read.own and invitations.send.own. Creates a message and notifications for all active AC recipients in one transaction. Returns 201 for creation, 200 for an existing alert. |
+| GET /api/evaluation-cycles/{cycleId}/alerts | observations.read; current AC university-wide scope. Supports type, departmentId, cursor, limit. |
 | GET /api/alerts/{alertId} | observations.read for AC scope, or observations.read.own for the original reporting observee. A selected observer does not inherit access to another faculty member's alert. |
-| PATCH /api/alerts/{alertId} | observations.read plus alerts.manage. Revision-checked acknowledgement/resolution and reporter notification are atomic. |
 | POST /api/evaluation-cycles/{cycleId}/notifications | notifications.send plus cycles.read. Uses the shared in-app notification service; no second reminder endpoint or browser notification-creation API. |
 
 All routes authenticate through the existing active-account/session resolver.
@@ -20,39 +19,33 @@ fields, invalid IDs, wrong grants, stale revisions and foreign records are rejec
 Serializable transactions protect concurrent writes; conflicts return 409 instead
 of blindly replaying user actions. Raw database exceptions are not exposed.
 
-## Agreed alert behavior
+## Faculty messages (current behavior)
 
-The user confirmed two actions: acknowledge an alert, then resolve it. State flow:
-pending -> acknowledged -> resolved. Resolved is terminal; no reopening or automatic
-observer replacement is implemented. The existing unique observation/reporter/kind
-constraint preserves the previous one-alert-per-observation behavior, including
-retries through the older Faculty issue route. Reposting does not overwrite the
-reason/details or create a second committee notification.
+Alerts are now messages sent to the Assessment Committee, with no acknowledgement,
+resolution or message status workflow. PATCH /api/alerts/{alertId} is removed (405).
+Read/unread remains per recipient through the notification endpoints. GET responses
+omit lifecycle fields and return allowedActions:[]; status filters are unsupported.
+The existing alert URLs remain for authorized message/observation context.
 
-The user confirmed preserving free-text reasons. Creation accepts the contract's
-{reasonCode:"OTHER",details} with an additive optional reason string for the existing
-Faculty form. The generic OTHER code is the only enabled code until a team-approved
-reason list exists. The free-text reason is limited to 2000 characters and details
-to 20000. Old alert rows retain their original reason/details.
+Faculty can send multiple messages per observation. Optional body creationKey UUID
+deduplicates retries of one submission: same content/key returns its existing
+message, changed content/key returns 409, and a new key creates a new message.
+The form retains the key on failure and clears it after success. Creation accepts
+reasonCode:OTHER, optional free-text reason (up to 2000 characters), details (up to
+20000 characters) and optional creationKey.
 
-PATCH takes {status:"acknowledged"|"resolved",expectedRevision,resolutionNote?}.
-Resolution notes are optional, up to 2000 characters. The server records actor,
-acknowledgement/resolution timestamps and increments the revision. Direct pending
-to resolved, reopening, stale revisions and repeated transitions are rejected.
-allowedActions reflects current state and effective permissions.
+Every active account assigned AC receives one in-app notification and one queued
+email, without requiring alerts.manage. Admin accounts and custom committee roles
+with both observations.read and notifications.send also receive the message.
+Multiple matching roles do not duplicate delivery. Inactive accounts are excluded.
+The persisted notification/email message includes the sender's name and full text.
+Observation destinations and context reads still enforce current access; receiving
+a message does not grant additional observation permissions.
 
-The additive migration gives default AC/Admin roles alerts.manage and increments
-changed role revisions so pre-migration role edits cannot silently erase the grant.
-Custom roles require explicit assignment; a role name alone never authorizes a
-request. Committee recipients must have both alerts.manage and observations.read.
-
-Alert reads attach linked observation, section/semester, participants and current
-candidate context server-side. This is current linked context, not a historical
-snapshot. Faculty cannot see unreleased recommendations through this endpoint;
-AC may view candidates with its observation read grant. Neither form answers nor
-private feedback attachments are exposed. Missing/foreign alerts return generic
-404 responses. The existing observation details read now supplies a pendingAlert
-reference only to its own observee or scoped AC readers, not merely any observer.
+Old messages, lifecycle audit fields and historical notifications are preserved;
+these fields are no longer used in the API or UI. The old alerts.manage grant is
+inert and is not seeded for new roles. No data-reset or destructive migration is
+needed. Existing acknowledgement rules for assessment forms are unchanged.
 
 ## In-app reminders
 
@@ -93,7 +86,7 @@ No reminder is sent automatically by a read or page render.
 - AC Observation Progress has a cycle alert list. View alert opens the existing
   observation details destination with its selected alertId. The shared context
   panel validates the observation/alert pairing and displays reason, details,
-  candidate context, acknowledgement and resolution actions.
+  candidate context and full read-only message.
 - Existing observation details can display its pending alert for an authorized
   observee/AC viewer. Resolution notes and terminal state remain accessible through
   the cycle alert list's explicit alert link.
@@ -112,7 +105,7 @@ It preserves existing FacultyIssue records and the prior notification migration.
 - Unit suite: 231 passed, one existing optional SQL-plan test skipped.
 - Source TypeScript checks and lint passed.
 - Isolated PostgreSQL integration covers ownership, candidate privacy, duplicate
-  alerts, lifecycle/revisions, concurrent acknowledgement/reminder requests, recipient
+  messages, all-active-AC delivery, concurrent retry/reminder requests, recipient
   filters, inactive exclusions, notification atomicity, rollback and email rejection.
 - Existing populated Faculty regression passed all 15 groups in a disposable DB,
   including the legacy Alert AC route and notification workflows.
@@ -120,7 +113,7 @@ It preserves existing FacultyIssue records and the prior notification migration.
   using only reads and rejected/missing-record mutations. No real alerts/reminders
   or email were created by those checks.
 - Isolated browser fixtures passed alert-list navigation, observation/alert context,
-  candidate display, acknowledgement/resolution notes/revisions, reminder form with
+  candidate display, absence of message lifecycle controls, reminder form with
   idempotency key, and mobile overflow. All business APIs were intercepted.
 
 Inherited checks remain separate: full generated route types still hit optional
@@ -138,3 +131,22 @@ accept email and/or inApp, default to both, and return emailQueuedCount. Workflo
 alerts also queue email alongside their in-app notifications. The frontend requests
 both and describes email as queued. The outbox commits with the workflow; a
 separate worker sends through Mailpit. No historical email backfill occurs.
+
+
+Multiple-alert verification: the isolated PostgreSQL regression passed multiple
+alerts on one observation (including pending/resolved predecessors), same-key
+retries and conflicts, concurrent deduplication and one notification/email queue
+row per new alert. The form test passed retained keys after errors and fresh keys
+after success. All 15 populated Faculty regression groups passed; source types
+and targeted lint passed. Migration 20261028030000_multiple_observation_alerts
+was applied locally without resetting or changing existing alert records.
+
+
+Simple-message verification: 233 unit tests passed, with the existing optional
+SQL-plan check skipped. Isolated PostgreSQL tests verified all active AC recipients
+without alerts.manage, Admin delivery, multi-role deduplication, inactive exclusion,
+email queue creation, retained historical messages and per-submission retry keys.
+Live HTTP checks confirmed PATCH returns 405 and read authorization remains intact.
+The browser test confirmed full message/context viewing and no lifecycle controls.
+Source TypeScript and targeted lint passed. No real messages were sent by these
+regressions; existing application records were not modified.

@@ -37,8 +37,8 @@ for(const role of ['Faculty','AC','Admin']){
  const cycles=await request('/api/evaluation-cycles?limit=1');assert.equal(cycles.status,200);const firstCycle=(await cycles.json()).items[0]?.id;
  if(firstCycle){const list=await request('/api/evaluation-cycles/'+firstCycle+'/alerts');assert.equal(list.status,broad?200:403);if(broad){assert.ok(Array.isArray((await list.json()).items));assert.equal(list.headers.get('cache-control'),'private, no-store');}}
  assert.equal((await request('/api/alerts/'+missingId)).status,404);
- const update=await request('/api/alerts/'+missingId,{method:'PATCH',headers:{origin:base,'content-type':'application/json'},body:JSON.stringify({status:'acknowledged',expectedRevision:0})});assert.equal(update.status,broad?404:403);
+ const update=await request('/api/alerts/'+missingId,{method:'PATCH',headers:{origin:base,'content-type':'application/json'},body:JSON.stringify({status:'acknowledged',expectedRevision:0})});assert.equal(update.status,405);
  const create=await request('/api/observations/'+missingId+'/alerts',{method:'POST',headers:{origin:base,'content-type':'application/json'},body:JSON.stringify({reasonCode:'OTHER',reason:'Missing record check',details:''})});assert.equal(create.status,404);
  const mail=await request('/api/evaluation-cycles/'+missingId+'/notifications',{method:'POST',headers:{origin:base,'content-type':'application/json'},body:JSON.stringify({kind:'custom',recipientFilter:{},channels:['email'],message:'No delivery'})});assert.equal(mail.status,broad?404:403);
 }
-console.log('Passed live alert/reminder HTTP checks: anonymous denial, Faculty ownership and AC/Admin read/status grants, private responses, missing-record errors, and missing-cycle email-request rejection. No alerts, reminders or emails were created.');
+console.log('Passed live alert/reminder HTTP checks: anonymous denial, Faculty ownership and AC/Admin read grants and removed lifecycle PATCH, private responses, missing-record errors, and missing-cycle email-request rejection. No alerts, reminders or emails were created.');

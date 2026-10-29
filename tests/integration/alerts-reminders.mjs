@@ -36,22 +36,32 @@ try{
   const signup=await db.evaluationSignup.create({data:{cycleId,professorId,sectionId}});await db.observation.create({data:{observationId,signupId:signup.signupId,cycleId}});
  }
 
- const {createObservationAlert,updateAlert}=await import('../../src/server/services/alerts.ts');
+ const {createObservationAlert}=await import('../../src/server/services/alerts.ts');
  const {getAlert,getCycleAlerts}=await import('../../src/server/queries/alerts.ts');
  const {sendCycleReminders}=await import('../../src/server/services/cycle-reminders.ts');
  const faculty={id:u1,permissions:['observations.read.own','invitations.send.own']};
  const observer={id:u2,permissions:[...faculty.permissions]};
- const committee={id:u3,permissions:['observations.read','alerts.manage','notifications.send','cycles.read','reports.read']};
- const permission=await db.permission.findUnique({where:{permissionName:'alerts.manage'}});
+ const committee={id:u3,permissions:['observations.read','notifications.send','cycles.read','reports.read']};
  const observationPermission=await db.permission.create({data:{permissionName:'observations.read'}});
- const role=await db.role.create({data:{roleName:'AC',rolePermissions:{create:[{permissionId:permission.permissionId},{permissionId:observationPermission.permissionId}]}}});
+ const role=await db.role.create({data:{roleName:'AC',rolePermissions:{create:[{permissionId:observationPermission.permissionId}]}}});
  await db.userRole.create({data:{userId:u3,roleId:role.roleId}});
+ const [ac2,inactiveAC,adminUser]=Array.from({length:3},()=>randomUUID());
+ await db.appUser.createMany({data:[{userId:ac2,fullName:'Second AC',email:'ac2@test.invalid'},{userId:inactiveAC,fullName:'Inactive AC',email:'inactive@test.invalid',isActive:false},{userId:adminUser,fullName:'Admin',email:'admin@test.invalid'}]});
+ const adminRole=await db.role.create({data:{roleName:'Admin'}});
+ await db.userRole.createMany({data:[{userId:ac2,roleId:role.roleId},{userId:ac2,roleId:adminRole.roleId},{userId:inactiveAC,roleId:role.roleId},{userId:adminUser,roleId:adminRole.roleId}]});
  await db.observation.update({where:{observationId:o1},data:{observerId:p2}});
  await db.observationCandidate.create({data:{observationId:o1,professorId:p2}});
- const create=()=>tx(t=>createObservationAlert(t,faculty,o1,{reasonCode:'OTHER',reason:'Please help',details:'Full context'}));
- const first=await create();assert.equal(first.created,true);assert.equal(first.alert.status,'pending');assert.equal(first.alert.context.candidates.length,0);
+ const creationKey=randomUUID();const create=()=>tx(t=>createObservationAlert(t,faculty,o1,{reasonCode:'OTHER',reason:'Please help',details:'Full context',creationKey}));
+ const first=await create();assert.equal(first.created,true);assert.equal(first.alert.status,undefined);assert.deepEqual(first.alert.allowedActions,[]);assert.equal(first.alert.context.candidates.length,0);
  const again=await create();assert.equal(again.created,false);assert.equal(again.alert.id,first.alert.id);
  assert.equal(await db.notification.count({where:{userId:u3}}),1);
+ for(const recipient of [u3,ac2,adminUser]){
+  const notices=await db.notification.findMany({where:{userId:recipient,eventKey:'faculty-issue:'+first.alert.id},include:{emailDelivery:true}});
+  assert.equal(notices.length,1,'Each active AC/Admin gets exactly one message');assert.ok(notices[0].emailDelivery);assert.equal(notices[0].emailDelivery.status,'pending');assert.ok(notices[0].message.includes('From: Faculty 0'));
+ }
+ assert.equal(await db.notification.count({where:{userId:inactiveAC}}),0);assert.equal(await db.notification.count({where:{userId:u2}}),0);
+ await db.facultyIssue.update({where:{issueId:first.alert.id},data:{status:'RESOLVED',resolutionNote:'Historical note'}});
+ const historic=await tx(t=>getAlert(t,committee,first.alert.id));assert.equal(historic.details,'Full context');assert.equal(historic.status,undefined);assert.equal(historic.resolutionNote,undefined);assert.deepEqual(historic.allowedActions,[]);
  const {getNotifications}=await import('../../src/server/queries/notifications.ts');
  const inbox=await tx(t=>getNotifications(t,{...committee,permissions:[...committee.permissions,'notifications.read.own']},new URLSearchParams()));
  assert.equal(inbox.items[0].sender.id,u1);assert.equal(inbox.items[0].sender.name,'Faculty 0');
@@ -61,15 +71,13 @@ try{
  await assert.rejects(tx(t=>getAlert(t,observer,first.alert.id)),e=>e.status===404);
  assert.equal((await tx(t=>getAlert(t,faculty,first.alert.id))).details,'Full context');
  assert.equal((await tx(t=>getAlert(t,committee,first.alert.id))).context.candidates.length,1);
- const alerts=await tx(t=>getCycleAlerts(t,committee,cycleId,new URL('http://test?status=pending')));assert.equal(alerts.items.length,1);
+ const alerts=await tx(t=>getCycleAlerts(t,committee,cycleId,new URL('http://test')));assert.equal(alerts.items.length,1);
  await assert.rejects(tx(t=>getCycleAlerts(t,faculty,cycleId,new URL('http://test'))),e=>e.status===403);
- await assert.rejects(tx(t=>updateAlert(t,faculty,first.alert.id,{status:'acknowledged',expectedRevision:0})),e=>e.status===403);
- await assert.rejects(tx(t=>updateAlert(t,committee,first.alert.id,{status:'resolved',expectedRevision:0})),e=>e.status===409);
- const acknowledged=await tx(t=>updateAlert(t,committee,first.alert.id,{status:'acknowledged',expectedRevision:0}));assert.equal(acknowledged.status,'acknowledged');assert.equal(acknowledged.revision,1);
- await assert.rejects(tx(t=>updateAlert(t,committee,first.alert.id,{status:'resolved',expectedRevision:0})),e=>e.status===409);
- const resolved=await tx(t=>updateAlert(t,committee,first.alert.id,{status:'resolved',expectedRevision:1,resolutionNote:'Handled'}));assert.equal(resolved.status,'resolved');assert.equal(resolved.revision,2);
- assert.equal(await db.notification.count({where:{userId:u1,notificationType:'ALERT_UPDATED'}}),2);
  assert.equal((await create()).created,false);assert.equal(await db.facultyIssue.count({where:{observationId:o1,kind:'ALERT'}}),1);
+ await assert.rejects(tx(t=>createObservationAlert(t,faculty,o1,{reasonCode:'OTHER',reason:'Changed',details:'Full context',creationKey})),e=>e.status===409);
+ const next=await tx(t=>createObservationAlert(t,faculty,o1,{reasonCode:'OTHER',reason:'A separate issue',details:'Additional context',creationKey:randomUUID()}));assert.equal(next.created,true);assert.notEqual(next.alert.id,first.alert.id);assert.equal(next.alert.status,undefined);
+ const third=await tx(t=>createObservationAlert(t,faculty,o1,{reasonCode:'OTHER',reason:'Third issue',details:'Can coexist with a pending alert'}));assert.equal(third.created,true);assert.equal(await db.facultyIssue.count({where:{observationId:o1,kind:'ALERT'}}),3);
+ const concurrentKey=randomUUID();const concurrentCreate=()=>tx(t=>createObservationAlert(t,faculty,o1,{reasonCode:'OTHER',reason:'Concurrent issue',details:'Single request',creationKey:concurrentKey}));await Promise.allSettled([concurrentCreate(),concurrentCreate()]);const replayed=await concurrentCreate();assert.equal(replayed.created,false);assert.equal(await db.facultyIssue.count({where:{observationId:o1,kind:'ALERT',occurrenceKey:concurrentKey}}),1);assert.equal(await db.notification.count({where:{userId:u3,eventKey:'faculty-issue:'+replayed.alert.id}}),1);assert.equal(await db.notificationEmail.count({where:{notificationId:(await db.notification.findFirstOrThrow({where:{userId:u3,eventKey:'faculty-issue:'+replayed.alert.id}})).notificationId}}),1);
  const key=randomUUID(),payload={kind:'custom',recipientFilter:{professorIds:[p1]},channels:['inApp'],message:'Please review your tasks.'};
  const send=()=>tx(t=>sendCycleReminders(t,committee,cycleId,payload,key));const sent=await send();assert.equal(sent.recipientCount,1);assert.equal(sent.status,'completed');
  const replay=await send();assert.equal(replay.dispatchId,sent.dispatchId);assert.equal(await db.notification.count({where:{userId:u1,eventKey:'reminder:'+key}}),1);
@@ -84,12 +92,8 @@ try{
  const active=await tx(t=>sendCycleReminders(t,committee,cycleId,{...payload,recipientFilter:{}},randomUUID()));assert.equal(active.recipientCount,1);
  const rollbackKey=randomUUID();await assert.rejects(tx(async t=>{await sendCycleReminders(t,committee,cycleId,payload,rollbackKey);throw new Error('Rollback');}));assert.equal(await db.reminderDispatch.count({where:{dispatchId:rollbackKey}}),0);
 
- const second=await tx(t=>createObservationAlert(t,observer,o2,{reasonCode:'OTHER',reason:'Second issue',details:'Context'}));
- const concurrentAcks=await Promise.allSettled([tx(t=>updateAlert(t,committee,second.alert.id,{status:'acknowledged',expectedRevision:0})),tx(t=>updateAlert(t,committee,second.alert.id,{status:'acknowledged',expectedRevision:0}))]);
- assert.equal(concurrentAcks.filter(x=>x.status==='fulfilled').length,1);
- assert.equal(await db.notification.count({where:{userId:u2,eventKey:'alert-status:'+second.alert.id+':1'}}),1);
  const retryKey=randomUUID();await Promise.allSettled([tx(t=>sendCycleReminders(t,committee,cycleId,payload,retryKey)),tx(t=>sendCycleReminders(t,committee,cycleId,payload,retryKey))]);
  assert.equal(await db.reminderDispatch.count({where:{dispatchId:retryKey}}),1);assert.equal(await db.notification.count({where:{userId:u1,eventKey:'reminder:'+retryKey}}),1);
  const due=await tx(t=>sendCycleReminders(t,committee,cycleId,{...payload,recipientFilter:{evaluationStatus:'due'}},randomUUID()));assert.equal(due.recipientCount,0);
- console.log('Passed isolated alert/reminder PostgreSQL tests: observee ownership, selected-observer denial, unreleased-candidate privacy, AC scope, duplicate alerts, acknowledged/resolved lifecycle, stale revisions, workflow notifications, reminder recipient filters/idempotence/rollback, inactive-recipient exclusion, and transactional email enqueue with no SMTP delivery.');
+ console.log('Passed isolated alert/reminder PostgreSQL tests: observee ownership, selected-observer denial, unreleased-candidate privacy, AC scope, multiple messages, retry deduplication, all-AC delivery, read-only message context, workflow notifications, reminder recipient filters/idempotence/rollback, inactive-recipient exclusion, and transactional email enqueue with no SMTP delivery.');
 }finally{await db.$disconnect();await migration.end();if(created)await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end();}

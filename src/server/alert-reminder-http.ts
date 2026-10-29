@@ -1,6 +1,6 @@
 import { ConfigurationError,sameOrigin,type ConfigurationUser } from "./configuration-validation";
 import { workflowGrant } from "./alert-reminder-validation";
-export type WorkflowOperation="alert.create"|"alert.list"|"alert.get"|"alert.update"|"reminder.send";
+export type WorkflowOperation="alert.create"|"alert.list"|"alert.get"|"reminder.send";
 export function workflowHandler(operation:WorkflowOperation,dependencies:{getUser:()=>Promise<ConfigurationUser|null>;execute:(user:ConfigurationUser,id:string,url:URL,body:unknown,key?:string)=>Promise<unknown>}){
  return async(request:Request,id:string)=>{
   const headers={"Cache-Control":"private, no-store"};
@@ -8,10 +8,9 @@ export function workflowHandler(operation:WorkflowOperation,dependencies:{getUse
    const user=await dependencies.getUser();if(!user)throw new ConfigurationError(401,"UNAUTHENTICATED","Sign in to continue.");
    if(operation==="alert.create")workflowGrant(user,"observations.read.own","invitations.send.own");
    else if(operation==="alert.list")workflowGrant(user,"observations.read");
-   else if(operation==="alert.update")workflowGrant(user,"observations.read","alerts.manage");
    else if(operation==="reminder.send")workflowGrant(user,"notifications.send","cycles.read");
    else if(!user.permissions.includes("observations.read"))workflowGrant(user,"observations.read.own");
-   const mutation=operation==="alert.create"||operation==="alert.update"||operation==="reminder.send",url=new URL(request.url);
+   const mutation=operation==="alert.create"||operation==="reminder.send",url=new URL(request.url);
    if(operation!=="alert.list"&&url.searchParams.size)throw new ConfigurationError(400,"INVALID_QUERY","Unknown query parameters.");
    let body:unknown;
    if(mutation){

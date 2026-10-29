@@ -148,7 +148,7 @@ Template = {id,title,status,publishedAt,revision,criteria:Criterion[],
 Assessment = {id,observationId,templateVersionId,status,revision,
   answers:[{criterionId,value:number|string|null}],comments:[{promptId,text}],
   submittedAt,acknowledgements:[{actorId,participantRole,acknowledgedAt}],allowedActions}.
-Alert = {id,observationId,type,status,reasonCode,details,createdAt,revision}.
+Alert = {id,observationId,type,reasonCode,reason,details,createdAt,createdBy,context,allowedActions:[]}.
 Approval = {id,candidateId,attemptId,observationId,status,requestedAt,decidedAt,revision}.
 Attachment = {id,originalName,contentType,sizeBytes,status,createdAt}.
 Feedback = {id,cycleId,templateVersionId,submittedAt,answers,difficulties?,suggestions?,
@@ -385,16 +385,14 @@ POST /api/observations/{observationId}/incomplete-report -- own observee.
   Required by Report Not Completed action. Timing/correction/state effects TBD;
   non-occurrence is not the same as an unsubmitted form.
 POST /api/observations/{observationId}/alerts (COMPLETED); own observee.
-  B: {reasonCode,details}. R: Alert with pending status.
-  Attach observation/candidate context server-side; persist AC work item/notification.
-  Agree reason codes, limits and pending-alert deduplication; demo reasons are samples.
+  B: {reasonCode,reason?,details,creationKey?}. R: Read-only Alert message.
+  Attach authorized observation context; notify every active AC in-app and queue email.
+  OTHER plus free-text reason; creationKey deduplicates retries of one message.
 GET /api/evaluation-cycles/{cycleId}/alerts (COMPLETED); scoped AC/Admin.
-  Q: status?,type?,departmentId?. R: List<Alert>.
+  Q: type?,departmentId?. R: List<Alert>.
 GET /api/alerts/{alertId} (COMPLETED); own observee or scoped AC/Admin.
   R: Alert plus context,createdBy:User|null,allowedActions:string[].
-PATCH /api/alerts/{alertId} (COMPLETED); acknowledged then resolved, scoped AC/Admin.
-  B: {status:'acknowledged'|'resolved',resolutionNote?,expectedRevision}. R: Alert.
-  Agree lifecycle/re-alert rules. No automatic manual observer replacement.
+PATCH /api/alerts/{alertId} removed: no message lifecycle; returns 405.
 
 6. TEMPLATES AND WEB ASSESSMENTS
 ================================
@@ -664,3 +662,20 @@ Idempotency-Key, persist in-app synchronously and queue email transactionally.
 The email worker uses Mailpit locally; see EMAIL_DELIVERY.md. No optional
 operations endpoint is needed. This supersedes older reason/lifecycle/template TBD notes for
 the implemented generic in-app scope.
+
+
+October 28 alert creation correction: POST observation alerts allows multiple
+independent alerts per observation. Optional body creationKey UUID identifies one
+submission for retries (201 new, 200 retry, 409 key reused with changed content).
+Without a key each POST creates a new alert. Existing alert history is retained.
+
+
+October 28 faculty messages (supersedes alert lifecycle):
+Faculty alerts are simple messages to AC, with no acknowledgement/resolution
+workflow. PATCH /api/alerts/{alertId} is removed (405); lifecycle fields are omitted
+from GET responses and status filtering is unsupported. Old records/audit fields
+are retained. Every active AC account receives one in-app notification and queued
+email, independently of alerts.manage. Admin and custom committee roles with
+observations.read plus notifications.send remain included. Duplicate role membership
+does not duplicate delivery. Messages include sender and full text; observation
+access remains independently enforced. Multiple messages/retry keys remain supported.

@@ -1,23 +1,18 @@
-import { ConfigurationError, fields, object, text, uuid, revision, type ConfigurationUser } from "./configuration-validation";
+import { ConfigurationError, fields, object, text, uuid, type ConfigurationUser } from "./configuration-validation";
 export function workflowGrant(user:ConfigurationUser,...grants:string[]) {
   if(!grants.every(grant=>user.permissions.includes(grant)))throw new ConfigurationError(403,"FORBIDDEN","Permission denied.");
 }
 export function alertCreation(value:unknown){
-  const b=object(value);fields(b,["reasonCode","reason","details"]);
+  const b=object(value);fields(b,["reasonCode","reason","details","creationKey"]);
   if(b.reasonCode!=="OTHER")throw new ConfigurationError(422,"VALIDATION_ERROR","Only the generic OTHER reason code is currently supported; supply your reason as free text.");
   if(typeof b.details!=="string"||b.details.length>20000)throw new ConfigurationError(422,"VALIDATION_ERROR","Provide details of at most 20000 characters.");
-  return {reason:b.reason===undefined?"Faculty assistance requested":text(b.reason),details:b.details};
-}
-export function alertUpdate(value:unknown){
-  const b=object(value);fields(b,["status","resolutionNote","expectedRevision"]);
-  if(!["acknowledged","resolved"].includes(String(b.status)))throw new ConfigurationError(422,"VALIDATION_ERROR","Choose acknowledged or resolved.");
-  return {status:String(b.status).toUpperCase(),revision:revision(b.expectedRevision),note:b.resolutionNote===undefined?null:text(b.resolutionNote)};
+  return {reason:b.reason===undefined?"Faculty assistance requested":text(b.reason),details:b.details,...(b.creationKey===undefined?{}:{creationKey:uuid(b.creationKey)})};
 }
 export function alertFilters(url:URL){
-  for(const k of url.searchParams.keys())if(!["status","type","departmentId","cursor","limit"].includes(k)||url.searchParams.getAll(k).length!==1||!url.searchParams.get(k)?.trim())throw new ConfigurationError(400,"INVALID_QUERY","Invalid alert filters.");
-  const status=url.searchParams.get("status")?.toUpperCase(),type=url.searchParams.get("type");
-  if(status&&!["PENDING","ACKNOWLEDGED","RESOLVED"].includes(status)||type&&type!=="ALERT")throw new ConfigurationError(422,"VALIDATION_ERROR","Invalid alert status or type.");
-  return {status,departmentId:url.searchParams.has("departmentId")?uuid(url.searchParams.get("departmentId")):null};
+  for(const k of url.searchParams.keys())if(!["type","departmentId","cursor","limit"].includes(k)||url.searchParams.getAll(k).length!==1||!url.searchParams.get(k)?.trim())throw new ConfigurationError(400,"INVALID_QUERY","Invalid alert filters.");
+  const type=url.searchParams.get("type");
+  if(type&&type!=="ALERT")throw new ConfigurationError(422,"VALIDATION_ERROR","Invalid message type.");
+  return {departmentId:url.searchParams.has("departmentId")?uuid(url.searchParams.get("departmentId")):null};
 }
 export function reminderInput(value:unknown){
   const b=object(value);fields(b,["kind","recipientFilter","channels","message"]);

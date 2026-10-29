@@ -1,3 +1,4 @@
+import {activityPreview} from '../../src/lib/activity-preview.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
@@ -37,7 +38,7 @@ test('documented eligibility handles first semester, established faculty, missin
 
 function database(overrides = {}) {
   const calls = [];
-  return { calls, evaluationCycle: { async findMany(args) {
+  return { calls, evaluationSignup: {async findFirst(args){calls.push({signup:args});return overrides.signedUp?{signupId:'own-signup'}:null;}}, evaluationCycle: { async findMany(args) {
     calls.push({ prisma: args });
     return overrides.noCycle ? [] : (overrides.multipleCycles ? [cycle, { ...cycle, id: 'second' }] : [cycle]).map(c => ({
       cycleId: c.id, cycleName: c.name, semesterId: c.semesterId, signupDeadline: c.signupDeadline,
@@ -236,4 +237,32 @@ test('dashboard renders real empty states and preserves its three working shortc
     }
     assert.ok(!html.includes('Two observer requests are awaiting a response'));
   }
+});
+
+test('recent activity renders a bounded preview and links to the full notification',async()=>{
+ const message='A long faculty message '+ 'x'.repeat(400)+' HIDDEN_MESSAGE_TAIL';
+ const page=await runtime(database({activity:[{id:'notice',title:'Faculty message',message,createdAt:now}]}))('src/app/(main)/dashboard/page.tsx').default();
+ const html=renderToStaticMarkup(createElement(()=>page));
+ assert.ok(html.includes('A long faculty message'));assert.ok(!html.includes('HIDDEN_MESSAGE_TAIL'));assert.ok(html.includes('…'));assert.ok(html.includes('href="/notifications"'));assert.ok(html.includes('View full message in Notifications'));assert.ok(html.includes('line-clamp-2'));
+});
+
+test('activity previews collapse whitespace and preserve whole Unicode characters at the cutoff',()=>{
+ assert.equal(activityPreview('Short\n\n message'),'Short message');assert.equal(activityPreview(''),'');
+ assert.equal(activityPreview('😀'.repeat(181)),'😀'.repeat(180)+'…');assert.equal(activityPreview('x'.repeat(180)),'x'.repeat(180));
+});
+
+test('dashboard reads own signup in the selected cycle and renders the same progress labels as My Evaluation',async()=>{
+ const user={...actor,permissions:[...actor.permissions,'signups.read.own']};
+ for(const signedUp of [true,false]){
+  const db=database({signedUp,observation:{id:'observing',status:'PENDING',participation:'observer',course:'TEST',section:'1',scheduledAt:null}});
+  const result=await runtime(db,user)('src/server/queries/faculty-dashboard.ts').getFacultyDashboard(user,{now});
+  assert.equal(result.hasCurrentSignup,signedUp);const query=db.calls.find(c=>c.signup).signup;assert.deepEqual(query.where,{cycleId:cycle.id,professor:{userId:actor.id}});
+  const tree=await runtime(database({signedUp}),user)('src/app/(main)/dashboard/page.tsx').default();
+  const output=renderToStaticMarkup(createElement(()=>tree));
+  assert.ok(output.includes(signedUp?'Signed up':'Unknown'));assert.equal(output.includes('View Observation Details'),signedUp);
+ }
+ const restricted=database({signedUp:true});const hidden=await runtime(restricted)('src/server/queries/faculty-dashboard.ts').getFacultyDashboard(actor,{now});assert.equal(hidden.hasCurrentSignup,null);assert.ok(!restricted.calls.some(c=>c.signup));
+ const noCycle=database({signedUp:true,noCycle:true});assert.equal((await runtime(noCycle,user)('src/server/queries/faculty-dashboard.ts').getFacultyDashboard(user,{now})).hasCurrentSignup,null);assert.ok(!noCycle.calls.some(c=>c.signup));
+ const completed=database({signedUp:true,evaluation:{...evaluation,observationId:'done',completedAt:now,semesterId:cycle.semesterId,semester:cycle.semester,termCode:cycle.termCode}});
+ const tree=await runtime(completed,user)('src/app/(main)/dashboard/page.tsx').default();assert.ok(renderToStaticMarkup(createElement(()=>tree)).includes('Completed'));
 });
