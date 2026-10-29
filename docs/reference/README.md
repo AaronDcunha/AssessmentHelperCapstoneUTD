@@ -74,6 +74,7 @@ patched versions, the Node runtime target, known deferred majors, commit content
 and teammate installation steps.
 
 AC observer selection: see [AC_OBSERVER_SELECTION_BACKEND.md](AC_OBSERVER_SELECTION_BACKEND.md)
-for Issue #67's implemented signup GET, exact signups.read authorization, provisional
-university-wide scope, persisted meeting/release data, pagination and checks. Other
-Issue #67 endpoints and policy decisions are not completed by this read-only slice.
+for Issue #67's signup GET (signups.read) and Phase 1 AC-only candidate GET
+(observations.read), provisional university-wide scope, persisted meeting/response
+data, relevant teaching history, pagination and checks. Regeneration/versioned
+lists and new Faculty candidate access remain deferred.

@@ -346,9 +346,50 @@ POST /api/evaluation-cycles/{cycleId}/recommendations/release -- scoped AC/Admin
 POST /api/observations/{observationId}/recommendations/regenerate -- scoped AC/Admin.
   B: {reason?,expectedRevision}. R: {generationId,observationId,candidateCount,
     unmatched,revision}. Preserve previous responses and invitation attempts.
-GET /api/observations/{observationId}/candidates
-  Q: responseStatus?. R: {observationId,releasedAt,proposedMeetings:Meeting[],
-    items:Candidate[],pageInfo}. Own observee sees only released list; AC sees scope.
+GET /api/observations/{observationId}/candidates (PHASE 1 COMPLETED -- AC read only).
+  Active authentication and effective observations.read, the established broad
+  observation-detail grant. Provisional university-wide AC scope; no role-name
+  shortcut. Own-read/released-own grants, signup, candidacy and observer membership
+  do not authorize this route, even after release. Existing Faculty APIs unchanged.
+  Q: responseStatus?,cursor?,limit? (20 default, 100 maximum). Only one nonempty
+  value per key. responseStatus matches the actual latest attempt's uppercase
+  stored status, not an older attempt or the candidate's combined status. Null
+  means no attempt; ELIGIBLE is returned as candidate status, not a response.
+  R: {observationId,observationRevision,generationId:string|null,releasedAt:string|null,
+    proposedMeetings:[{id,sectionId,date,startsAt:string|null,endsAt:string|null,
+      timeZone:string|null,location:string|null}],items:[{id,observationId,
+      professor:{id,name},status,responseStatus:string|null,outcome:string|null,
+      invitedAt,expiresAt,respondedAt,acceptedMeetingOptionId:string|null,
+      availableMeetingOptionIds:string[],activeAttempt:{id,candidateId,sequence,
+        sentAt,expiresAt,responseStatus,respondedAt}|null,
+      courseHistory:[{course:{id,code,title,departmentId,level},semester:{id,name}}]}],pageInfo}.
+  status is the raw candidate status; outcome copies SELECTED/CANCELLED or is null.
+  activeAttempt is the latest real attempt, including closed/expired ones. No
+  earlier response or per-attempt accepted option is reconstructed; that option
+  is only stored on the candidate. Reads do not expire pending records or change
+  status. Filtering uses latest recorded responses before candidate-UUID pagination;
+  cursor must belong to this observation and response filter, otherwise 400.
+  courseHistory includes older semesters of same-level teaching (Aaron's updated
+  display requirement), at most five distinct course-ID/semester-ID pairs. Repeated
+  sections of that pair are deduplicated before limiting. Newest semester first by
+  stored YYs/YYu/YYf termCode: year, then Spring/Summer/Fall. Ties use ascending
+  course code, course UUID, then semester UUID. Unrecognized legacy term codes sort
+  last with those deterministic ties; no chronology is guessed from display names
+  or nullable boundaries. The JSON fields above are unchanged. This is display-only:
+  current-cycle-semester, same-level and same-department matching/compatibility
+  rules are unchanged. No new course-department eligibility restriction is added.
+  Shared availableOption/observerAvailable compute current compatible persisted
+  UUIDs. Stored proposal metadata stays nullable, including when the existing
+  validator resolves a legacy proposal from the current stored schedule.
+  generationId/releasedAt are raw single-list observation markers, not separate
+  draft/released versions. No regeneration, selection, notification or write occurs.
+  Repeatable-read HTTP transaction; private/no-store on success and errors. Existing
+  observation with no candidates returns 200 empty items; missing observation 404;
+  malformed UUID/limit 422; query/cursor errors 400; missing grant 403; no active
+  identity 401; dependency failure sanitized 503. Inconsistent section/cycle or
+  accepted option ownership returns 409. See AC_OBSERVER_SELECTION_BACKEND.md.
+  Deferred: own-observee released-list reads, versioned draft/released membership,
+  regeneration-after-release/invitations and the final response/outcome enums.
 POST /api/observations/{observationId}/invitations -- own observee.
   B: {candidateIds:string[],expectedRevision}.
   R: {observationId,attempts:Attempt[],revision}.

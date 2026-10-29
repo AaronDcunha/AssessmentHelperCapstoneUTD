@@ -1,4 +1,30 @@
 ASSESSMENT HELPER IMPLEMENTATION NOTES
+October 28, 2026 Issue #67 Candidates Phase 1:
+GET /api/observations/{observationId}/candidates adds only an AC-authorized read
+of the existing single list. observations.read already authorizes comparable
+observation-detail reads and is enforced by route and query. Faculty own grants
+do not authorize this new route, including for released lists. Existing Faculty
+readers, generation/release/invitation workers, grants, schema and migrations stay
+unchanged. Responses preserve raw candidate status, latest actual attempt status
+and timestamps, candidate-level accepted option and nullable meeting snapshots.
+No historical response/per-attempt accepted meeting is invented. Response filtering
+uses latest recorded attempts; no expiry or status write occurs during a read.
+Compatibility reuses the existing shared checks with one request time. Relevant
+courseHistory now includes older semesters, following Aaron's updated clarification:
+up to five recent distinct course/semester pairs of same-level teaching. Repeated
+sections are deduplicated before limiting. Stored YYs/YYu/YYf codes order year then
+Spring/Summer/Fall, newest first; course code, course UUID and semester UUID break
+ties. Unrecognized legacy codes sort last without guessing chronology. This only
+changes display history; current-cycle-semester eligibility, same-level/same-
+department matching and shared meeting compatibility remain unchanged.
+Current user relayed Aaron's decisions: process_explanation_to_all takes priority
+for conflicting workflow descriptions; current-semester eligibility applies for
+now; any five eligible observers are acceptable; Course history focuses on relevant
+courses; regeneration after release/invitations is required in a later phase.
+Versioned list membership and outstanding-invitation lifecycle remain unresolved;
+this Phase 1 route does not claim to distinguish a replacement draft from the
+last released list. The endpoint-specific contract documents provisional mapping.
+
 October 28, 2026 Issue #67 AC signup read (first independent portion):
 GET /api/evaluation-cycles/{cycleId}/signups now reads actual signup/observee,
 course/section/schedule, persisted proposed-option UUIDs and snapshots, observation
