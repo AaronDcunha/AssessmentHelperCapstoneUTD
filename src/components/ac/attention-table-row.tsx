@@ -32,7 +32,7 @@ function missing(field: string) {
 export function AttentionTableRow({ faculty, issueStatus, observationStatus, action, className, ...props }: AttentionTableRowProps) {
   const facultyName = faculty?.trim();
   const statusText = observationStatus?.trim();
-  const hasIssue = issueStatus === "overdue" || issueStatus === "unmatched" || issueStatus === "incomplete";
+  const hasIssue = issueStatus === "overdue" || issueStatus === "unmatched" || issueStatus === "incomplete" || issueStatus === "alert";
   const actionLabel = action?.label?.trim() || "Review →";
   const actionAriaLabel = action?.ariaLabel?.trim() || `${actionLabel}${facultyName ? ` for ${facultyName}` : " faculty record"}`;
   const hasHref = action?.href != null && (typeof action.href !== "string" || action.href.trim() !== "");
