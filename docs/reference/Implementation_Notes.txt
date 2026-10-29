@@ -806,3 +806,13 @@ alerts, reminders and Prisma invitation workflows explicitly preserve their emai
 behavior and pass existing transactions. No schema or public endpoint was added.
 Legacy pg writes retain their atomic trigger/outbox integration. See
 NOTIFICATION_HELPER.md for the supported API, examples and verified Mailpit delivery.
+
+
+October 28 dependency security update:
+Next/eslint-config-next 16.4.3, React/DOM 19.2.9, aligned Prisma 7.10.1 and patched
+indirect dependencies are locked. SMTP imports the official Nodemailer 10.2.1 via
+smtp-mailer alias, avoiding Auth.js Credentials provider optional v7/v8 peer
+conflicts. Mailpit is pinned to 1.32.0; Node target 24.22.1 is recorded in version
+files/engines. No new database migration or reset. The old Admin/AC optional route
+context typings were corrected; full production build now passes. See
+DEPENDENCY_UPDATES.md for compatibility, verification and teammate update steps.

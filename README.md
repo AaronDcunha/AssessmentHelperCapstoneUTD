@@ -2,7 +2,9 @@
 
 Faculty observation and assessment coordination using Next.js.
 
-Install Nodejs and Docker
+Install Node.js **24.22.1** (see `.nvmrc`) and Docker Desktop.
+
+After pulling dependency updates, follow [the teammate update instructions](docs/reference/DEPENDENCY_UPDATES.md).
 
 ## Login status
 
@@ -85,12 +87,12 @@ npm run db:seed
 
 Confirm the reset when prompted. **This deletes all data in the configured database**, including signups, assessments, and account changes, then recreates the tables and restores demo data.
 
-## Dependencies to revisit
+## Dependency security updates
 
-- Nodemailer: patched v10 is outside Auth.js beta's declared v7/v8 support; resolve compatibility before enabling email.
-- Prisma tooling: `deepmerge-ts` and `mysql2` findings remain.
-- ESLint tooling: `braces` dependency findings remain.
-- Avoid `npm audit fix --force`; it proposes incompatible downgrades. Recheck before deployment.
+Next.js, React, Prisma, the SMTP mailer and indirect dependencies have been patched.
+The current locked npm tree reports zero known audit vulnerabilities. See
+[DEPENDENCY_UPDATES.md](docs/reference/DEPENDENCY_UPDATES.md) for exact versions,
+remaining major-upgrade decisions, validation and teammate setup instructions.
 
 ## Deferred libraries
 

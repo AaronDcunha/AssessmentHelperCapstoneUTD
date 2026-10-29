@@ -34,9 +34,10 @@ EMAIL_DELIVERY_ENABLED=true
 
 Open [Mailpit](http://localhost:8025) to see captured messages. Next.js running
 inside Compose would use `mailpit` as the SMTP host. No real SMTP credentials are
-needed locally. The existing Nodemailer v8 dependency is used only with server
-constructed text/HTML, file/URL access disabled, and SMTP logging disabled; the
-previously documented dependency-upgrade work remains before production rollout.
+needed locally. The SMTP transport uses patched Nodemailer 10.2.1 through the smtp-mailer npm
+alias, with its built-in types. File/URL access and SMTP logging remain disabled.
+Auth.js uses Credentials, so its older optional Nodemailer peer is not installed.
+See DEPENDENCY_UPDATES.md for the compatibility decision and runtime upgrade.
 
 ## Transaction boundary and channels
 

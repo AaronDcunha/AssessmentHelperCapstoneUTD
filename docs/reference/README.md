@@ -68,3 +68,8 @@ worker, Mailpit setup, channel selection, retry handling and tests.
 
 
 Shared notification helper: see [NOTIFICATION_HELPER.md](NOTIFICATION_HELPER.md) for the canonical sendNotification function, specific-user/list/role audiences, optional email, transaction examples and Mailpit testing.
+
+
+Dependency/security updates: see [DEPENDENCY_UPDATES.md](DEPENDENCY_UPDATES.md) for
+patched versions, the Node runtime target, known deferred majors, commit contents
+and teammate installation steps.

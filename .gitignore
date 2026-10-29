@@ -45,3 +45,7 @@ next-env.d.ts
 /src/generated/prisma/
 /prisma/demo-accounts.txt
 /.local/private-faculty-attachments/
+
+# Downloaded project-local runtimes used for verification
+/.local/tooling/
+/.local/logs/

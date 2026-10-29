@@ -1,5 +1,5 @@
 import "server-only";
-import nodemailer from "nodemailer";
+import nodemailer from "smtp-mailer";
 
 export const defaultMailFrom="Assessment Helper <noreply_course_evaluation@assessmenthelper.edu>";
 export function createEmailTransport(env:NodeJS.ProcessEnv=process.env){
