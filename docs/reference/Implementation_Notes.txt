@@ -1,4 +1,14 @@
 ASSESSMENT HELPER IMPLEMENTATION NOTES
+October 29, 2026 Task #6 semester dropdown follow-up:
+Cycle creation now blocks selection/submission while existing-cycle availability
+is loading or unavailable, with a retry that preserves deadlines. Occupied terms
+remain labeled/disabled; all-occupied and selected-conflict states are explicit.
+Creation conflicts refresh the paginated cycle list without discarding semester
+selection or deadlines. Shared semester pagination, UUID payloads, permissions,
+backend validation and schema are unchanged. Focused unit/browser regressions,
+lint, TypeScript and production build passed; browser business writes were all
+intercepted. See AC_CONFIGURATION_FRONTEND.md. Task #5 alerts are untouched.
+
 October 27, 2026 full branch verification:
 Commit 70941d6 deliberately removed demo/test shortcuts from the product sidebar.
 Updated two stale navigation tests to assert business permissions, absence of demo

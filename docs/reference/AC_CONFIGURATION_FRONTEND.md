@@ -4,6 +4,33 @@ Weekly progress implementation, October 26, 2026. Branch
 `Sai/ac-configuration-frontend` starts at fetched `origin/main` (`7e02f9b`).
 Faculty branch/PR #72 are unchanged; no Faculty commits were merged or cherry-picked.
 
+October 29, 2026 Task #6 follow-up: cycle creation now waits for the shared
+paginated existing-cycle lookup before enabling semester selection/submission.
+Lookup failures expose Retry cycles without clearing deadlines. Occupied semesters
+stay labeled/disabled, including when all semesters have cycles. A creation 409
+refreshes availability while retaining the selected semester and all deadlines;
+the edit-only discard/reload action is no longer shown for creation conflicts.
+The existing paginated semester API helper, UUID option values, deadline conversion,
+shared controls, permission guards and backend validation remain in use.
+
+Focused regression checks (Node 24.22.1, locked dependencies): nine configuration
+unit tests passed, including multi-page semesters, later-page failure, restart on
+retry and repeated-cursor rejection. `tests/e2e/cycle-semester-dropdown.mjs` passed
+against the production build with all business mutations intercepted. It covers
+semester/cycle loading, both paginated lists, name/UUID options, required and
+occupied selection, exact POST payload, duplicate submissions, retained fields
+after 422/network/409 failures, lookup retries, empty/all-occupied states and
+successful creation navigation. TypeScript, lint and production build passed.
+Only existing seeded authentication/page guards accessed application data; no
+configuration records, environment files, schema or backend were changed.
+
+```text
+node --test tests/unit/ac-configuration-frontend.test.mjs
+node tests/e2e/cycle-semester-dropdown.mjs
+```
+
+The browser test uses the same localhost/CDP prerequisites documented below.
+
 ## Screens and API mappings
 
 | Route | Behavior and existing APIs |
