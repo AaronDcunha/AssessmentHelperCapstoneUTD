@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "jobs:email": "node --import ./scripts/server-loader.mjs --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/email-worker.ts",
+    "jobs:email:once": "npm run jobs:email -- --once",
+    "jobs:faculty": "node --import ./scripts/server-loader.mjs --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/scheduler.ts",
     "db:generate": "prisma generate",
     "predev": "prisma generate",
     "prebuild": "prisma generate",
@@ -16,27 +19,29 @@
   },
   "dependencies": {
     "@daypicker/react": "^10.0.2",
-    "@prisma/adapter-pg": "^7.10.0",
-    "@prisma/client": "^7.10.0",
-    "next": "^16.4.0",
+    "@prisma/adapter-pg": "7.10.1",
+    "@prisma/client": "7.10.1",
+    "next": "16.4.3",
     "next-auth": "^5.0.0-beta.32",
     "node-cron": "^4.6.0",
-    "nodemailer": "^8.0.11",
     "pg": "^8.23.1",
-    "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react": "19.2.9",
+    "react-dom": "19.2.9",
+    "smtp-mailer": "npm:nodemailer@10.2.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/nodemailer": "^8.0.2",
+    "@types/node": "^24",
     "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "^16.4.0",
-    "prisma": "^7.10.0",
+    "eslint-config-next": "16.4.3",
+    "prisma": "7.10.1",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=24.22.1 <25"
   }
 }

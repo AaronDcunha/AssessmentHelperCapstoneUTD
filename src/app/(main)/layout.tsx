@@ -2,12 +2,12 @@ import type { ReactNode } from "react";
 import { acPermissions, canAccessAcPage, type AcPage } from "@/lib/ac-permissions";
 import { AppShell } from "@/components/layout/app-shell";
 import { requireUser } from "@/server/permissions";
-import { adminNavigationBindings, adminRoutes, adminTestBindings, createNavigationConfig, filterNavigation } from "@/components/layout/navigation-config";
+import { adminNavigationBindings, adminRoutes, createNavigationConfig, filterNavigation } from "@/components/layout/navigation-config";
 import { facultyPageHeaders, facultyRoutes } from "@/components/observations/faculty-routes";
 
-// Reuse the existing Figma semester label; it is display context, not live cycle data.
+// Preserve Admin's Figma display context independently of live Faculty cycle data.
 const adminHeader = {
-  subtitle: facultyPageHeaders[facultyRoutes.dashboard].subtitle,
+  subtitle: "Fall 2026",
   showUnavailableControls: true,
   contentSpacing: "spacious" as const,
 };
@@ -42,15 +42,16 @@ export default async function MainLayout({ children }: { children: ReactNode }) 
     "ac.template": { href: "/ac/template", permission: "templates.manage" },
     "ac.reports": { href: "/ac/reports", permission: "reports.read" },
     "ac.semester": { href: "/ac/semester", permission: "cycles.manage" },
-    ...adminTestBindings,
   });
   return (
     <AppShell
       authorizedSections={filterNavigation(sections, item => item.id in acPermissions ? canAccessAcPage(user.permissions, item.id as AcPage) : !!item.permission && user.permissions.includes(item.permission))}
       user={{ name: user.name, initials: user.name, description: user.roles.join(" · ") }}
+      canReadNotifications={user.permissions.includes("notifications.read.own")}
       headerUser={{ name: user.name, initials: user.name }}
       pageHeaders={{
         ...facultyPageHeaders,
+        "/notifications": { title: "Notifications", facultyLayout: true },
         ...acPageHeaders,
         [adminRoutes.dashboard]: { ...adminHeader, title: "Admin Dashboard" },
         [adminRoutes.users]: { ...adminHeader, title: "Users" },

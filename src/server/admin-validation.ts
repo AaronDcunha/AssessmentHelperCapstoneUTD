@@ -10,6 +10,7 @@ export const grants = {
 } as const;
 export type Operation = keyof typeof grants;
 export function authorize(user: AdminUser, operation: Operation) {
+  if (operation === "levels.list" && user.permissions.includes("reports.read")) return;
   if (!grants[operation].every(key => user.permissions.includes(key))) throw new ConfigurationError(403,"FORBIDDEN","Permission denied.");
 }
 export function required<T>(value: T | null): T {
@@ -59,9 +60,15 @@ export function levelInput(value: unknown, create: boolean) {
   return {data, expectedRevision:create ? undefined : revision(b.expectedRevision)};
 }
 export type GrantRole = {roleId: string; roleName: string; rolePermissions: {permission: {permissionName: string}}[]};
+export function effectiveRoleNames(assignedNames: string[]) {
+  const names = new Set(assignedNames);
+  if (names.has("Admin")) names.add("AC");
+  if (names.has("AC")) names.add("Faculty");
+  return [...names];
+}
 export function effectivePermissions(roles: GrantRole[], assignedIds: string[]) {
   const assigned = roles.filter(r => assignedIds.includes(r.roleId));
-  const names = new Set(assigned.map(r => r.roleName));
-  const included = roles.filter(r => assignedIds.includes(r.roleId) || (names.has("Admin") && ["AC","Faculty"].includes(r.roleName)) || (names.has("AC") && r.roleName === "Faculty"));
+  const names = effectiveRoleNames(assigned.map(r => r.roleName));
+  const included = roles.filter(r => names.includes(r.roleName));
   return [...new Set(included.flatMap(r => r.rolePermissions.map(p => p.permission.permissionName)))].sort();
 }

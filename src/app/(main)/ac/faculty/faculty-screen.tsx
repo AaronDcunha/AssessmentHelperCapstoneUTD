@@ -1,5 +1,6 @@
 "use client";
 
+import { ReminderControl } from "@/components/ac/reminder-control";
 import { useCallback, useState } from "react";
 import { CycleSelector, useAcCycle } from "@/components/ac/cycle-context";
 import { useApiResource } from "@/components/ac/use-api-resource";
@@ -10,7 +11,7 @@ import { acApi, type FacultyStatusItem, type HiringLevel, userDisplayName } from
 const EMPTY_ROWS: FacultyStatusItem[] = [];
 const EMPTY_LEVELS: HiringLevel[] = [];
 
-export default function FacultyDuePage() {
+export default function FacultyDuePage({canSendReminders=false}:{canSendReminders?:boolean} = {}) {
   const cycleId = useAcCycle().selectedCycle?.id;
   const [hiringLevelId, setHiringLevelId] = useState("all");
   const [evaluationStatus, setEvaluationStatus] = useState("all");
@@ -27,11 +28,11 @@ export default function FacultyDuePage() {
         </Select>
         <Select label="Due / Overdue" name="evaluationStatus" value={evaluationStatus} onChange={(event) => setEvaluationStatus(event.target.value)} className="h-control-56">
           <option value="all">All</option><option value="due">Due</option><option value="overdue">Overdue</option>
+          <option value="not_due">Not due</option><option value="needs-review">Needs review</option>
         </Select>
       </div>
 
-      {(result.error || levels.error) && <p role="alert" className="rounded-ah-8 bg-danger-bg p-ah-12 text-body text-danger">Faculty status data is currently unavailable.</p>}
-
+      <ReminderControl cycleId={cycleId} canSend={canSendReminders} recipientFilter={{...(hiringLevelId!=="all"?{hiringLevelId}:{}),...(evaluationStatus!=="all"?{evaluationStatus}:{})}} />
       <div className="overflow-x-auto rounded-ah-8 border border-border bg-surface">
         <table className="w-full min-w-[760px] table-fixed border-collapse">
           <thead><tr className="h-[80px] bg-canvas">
@@ -43,7 +44,7 @@ export default function FacultyDuePage() {
                 <TableCell className="h-[80px]!">{userDisplayName(row.professor)}</TableCell>
                 <TableCell className="h-[80px]!">{typeof row.hiringLevel === "string" ? row.hiringLevel : row.hiringLevel.name}</TableCell>
                 <TableCell className="h-[80px]!">{row.lastEvaluation?.semester?.name?.trim() || "—"}</TableCell>
-                <TableCell className="h-[80px]!">{row.evaluationStatus || "—"}</TableCell>
+                <TableCell className="h-[80px]!">{{ due: "Due", overdue: "Overdue", not_due: "Not due", "needs-review": "Needs review" }[row.evaluationStatus] || "—"}</TableCell>
                 <TableCell className="h-[80px]!">{row.signupId ? "Yes" : "No"}</TableCell>
               </tr>
             ))}

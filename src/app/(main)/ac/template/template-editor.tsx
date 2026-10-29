@@ -1,249 +1,207 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AssessmentQuestionEditor } from "@/components/ac/assessment-question-editor";
-import { AssessmentRatingField } from "@/components/observations/assessment-rating-field";
+import { TemplatePreview } from "@/components/ac/template-preview";
+import { useApiResource } from "@/components/ac/use-api-resource";
 import { Button } from "@/components/ui/button";
-import { Input, Textarea } from "@/components/ui/form-fields";
+import { Input, Select } from "@/components/ui/form-fields";
 import { Section } from "@/components/ui/section";
-import { acApi, type ObservationTemplate } from "@/lib/ac-api";
-import { nextTemplateSection, previousTemplateSection, type TemplateSection } from "@/lib/ac-template-sections";
+import { guardUnsavedNavigation } from "@/lib/unsaved-navigation";
+import { acApi, ApiRequestError, type ObservationTemplate, type ObservationTemplateWrite, type TemplateSummary } from "@/lib/ac-api";
+import { configurationError, moveItem, moveQuestion, newTemplate, templateDraft, templatePayload, type EditorCriterion, type TemplateDraft } from "@/lib/ac-configuration";
 
-type EditableQuestion = { localId: string; apiId?: string; key: string; value: string };
-type EditablePrompt = { localId: string; apiId?: string; value: string };
-
-let localId = 0;
-const newLocalId = (prefix: string) => `${prefix}-${++localId}`;
-
-const initialScaleQuestions: EditableQuestion[] = [
-  { localId: "scale-1", key: "learning-objectives", value: "The instructor clearly communicated the learning objectives." },
-  { localId: "scale-2", key: "course-organization", value: "The course content was organized and presented effectively." },
-  { localId: "scale-3", key: "student-engagement", value: "The instructor encouraged student participation and engagement." },
-  { localId: "scale-4", key: "teaching-methods", value: "The instructor used appropriate teaching methods and materials." },
-  { localId: "scale-5", key: "student-understanding", value: "The instructor assessed student understanding and provided feedback." },
-];
-
-const initialCommentPrompts: EditablePrompt[] = [
-  { localId: "comment-1", value: "Strengths" },
-  { localId: "comment-2", value: "Opportunities for improvement" },
-];
-
-const ratingOptions = [
-  { value: 1, label: "Unsatisfactory" },
-  { value: 2, label: "Needs improvement" },
-  { value: 3, label: "Satisfactory" },
-  { value: 4, label: "Good" },
-  { value: 5, label: "Excellent" },
-] as const;
-
-function editableCriteria(template: ObservationTemplate, type: "rating" | "text"): EditableQuestion[] {
-  return template.criteria.filter((criterion) => criterion.type === type).map((criterion) => ({
-    localId: criterion.id,
-    apiId: criterion.id,
-    key: criterion.key,
-    value: criterion.prompt,
-  }));
-}
+const EMPTY: TemplateSummary[] = [];
+const tabs = ["Scale questions", "Long responses", "Comments & signatures"];
 
 export function ObservationTemplateEditor() {
-  const [section, setSection] = useState<TemplateSection>("scale");
-  const [scaleQuestions, setScaleQuestions] = useState(initialScaleQuestions);
-  const [longResponses, setLongResponses] = useState<EditableQuestion[]>([]);
-  const [commentPrompts, setCommentPrompts] = useState(initialCommentPrompts);
-  const [signatureLabels, setSignatureLabels] = useState({ observer: "Observer", observee: "Observee" });
-  const [templateId, setTemplateId] = useState<string | null>(null);
-  const [revision, setRevision] = useState(0);
+  const [retry, setRetry] = useState(0);
+  const result = useApiResource(useCallback(async () => {
+    void retry; // Explicit retry creates a new resource request.
+    try { return await acApi.getTemplates(); }
+    catch (error) { throw new Error(configurationError(error)); }
+  }, [retry]), EMPTY);
+  if (result.loading) return <p role="status">Loading observation templates…</p>;
+  if (result.error) return <Section title="Observation templates unavailable"><p role="alert" className="text-danger">{result.error}</p><Button variant="secondary" onClick={() => setRetry(value => value + 1)}>Retry templates</Button></Section>;
+  return <TemplateWorkspace initial={result.data} />;
+}
+
+function TemplateWorkspace({ initial }: { initial: TemplateSummary[] }) {
+  const [summaries, setSummaries] = useState(initial);
+  const [selection, setSelection] = useState(initial.length === 1 ? initial[0].id : "");
+  const [dirty, setDirty] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [reload, setReload] = useState(0);
+  const [created, setCreated] = useState<ObservationTemplate | null>(null);
+  function choose(id: string) {
+    if (busy || (dirty && !window.confirm("Discard unsaved template changes?"))) return;
+    setDirty(false); setCreated(null); setSelection(id); setReload(value => value + 1);
+  }
+  function saved(template: ObservationTemplate) {
+    setSummaries(current => current.some(item => item.id === template.id) ? current.map(item => item.id === template.id ? template : item) : [...current, template]);
+    // Keep the same editor mounted after a create so the returned IDs/revision
+    // become the next save's baseline without losing the current section.
+    setCreated(template);
+  }
+  const activeId = selection === "new" && created ? created.id : selection;
+  return <div className="space-y-ah-24">
+    <div className="flex flex-wrap items-end gap-ah-16">
+      <Select label="Observation template" name="templateId" value={activeId} disabled={busy} wrapperClassName="min-w-0 flex-1" onChange={event => choose(event.target.value)}>
+        <option value="">Select a draft or published template</option>
+        {selection === "new" && !created && <option value="new">New unsaved template</option>}
+        {summaries.map(item => <option key={item.id} value={item.id}>{item.title} — {item.status === "draft" ? "Draft" : "Published"}</option>)}
+      </Select>
+      <Button variant="secondary" disabled={busy} onClick={() => choose("new")}>+ New template</Button>
+    </div>
+    {!summaries.length && !selection && <p role="status" className="text-muted">No templates exist. Create a draft to begin.</p>}
+    {!selection && summaries.length > 0 && <p className="text-muted">Choose an existing template, including a draft, or create a new one.</p>}
+    {selection && <TemplateLoader key={`${selection}-${reload}`} id={selection} onSaved={saved} onDirty={setDirty} onBusy={setBusy} reload={() => choose(activeId)} />}
+  </div>;
+}
+
+function TemplateLoader({ id, onSaved, onDirty, onBusy, reload }: { id: string; onSaved: (template: ObservationTemplate) => void; onDirty: (dirty: boolean) => void; onBusy: (busy: boolean) => void; reload: () => void }) {
+  const [retry, setRetry] = useState(0);
+  const result = useApiResource(useCallback(async () => {
+    void retry;
+    if (id === "new") return null;
+    try { return await acApi.getTemplate(id); }
+    catch (error) { throw new Error(configurationError(error)); }
+  }, [id, retry]), null);
+  if (result.loading) return <p role="status">Loading template…</p>;
+  if (result.error) return <div className="space-y-ah-12"><p role="alert" className="text-danger">{result.error}</p><Button variant="secondary" onClick={() => setRetry(value => value + 1)}>Retry template</Button></div>;
+  return <TemplateForm initial={result.data} onSaved={onSaved} onDirty={onDirty} onBusy={onBusy} reload={reload} />;
+}
+
+function TemplateForm({ initial, onSaved, onDirty, onBusy, reload }: { initial: ObservationTemplate | null; onSaved: (template: ObservationTemplate) => void; onDirty: (dirty: boolean) => void; onBusy: (busy: boolean) => void; reload: () => void }) {
+  const [saved, setSaved] = useState(initial);
+  const [baseline, setBaseline] = useState<TemplateDraft>(() => initial ? templateDraft(initial) : newTemplate());
+  const [draft, setDraft] = useState(baseline);
+  const [section, setSection] = useState(0);
+  const [preview, setPreview] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [previewing, setPreviewing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-
+  const [success, setSuccess] = useState(false);
+  const [conflict, setConflict] = useState(false);
+  const creationAttempt = useRef<(ObservationTemplateWrite & { creationKey: string }) | null>(null);
+  const [creationUncertain, setCreationUncertain] = useState(false);
+  const busy = useRef(false);
+  const active = useRef(true);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
+  const dirty = JSON.stringify(draft) !== JSON.stringify(baseline);
+  useEffect(() => { onDirty(dirty); }, [dirty, onDirty]);
   useEffect(() => {
-    let active = true;
-    acApi.getCurrentTemplate().then((template) => {
-      if (!active) return;
-      setTemplateId(template.id);
-      setRevision(template.revision ?? 0);
-      const ratings = editableCriteria(template, "rating");
-      setScaleQuestions(ratings.length > 0 ? ratings : initialScaleQuestions);
-      setLongResponses(editableCriteria(template, "text"));
-      setCommentPrompts(template.commentPrompts.map((prompt, index) => ({
-        localId: prompt.id ?? `loaded-comment-${index}`,
-        apiId: prompt.id,
-        value: prompt.prompt,
-      })));
-      setSignatureLabels(template.signatureLabels);
-    }).catch(() => { if (active) setMessage("The saved template is currently unavailable. Default questions are shown."); });
-    return () => { active = false; };
-  }, []);
+    if (!dirty) return;
+    return guardUnsavedNavigation(window, document, "Discard unsaved template changes?");
+  }, [dirty]);
 
-  function updateQuestion(setter: typeof setScaleQuestions, id: string, value: string) {
-    setter((current) => current.map((question) => question.localId === id ? { ...question, value } : question));
+  function edit(action: (current: TemplateDraft) => TemplateDraft) { setDraft(action); setMessage(null); setSuccess(false); }
+  function question(id: string, change: Partial<EditorCriterion>) {
+    edit(current => ({ ...current, criteria: current.criteria.map(item => item.uiId === id ? { ...item, ...change } : item) }));
   }
-
-  function removeQuestion(setter: typeof setScaleQuestions, id: string) {
-    setter((current) => current.filter((question) => question.localId !== id));
+  function addQuestion() {
+    const uid = crypto.randomUUID();
+    const type = section === 0 ? "rating" : "text";
+    edit(current => ({ ...current, criteria: [...current.criteria, { uiId: `new-${uid}`, key: `question_${uid}`, prompt: "", type, required: true, order: current.criteria.length, weight: 1,
+      ...(type === "rating" ? { options: ["Unsatisfactory", "Needs improvement", "Satisfactory", "Good", "Excellent"].map((label, index) => ({ value: index + 1, label })) } : {}) }] }));
   }
-
-  function addQuestion(setter: typeof setScaleQuestions, type: "rating" | "text") {
-    setter((current) => [...current, { localId: newLocalId(type), key: `${type}-${Date.now()}-${current.length + 1}`, value: "" }]);
+  function accept(template: ObservationTemplate) {
+    const hydrated = templateDraft(template);
+    setSaved(template); setBaseline(hydrated); setDraft(hydrated); onSaved(template); setConflict(false);
   }
-
-  function updatePrompt(id: string, value: string) {
-    setCommentPrompts((current) => current.map((prompt) => prompt.localId === id ? { ...prompt, value } : prompt));
-  }
-
-  function removePrompt(id: string) {
-    setCommentPrompts((current) => current.filter((prompt) => prompt.localId !== id));
-  }
-
-  function applySavedTemplate(template: ObservationTemplate) {
-    setTemplateId(template.id);
-    setRevision(template.revision ?? revision);
-    setScaleQuestions(editableCriteria(template, "rating"));
-    setLongResponses(editableCriteria(template, "text"));
-    setCommentPrompts(template.commentPrompts.map((prompt, index) => ({
-      localId: prompt.id ?? `saved-comment-${index}`,
-      apiId: prompt.id,
-      value: prompt.prompt,
-    })));
-    setSignatureLabels(template.signatureLabels);
-  }
-
-  async function saveTemplate() {
-    setSaving(true);
-    setMessage(null);
-    const ratingCriteria = scaleQuestions.map((question, order) => ({
-      id: question.apiId, key: question.key, prompt: question.value, type: "rating" as const,
-      required: true, order, options: ratingOptions.map((option) => ({ ...option })), weight: 1,
-    }));
-    const textCriteria = longResponses.map((question, index) => ({
-      id: question.apiId, key: question.key, prompt: question.value, type: "text" as const,
-      required: false, order: ratingCriteria.length + index, weight: 1,
-    }));
-    const body = {
-      title: "Faculty observation form",
-      criteria: [...ratingCriteria, ...textCriteria],
-      commentPrompts: commentPrompts.map((prompt, order) => ({ id: prompt.apiId, prompt: prompt.value, required: false, order })),
-      signatureLabels,
-    };
+  async function save(publish = false) {
+    if (busy.current) return;
+    setMessage(null); setSuccess(false); setConflict(false);
     try {
-      const template = templateId
-        ? await acApi.updateTemplate(templateId, { ...body, expectedRevision: revision })
-        : await acApi.createTemplate(body);
-      applySavedTemplate(template);
-      setMessage("Template saved.");
-    } catch { setMessage("Unable to save the template. Check each section and try again."); }
-    finally { setSaving(false); }
+      const payload = creationAttempt.current ?? templatePayload(draft);
+      if (publish && (!saved || dirty)) throw new Error("Save your current changes before publishing this draft.");
+      if (publish && !window.confirm("Publish this saved template for Faculty use?")) return;
+      busy.current = true; setSaving(true); onBusy(true);
+      if (!saved && !creationAttempt.current) creationAttempt.current = { ...payload, creationKey: crypto.randomUUID() };
+      const result = publish ? await acApi.publishTemplate(saved!.id, saved!.revision)
+        : saved ? await acApi.updateTemplate(saved.id, { ...payload, expectedRevision: saved.revision }) : await acApi.createTemplate(creationAttempt.current!);
+      creationAttempt.current = null;
+      if (active.current) { setCreationUncertain(false); accept(result); setSuccess(true); setMessage(publish ? "Template published." : result.status === "draft" ? "Draft saved. Publish when ready for Faculty use." : "Published template changes saved."); }
+    } catch (error) { if (active.current) {
+      const uncertain = !saved && creationAttempt.current !== null && (creationUncertain || !(error instanceof ApiRequestError) || !error.status || error.status >= 500);
+      setCreationUncertain(uncertain);
+      if (!uncertain) creationAttempt.current = null;
+      setMessage(uncertain ? `${configurationError(error)} Creation could not be confirmed. Retry Save to recover the same draft safely. Fields are locked until the result is confirmed.` : configurationError(error));
+      setConflict((error as { status?: number }).status === 409);
+    } }
+    finally { busy.current = false; if (active.current) { setSaving(false); onBusy(false); } }
   }
 
-  const tab = (target: TemplateSection, label: string) => (
-    <Button key={target} variant={section === target ? "primary" : "secondary"} className="w-full sm:w-[200px]"
-      aria-current={section === target ? "step" : undefined} onClick={() => setSection(target)}>{label}</Button>
-  );
-
-  return (
-    <div className="flex flex-col">
-      <div className="flex min-h-ah-48 flex-wrap items-center justify-between gap-ah-12">
-        <h2 className="text-section text-ink">Faculty observation form</h2>
-        <Button variant="secondary" className="w-full sm:w-[200px]" aria-expanded={previewing} aria-controls="observation-template-preview"
-          onClick={() => setPreviewing((current) => !current)}>{previewing ? "Close preview" : "Preview form"}</Button>
+  if (preview) return <TemplatePreview draft={draft} onBack={() => setPreview(false)} />;
+  const questions = draft.criteria.filter(item => item.type === (section === 0 ? "rating" : "text"));
+  return <Section variant="plain" title="Faculty observation form" actions={<Button variant="secondary" onClick={() => setPreview(true)} disabled={saving}>Preview form</Button>} contentClassName="space-y-ah-24">
+    <div className="flex flex-wrap gap-ah-12" role="tablist" aria-label="Template sections" onKeyDown={event => {
+      if (saving || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+      event.preventDefault();
+      const next = event.key === "Home" ? 0 : event.key === "End" ? 2 : (section + (event.key === "ArrowRight" ? 1 : 2)) % 3;
+      setSection(next); event.currentTarget.querySelectorAll<HTMLButtonElement>('button[role="tab"]')[next]?.focus();
+    }}>
+      {tabs.map((tab, index) => <Button key={tab} id={`template-tab-${index}`} role="tab" tabIndex={section === index ? 0 : -1} aria-selected={section === index} aria-controls="template-panel" variant={section === index ? "primary" : "secondary"} disabled={saving} onClick={() => setSection(index)}>{index + 1}&nbsp; {tab}</Button>)}
+    </div>
+    <div className="flex flex-wrap items-center gap-ah-12">
+      <span className="rounded-ah-pill bg-neutral-bg px-ah-12 py-ah-4 text-label">{saved ? saved.status === "published" ? "Published" : "Saved draft" : "Unsaved draft"}</span>
+      {dirty && <span className="text-caption text-warning">Unsaved changes</span>}
+      {saved && <span className="text-caption text-muted">Revision {saved.revision}</span>}
+    </div>
+    {saved?.status === "published" && <p className="text-caption text-warning">Saving edits changes this published template in place, including what linked assessments display. Removing referenced questions is restricted by the server.</p>}
+    <fieldset disabled={saving || creationUncertain} className="min-w-0 space-y-ah-24">
+      <Input label="Template title" maxLength={2000} value={draft.title} onChange={event => edit(current => ({ ...current, title: event.target.value }))} />
+      <div role="tabpanel" id="template-panel" aria-labelledby={`template-tab-${section}`} className="space-y-ah-16">
+        <h3 className="text-section">{tabs[section]}</h3>
+        <p className="text-body text-muted">{section === 0 ? "Edit the scale questions and their configured rating values and labels." : section === 1 ? "Edit the prompts Faculty will answer in their own words." : "Edit the comment prompts and signature labels shown on the Faculty form."}</p>
+        {section < 2 ? <>
+          {section === 0 && questions[0]?.options && <div className="flex flex-wrap gap-ah-16 rounded-ah-8 bg-neutral-bg p-ah-12 text-caption text-muted"><span className="text-label text-ink">Response scale · Question 1</span>{questions[0].options.map((option, index) => <span key={index}>{option.value} {option.label}</span>)}</div>}
+          {!questions.length && <p className="text-muted">No {section === 0 ? "scale" : "long-response"} questions. Add a question to begin.</p>}
+          {questions.map((item, index) => <AssessmentQuestionEditor key={item.uiId} questionId={item.uiId} questionNumber={index + 1} value={item.prompt} onChange={(id, prompt) => question(id, { prompt })} onRemove={id => edit(current => ({ ...current, criteria: current.criteria.filter(value => value.uiId !== id) }))}>
+            <div className="flex flex-wrap items-end gap-ah-16">
+              <label className="flex min-h-11 items-center gap-ah-8 text-label"><input type="checkbox" checked={item.required} onChange={event => question(item.uiId, { required: event.target.checked })} />Required</label>
+              <Input label="Weight" type="number" min="0" step="any" value={Number.isFinite(item.weight ?? 1) ? item.weight ?? 1 : ""} wrapperClassName="w-[120px]" onChange={event => question(item.uiId, { weight: event.target.value === "" ? NaN : Number(event.target.value) })} />
+              <Button variant="secondary" aria-label={`Move question ${index + 1} up`} disabled={index === 0} onClick={() => edit(current => ({ ...current, criteria: moveQuestion(current.criteria, item.uiId, -1) }))}>↑ Move up</Button>
+              <Button variant="secondary" aria-label={`Move question ${index + 1} down`} disabled={index === questions.length - 1} onClick={() => edit(current => ({ ...current, criteria: moveQuestion(current.criteria, item.uiId, 1) }))}>↓ Move down</Button>
+            </div>
+            {item.type === "rating" && <details className="mt-ah-8"><summary className="cursor-pointer text-label text-sidebar">Edit response scale ({item.options?.length ?? 0} options)</summary><div className="mt-ah-12 space-y-ah-12">
+              {(item.options ?? []).map((option, position) => <div key={position} className="flex flex-wrap items-end gap-ah-12">
+                <Input label={`Rating ${position + 1} value`} type="number" step="1" wrapperClassName="w-[120px]" value={Number.isFinite(option.value) ? option.value : ""} onChange={event => question(item.uiId, { options: item.options!.map((value, at) => at === position ? { ...value, value: event.target.value === "" ? NaN : Number(event.target.value) } : value) })} />
+                <Input label={`Rating ${position + 1} label`} maxLength={2000} wrapperClassName="min-w-0 flex-1" value={option.label} onChange={event => question(item.uiId, { options: item.options!.map((value, at) => at === position ? { ...value, label: event.target.value } : value) })} />
+                <Button variant="secondary" disabled={item.options!.length <= 2} onClick={() => question(item.uiId, { options: item.options!.filter((_, at) => at !== position) })}>Remove rating {position + 1}</Button>
+              </div>)}
+              <Button variant="secondary" disabled={(item.options?.length ?? 0) >= 20} onClick={() => { const used = item.options!.map(value => value.value); let value = 1; while (used.includes(value)) value++; question(item.uiId, { options: [...item.options!, { value, label: "" }] }); }}>+ Add rating</Button>
+            </div></details>}
+          </AssessmentQuestionEditor>)}
+          <div className="flex items-center justify-between gap-ah-12"><Button variant="secondary" disabled={draft.criteria.length >= 100} onClick={addQuestion}>+ Add question</Button><p className="text-label text-muted">{questions.length} questions</p></div>
+        </> : <>
+          {draft.commentPrompts.map((item, index) => <Section key={item.uiId} headingLevel={4} title={`Comment prompt ${index + 1}`} actions={<Button variant="secondary" onClick={() => edit(current => ({ ...current, commentPrompts: current.commentPrompts.filter(value => value.uiId !== item.uiId) }))}>Remove comment {index + 1}</Button>} contentClassName="space-y-ah-12">
+            <Input label="Comment prompt text" value={item.prompt} maxLength={2000} onChange={event => edit(current => ({ ...current, commentPrompts: current.commentPrompts.map(value => value.uiId === item.uiId ? { ...value, prompt: event.target.value } : value) }))} />
+            <div className="flex flex-wrap items-center gap-ah-16">
+              <label className="flex min-h-11 items-center gap-ah-8 text-label"><input type="checkbox" checked={item.required} onChange={event => edit(current => ({ ...current, commentPrompts: current.commentPrompts.map(value => value.uiId === item.uiId ? { ...value, required: event.target.checked } : value) }))} />Required</label>
+              <Button variant="secondary" disabled={index === 0} onClick={() => edit(current => ({ ...current, commentPrompts: moveItem(current.commentPrompts, index, -1) }))}>↑ Move comment up</Button>
+              <Button variant="secondary" disabled={index === draft.commentPrompts.length - 1} onClick={() => edit(current => ({ ...current, commentPrompts: moveItem(current.commentPrompts, index, 1) }))}>↓ Move comment down</Button>
+            </div>
+          </Section>)}
+          <Button variant="secondary" disabled={draft.commentPrompts.length >= 100} onClick={() => edit(current => ({ ...current, commentPrompts: [...current.commentPrompts, { uiId: crypto.randomUUID(), prompt: "", required: false, order: current.commentPrompts.length }] }))}>+ Add comment prompt</Button>
+          <Section title="Signatures" headingLevel={4} description="These labels appear beneath the comment section." contentClassName="space-y-ah-16">
+            {(["observee", "observer"] as const).map(role => <Input key={role} label={`${role === "observee" ? "Faculty / observee" : "Observer"} signature label`} maxLength={2000} value={draft.signatureLabels[role]} onChange={event => edit(current => ({ ...current, signatureLabels: { ...current.signatureLabels, [role]: event.target.value } }))} />)}
+          </Section>
+        </>}
       </div>
-
-      {previewing && <Section id="observation-template-preview" title="Faculty observation form preview"
-        description="This is how the current questions will appear to faculty. Preview entries are not saved."
-        className="mt-ah-24" contentClassName="space-y-ah-24">
-        <ol className="space-y-ah-24" aria-label="Observation template preview questions">
-          {scaleQuestions.map((question, index) => <li key={question.localId} className={index > 0 ? "border-t border-border pt-ah-24" : undefined}>
-            <AssessmentRatingField label={`${index + 1}. ${question.value.trim() || "Untitled question"}`} options={ratingOptions}
-              value={null} name={`preview-${question.localId}`} readOnly onChange={() => {}} />
-          </li>)}
-        </ol>
-        {longResponses.length > 0 && <div className="grid gap-ah-16 border-t border-border pt-ah-24 md:grid-cols-2">
-          {longResponses.map((question) => <Textarea key={question.localId} label={question.value.trim() || "Untitled long response"} value="" readOnly placeholder="Faculty response" />)}
-        </div>}
-        {commentPrompts.length > 0 && <div className="grid gap-ah-16 border-t border-border pt-ah-24 md:grid-cols-2">
-          {commentPrompts.map((prompt) => <Textarea key={prompt.localId} label={`${prompt.value.trim() || "Untitled comment"} (optional)`} value="" readOnly placeholder="Faculty comment" />)}
-        </div>}
-        <dl className="grid gap-ah-16 border-t border-border pt-ah-24 sm:grid-cols-2">
-          <div><dt className="text-label text-muted">Observer signature</dt><dd className="text-body text-ink">{signatureLabels.observer}</dd></div>
-          <div><dt className="text-label text-muted">Observee signature</dt><dd className="text-body text-ink">{signatureLabels.observee}</dd></div>
-        </dl>
-      </Section>}
-
-      <nav className="mt-ah-24 flex flex-wrap gap-ah-12" aria-label="Observation template sections">
-        {tab("scale", "1  Scale questions")}
-        {tab("long-responses", "2  Long responses")}
-        {tab("comments-signatures", "3  Comments & signatures")}
-      </nav>
-
-      {section === "scale" && <>
-        <div className="mt-ah-24 flex min-h-ah-64 flex-col gap-ah-8">
-          <h3 className="text-section text-ink">Scale questions</h3>
-          <p className="text-body text-muted">Edit the questions faculty will answer using the same five-point scale.</p>
-        </div>
-        <div className="mt-ah-24 flex min-h-ah-48 flex-wrap items-center gap-x-ah-24 gap-y-ah-8 rounded-ah-8 bg-neutral-bg px-ah-12 py-ah-8 text-caption text-muted">
-          <span className="text-label text-ink">Response scale</span>
-          {ratingOptions.map((option) => <span key={option.value}>{option.value}&nbsp; {option.label}</span>)}
-        </div>
-        <div className="mt-ah-24 space-y-ah-12">
-          {scaleQuestions.map((question, index) => <AssessmentQuestionEditor key={question.localId} questionId={question.localId}
-            questionNumber={index + 1} value={question.value} onChange={(id, value) => updateQuestion(setScaleQuestions, id, value)}
-            onRemove={(id) => removeQuestion(setScaleQuestions, id)} />)}
-        </div>
-        <div className="mt-ah-24 flex flex-wrap items-center justify-between gap-ah-12">
-          <Button variant="secondary" className="w-full sm:w-[200px]" onClick={() => addQuestion(setScaleQuestions, "rating")}>+ Add question</Button>
-          <p className="text-label text-muted">{scaleQuestions.length} questions</p>
-        </div>
-      </>}
-
-      {section === "long-responses" && <>
-        <div className="mt-ah-24 flex min-h-ah-64 flex-col gap-ah-8">
-          <h3 className="text-section text-ink">Long responses</h3>
-          <p className="text-body text-muted">Add optional questions that faculty answer in their own words.</p>
-        </div>
-        <div className="mt-ah-24 space-y-ah-12">
-          {longResponses.map((question, index) => <AssessmentQuestionEditor key={question.localId} questionId={question.localId}
-            questionNumber={index + 1} value={question.value} onChange={(id, value) => updateQuestion(setLongResponses, id, value)}
-            onRemove={(id) => removeQuestion(setLongResponses, id)} />)}
-          {longResponses.length === 0 && <p className="rounded-ah-8 border border-border bg-surface p-ah-24 text-body text-muted">No long-response questions have been added.</p>}
-        </div>
-        <div className="mt-ah-24 flex flex-wrap items-center justify-between gap-ah-12">
-          <Button variant="secondary" className="w-full sm:w-[200px]" onClick={() => addQuestion(setLongResponses, "text")}>+ Add response</Button>
-          <p className="text-label text-muted">{longResponses.length} responses</p>
-        </div>
-      </>}
-
-      {section === "comments-signatures" && <>
-        <div className="mt-ah-24 flex min-h-ah-64 flex-col gap-ah-8">
-          <h3 className="text-section text-ink">Comments &amp; signatures</h3>
-          <p className="text-body text-muted">Configure optional closing comments and participant acknowledgement labels.</p>
-        </div>
-        <div className="mt-ah-24 space-y-ah-12">
-          {commentPrompts.map((prompt, index) => <AssessmentQuestionEditor key={prompt.localId} questionId={prompt.localId}
-            questionNumber={index + 1} value={prompt.value} onChange={updatePrompt} onRemove={removePrompt} />)}
-          <Button variant="secondary" className="w-full sm:w-[200px]"
-            onClick={() => setCommentPrompts((current) => [...current, { localId: newLocalId("comment"), value: "" }])}>+ Add comment</Button>
-        </div>
-        <div className="mt-ah-24 grid gap-ah-16 md:grid-cols-2">
-          <Input label="Observer signature label" value={signatureLabels.observer}
-            onChange={(event) => setSignatureLabels((current) => ({ ...current, observer: event.target.value }))} />
-          <Input label="Observee signature label" value={signatureLabels.observee}
-            onChange={(event) => setSignatureLabels((current) => ({ ...current, observee: event.target.value }))} />
-        </div>
-      </>}
-
-      {message && <p className="mt-ah-16 text-body text-muted" role="status">{message}</p>}
-
-      <div className="mt-ah-24 flex flex-wrap items-center justify-between gap-ah-12">
-        <button type="button" className="h-11 w-full rounded-ah-8 text-label text-sidebar sm:w-[200px]">Cancel</button>
-        <div className="flex w-full flex-wrap gap-ah-12 sm:w-auto">
-          {section !== "scale" && <Button variant="secondary" className="w-full sm:w-[200px]"
-            onClick={() => setSection(previousTemplateSection(section))}>← Previous section</Button>}
-          <Button className="w-full sm:w-[200px]" onClick={saveTemplate} disabled={saving}>{saving ? "Saving…" : "Save template"}</Button>
-          {section !== "comments-signatures" && <Button variant="secondary" className="w-full sm:w-[200px]"
-            onClick={() => setSection(nextTemplateSection(section))}>Next section →</Button>}
-        </div>
+    </fieldset>
+    {message && <p role={success ? "status" : "alert"} className={success ? "text-sidebar" : "text-danger"}>{message}</p>}
+    {conflict && <Button variant="secondary" disabled={saving} onClick={reload}>Reload latest template (discard edits)</Button>}
+    <div className="flex flex-wrap items-center justify-between gap-ah-16">
+      <div className="flex flex-wrap gap-ah-12">
+        <Button variant="secondary" disabled={saving || creationUncertain} onClick={() => { if (!dirty || window.confirm("Discard unsaved template changes?")) { setDraft(baseline); setMessage(null); setConflict(false); } }}>Cancel</Button>
+        {section > 0 && <Button variant="secondary" disabled={saving} onClick={() => setSection(value => value - 1)}>← Previous section</Button>}
+      </div>
+      <div className="flex flex-wrap gap-ah-12">
+        <Button disabled={saving} onClick={() => save()}>{saving ? "Saving…" : creationUncertain ? "Retry Save" : "Save template"}</Button>
+        {saved?.status === "draft" && <Button variant="secondary" disabled={saving || dirty} onClick={() => save(true)}>Publish template</Button>}
+        {section < 2 && <Button variant="secondary" disabled={saving} onClick={() => setSection(value => value + 1)}>Next section →</Button>}
       </div>
     </div>
-  );
+    {saved?.status === "draft" && dirty && <p className="text-caption text-muted">Save changes before publishing.</p>}
+  </Section>;
 }

@@ -14,6 +14,8 @@ The original documents are preserved as supplied. They contain outdated requirem
 
 ## Files
 
+Faculty dashboard backend: see `FACULTY_DASHBOARD_BACKEND.md` for the live own-data query, private aggregate API, temporary cycle/eligibility assumptions, and focused checks.
+
 Authentication backend: see `AUTH_BACKEND.md` for database-backed login, development-only mock fixtures, current grants, and the frontend integration contract.
 
 | File | Use |
@@ -21,6 +23,7 @@ Authentication backend: see `AUTH_BACKEND.md` for database-backed login, develop
 | `Implementation_Notes.txt` | Current decisions and remaining implementation questions |
 | `ADMIN_BACKEND.md` | Implemented Admin endpoints, access rules, migration, safeguards and verification |
 | `AC_CONFIGURATION_BACKEND.md` | Implemented configuration endpoints, access rules, migrations, and verification |
+| `AC_CONFIGURATION_FRONTEND.md` | Issue #52 cycle/settings/template editor, unsaved preview, API integration and verification |
 
 | `AC_MONITORING_FRONTEND.md` | AC list/cycle integration, business page guards, deferred work and verification |
 | `AC_OBSERVER_SELECTION_FRONTEND.md` | Observer-selection Figma implementation, permissions, planned API integration and verification |
@@ -47,3 +50,27 @@ The TXT extracts aid reading; use the Word originals when table structure or for
 ## Maintaining this guide
 
 Record agreed changes in `Implementation_Notes.txt` and update affected guidance, API drafts, and schema designs together. Distinguish confirmed decisions from proposals. No documentation edit alone implements a feature.
+
+Personal observation list: see `PERSONAL_OBSERVATIONS_BACKEND.md` for implemented
+GET /api/me/observations, personal ownership, database filters, pagination and tests.
+
+Notifications frontend: see NOTIFICATIONS_FRONTEND.md for the Figma-based shared
+page, header bell, read-state API clients and frontend-only verification scope.
+
+Notifications backend: see NOTIFICATIONS_BACKEND.md for the four implemented
+personal inbox/read-state APIs, migration and shared creation service. New notification runtime code uses Prisma Client.
+
+Alerts/reminders: see ALERTS_REMINDERS_BACKEND.md for the implemented observation
+alert create, cycle alert list, individual alert read/update, and AC cycle reminder
+endpoint, their frontend wiring and permissions.
+
+Email delivery: see EMAIL_DELIVERY.md for the transactional outbox, separate SMTP
+worker, Mailpit setup, channel selection, retry handling and tests.
+
+
+Shared notification helper: see [NOTIFICATION_HELPER.md](NOTIFICATION_HELPER.md) for the canonical sendNotification function, specific-user/list/role audiences, optional email, transaction examples and Mailpit testing.
+
+
+Dependency/security updates: see [DEPENDENCY_UPDATES.md](DEPENDENCY_UPDATES.md) for
+patched versions, the Node runtime target, known deferred majors, commit contents
+and teammate installation steps.

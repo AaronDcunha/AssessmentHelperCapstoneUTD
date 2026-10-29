@@ -78,14 +78,15 @@ test("The actual server guard redirects anonymous, Faculty, AC and fixture-only 
   }
 });
 
-test("The shared shell marks /admin active, retains Faculty/test links and uses real identity", async () => {
+test("The shared shell marks /admin active, retains Faculty links, omits demo shortcuts and uses real identity", async () => {
   currentUser = { ...admin, permissions: [...admin.permissions, "test:admin"] };
   const shell = await MainLayout({ children: await Dashboard() });
   const faculty = shell.props.authorizedSections.find(section => section.id === "faculty");
   const adminSection = shell.props.authorizedSections.find(section => section.id === "admin");
   assert.equal(faculty.items.length, 5);
   assert.deepEqual(adminSection.items.slice(0, 4).map(item => item.href), ["/admin", ...plannedRoutes]);
-  assert.deepEqual(adminSection.items.slice(4).map(item => item.href), adminTestPages.map(item => item.href));
+  assert.equal(adminSection.items.length, 4);
+  assert.ok(!shell.props.authorizedSections.flatMap(section => section.items).some(item => adminTestPages.some(testPage => testPage.href === item.href)));
   const { acPermissions, canAccessAcPage } = load("src/lib/ac-permissions.ts");
   const acSection = shell.props.authorizedSections.find(section => section.id === "ac");
   const acIds = ["ac.dashboard", "ac.cycles", "ac.observerSelection", "ac.faculty", "ac.progress", "ac.template", "ac.reports", "ac.semester"];
@@ -199,25 +200,24 @@ test("Hiring levels require the read grant; management controls use the effectiv
   assert.match(html, /Loading hiring levels/);
 });
 
-test("All Admin headers reuse the semester context and unavailable bell, including both user form routes", async () => {
-  const { facultyPageHeaders, facultyRoutes } = load("src/components/observations/faculty-routes.ts");
-  const expectedSubtitle = facultyPageHeaders[facultyRoutes.dashboard].subtitle;
+test("All Admin headers preserve their Figma semester context independently of live Faculty data", async () => {
+  const expectedSubtitle = "Fall 2026";
   for (const path of ["/admin", "/admin/users", "/admin/users/new", "/admin/users/user-id", "/admin/roles", "/admin/hiring-levels"]) {
     pathname = path;
     const html = renderToStaticMarkup(await MainLayout({ children: null }));
     assert.match(html, new RegExp(`<p[^>]*>${expectedSubtitle}</p>`));
-    assert.match(html, /role="img" aria-label="Notifications unavailable"/);
-    assert.equal((html.match(/aria-label="Notifications unavailable"/g) || []).length, 1);
+    assert.match(html, /href="\/notifications"/);
+    assert.equal((html.match(/href="\/notifications"/g) || []).length, 1);
     assert.match(html, /aria-label="Account options for Admin Account"/);
     assert.equal((html.match(/aria-current="page"/g) || []).length, 1);
   }
 });
 
 test("Admin header options preserve Faculty headers and existing AC test-page defaults", async () => {
-  for (const [path, hasSemester, hasBell] of [["/dashboard", true, true], ["/dashboard/evaluation", false, true], ["/observations", false, true], ["/test/ac", false, false]]) {
+  for (const [path, hasSemester, hasBell] of [["/dashboard", false, true], ["/dashboard/evaluation", false, true], ["/observations", false, true], ["/test/ac", false, true]]) {
     pathname = path;
     const html = renderToStaticMarkup(await MainLayout({ children: null }));
     assert.equal(html.includes("Fall 2026"), hasSemester);
-    assert.equal(html.includes('aria-label="Notifications unavailable"'), hasBell);
+    assert.equal(html.includes('href="/notifications"'), hasBell);
   }
 });

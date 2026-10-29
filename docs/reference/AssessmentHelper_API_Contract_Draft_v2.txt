@@ -3,6 +3,25 @@ October 18, 2026 | Reviewed against Faculty, AC, Admin and Shared Figma screens.
 
 STATUS
 ======
+October 25 #55 monitoring reads: the five cycle reporting routes and three
+observation/detail/template/assessment GET routes are implemented using Prisma.
+This is read-only integration, not completion of the evaluation/assessment workflow.
+See Implementation_Notes.txt (October 25 AC monitoring) for operational count/status
+definitions, eligibility rules/Needs review exceptions, conservative draft visibility and the
+stored assessment response shape. The current schema cannot supply assessment
+revision/submittedAt (both null). Alert/expired-approval monitoring adapters remain
+unavailable; main now stores corresponding Faculty workflow records.
+Missing policies/data are reported unavailable rather than inferred. Later task
+owners should extend these reads rather than introduce duplicate routes.
+User-authorized exception: development metrics return fixed dummy values marked
+source:demo/formulaVersion:demo; production metrics remain unavailable.
+Faculty evaluationStatus is due, overdue, not_due or needs-review (unavailable is
+accepted as a filter alias for needs-review). Reports expose summary.needsReview
+and per-hiring-level needsReview counts; these are excluded from due/overdue totals.
+Attention includes overdue faculty without requiring an existing signup/observation.
+Assessment reads accept Faculty ID-keyed answer/prompt objects as well as the older
+arrays, returning arrays and an optional generalComments string without changing writes.
+
 October 23 AC Configuration update: the cycle, semester lookup/settings and
 template operations in sections 2 and 6 are implemented as described below.
 See AC_CONFIGURATION_BACKEND.md for the finalized integration contract and tests.
@@ -16,6 +35,58 @@ Endpoints marked COMPLETED are implemented for their stated scope. Unmarked
 endpoints remain proposals; frontend consumers alone do not implement an API.
 Implementation_Notes.txt and current team decisions take priority over this draft.
 The original AssessmentHelper_API_Endpoints.txt remains unchanged as a backup.
+
+October 19 dashboard implementation addendum (prototype scope only):
+October 26 Faculty completion supersedes older blocked-workflow statements:
+The own aggregate includes availableCycles/availableObservations, eligibility and
+verified own context choices. /api/me/dashboard adds invitations, requests/accept,
+requests/decline (attemptId required), requests/late-acceptance, selected-observer,
+issues, feedback and private feedback/attachments upload/download. Attempt/window,
+accepted-option/release persistence, reports and feedback are implemented by the
+additive Faculty migration. Generate/release and expired-approval support endpoints
+use existing AC grants; no AC frontend or History work is included. Acceptance is
+availability, final pairing is atomic and observer drafts stay private. This does
+not mark every generic endpoint below complete. See FACULTY_DASHBOARD_BACKEND.md
+for exact request bodies, permissions, documented assumptions and verification.
+
+GET /api/me/dashboard is implemented as a read-only own-account aggregate for
+the existing dashboard. No parameters; actor comes from Auth.js. Requires
+profile.read.own; evaluation, observations/count, and notification fields also
+require their respective existing own-read grants. Returns asOf, hasFacultyProfile,
+cycle|null, evaluation:{status,reason,hiringLevel,lastCompletedEvaluation|null},
+currentObservation|null, pendingObserverRequestCount:number|null, recentActivity[],
+and per-section access flags. API replies use private/no-store for success/errors;
+401 anonymous, 403 lacking base grant, 503 database/auth dependency unavailable.
+The page calls the shared server query directly. This is a focused addition to
+the draft, not a claim that the separate planned APIs below are implemented.
+See FACULTY_DASHBOARD_BACKEND.md for current schema mappings and temporary rules.
+
+October 19 linked Faculty follow-up (implemented prototype additions):
+October 26 integration supersedes its configuration assumptions: Faculty cycle
+context uses the shared relevant-cycle lookup (ambiguous open cycles unavailable),
+calendar options honor configured semester boundaries/timeZone, and first-save
+templates use publishedAt/UUID ordering. Existing assessments retain their template.
+Rating answers must match actual configured options. responses additionally accepts
+optional promptAnswers:{[promptId]:string} for configured comment prompts; required
+comments validate on acknowledgement. No new schema or History changes.
+
+GET /api/me/dashboard/workflow returns own assigned sections/schedules, current
+signup, calendar options, current observation details and active incoming requests.
+POST /api/me/dashboard/signup accepts {sectionId,dates:['YYYY-MM-DD']} and atomically
+records signup/observation/options after own-record, deadline and eligibility checks.
+POST /api/me/dashboard/requests/decline accepts {candidateId}, revalidates the active
+own invitation, and records its decline plus observee notification atomically.
+GET /api/me/dashboard/assessment returns {form}|null for own current scheduled work.
+POST /api/me/dashboard/assessment accepts {action:'save'|'acknowledge',revision,
+responses?:{answers:{[criterionId]:number|string},comments:string},acknowledged?:true}.
+The user explicitly chose separate acknowledgements then lock: observer drafts and
+submits first, observee acknowledges independently; both finalize/lock atomically.
+Enforce stored criteria/ranges, participant identity, frozen answers and stale-write
+checks. All replies are private/no-store; POSTs require same-origin JSON and existing
+action grants. No History, schema, auth, seed, dependencies or package changes.
+Remaining calendar/eligibility/release/acceptance/report/survey/alert limitations and
+exact temporary choices are recorded in FACULTY_DASHBOARD_BACKEND.md. These routes
+do not imply the separate planned endpoint families below are implemented.
 
 Progress labels: (COMPLETED) = implemented for the stated scope; (INCOMPLETE) =
 partially implemented with remaining work noted. Unmarked endpoints are planned.
@@ -77,12 +148,14 @@ Template = {id,title,status,publishedAt,revision,criteria:Criterion[],
 Assessment = {id,observationId,templateVersionId,status,revision,
   answers:[{criterionId,value:number|string|null}],comments:[{promptId,text}],
   submittedAt,acknowledgements:[{actorId,participantRole,acknowledgedAt}],allowedActions}.
-Alert = {id,observationId,type,status,reasonCode,details,createdAt,revision}.
+Alert = {id,observationId,type,reasonCode,reason,details,createdAt,createdBy,context,allowedActions:[]}.
 Approval = {id,candidateId,attemptId,observationId,status,requestedAt,decidedAt,revision}.
 Attachment = {id,originalName,contentType,sizeBytes,status,createdAt}.
 Feedback = {id,cycleId,templateVersionId,submittedAt,answers,difficulties?,suggestions?,
   attachments:Attachment[]}; reviewer visibility is unresolved.
-Notification = {id,type,title,message,createdAt,readAt,target:{kind,id}|null}.
+Notification = {id,type,title,message,createdAt,readAt,target:{kind,id}|null,
+  sender?:{id,name}|null}. Sender metadata is resolved server-side when recorded
+  and authorized; it is not accepted in read-state mutation bodies.
 Role = {id,key,name,description?,permissionKeys:string[],revision}.
 HiringLevel = {id,name,evaluationIntervalYears,active,revision}.
 Status enums, lifecycle transitions and privacy rules must be agreed before coding.
@@ -233,19 +306,19 @@ POST /api/evaluation-cycles/{cycleId}/signups
   Validate ownership, eligibility, signup window and nonempty unique eligible dates
   before observation deadline. Signup enters observer pool. Confirm one-course and
   duplicate-signup policy; one meeting per date is a current UI limitation.
-GET /api/evaluation-cycles/{cycleId}/signups (COMPLETED) -- scoped AC/Admin.
+GET /api/evaluation-cycles/{cycleId}/signups -- scoped AC/Admin. (COMPLETED)
   Q: departmentId?,hiringLevelId?,q?.
   R: List<{signupId,observationId,observee:User,section:Section,proposedMeetings,signedUpAt}>.
 
 4. MATCHING AND INVITATIONS
 ===========================
-POST /api/evaluation-cycles/{cycleId}/recommendations/generate -- scoped AC/Admin.
+POST /api/evaluation-cycles/{cycleId}/recommendations/generate -- scoped AC/Admin. (COMPLETED; current response is generationId/generatedCount)
   B: {scope?:{departmentId?,professorIds?:string[]}}.
   R: {generationId,cycleId,status,generatedCount,insufficientCount,unmatchedCount,
     generatedAt}; or 202 + operation tracking if asynchronous.
   After signup closes: up to five eligible, same-department/course-level candidates
   available for proposed meetings, excluding self. Ranking/overlap/capacity TBD.
-POST /api/evaluation-cycles/{cycleId}/recommendations/release -- scoped AC/Admin.
+POST /api/evaluation-cycles/{cycleId}/recommendations/release -- scoped AC/Admin. (COMPLETED; current response is releasedObservationIds)
   B: {generationId,observationIds?:string[]}.
   R: {releaseId,releasedObservationIds:string[],releasedAt,notificationCount}.
   Distinct from generation; create notifications idempotently.
@@ -292,14 +365,18 @@ and notify AC informationally. Retry limits/timing/cutoff remain unresolved.
 
 5. OBSERVATIONS AND AC ALERTS
 =============================
-GET /api/me/observations
+GET /api/me/observations (COMPLETED)
   Q: cycleId?,semesterId?,participation?:observer|observee,status?,assessmentStatus?.
-  R: List<Observation>. Supports dashboard/history; define current-observation rule.
-GET /api/observations/{observationId} (COMPLETED)
+  R: List<Observation>. Own observee/selected-observer records only, including AC/Admin.
+  Filters intersect; status matches stored uppercase values; assessmentStatus uses
+  NOT_STARTED/IN_PROGRESS/COMPLETED (no assessment/unlocked/locked).
+  UUID cursor pagination: default 20, max 100; private/no-store. No implicit current
+  cycle or completed-only rule. See PERSONAL_OBSERVATIONS_BACKEND.md.
+GET /api/observations/{observationId}
   R: {observation:Observation,proposedMeetings:Meeting[],progress:[{key,label,state,
     completedAt}],pendingAlert:Alert|null,templateVersionId}.
   Participants or scoped authorized AC/Admin; redact data by caller visibility.
-GET /api/evaluation-cycles/{cycleId}/observations (COMPLETED) -- scoped AC/Admin.
+GET /api/evaluation-cycles/{cycleId}/observations -- scoped AC/Admin.
   Q: status?,assessmentStatus?,departmentId?,hiringLevelId?,observeeId?,observerId?,q?.
   R: List<Observation>. Include form state and authorized view actions.
 POST /api/observations/{observationId}/incomplete-report -- own observee.
@@ -307,17 +384,15 @@ POST /api/observations/{observationId}/incomplete-report -- own observee.
   R: {reportId,observationId,reportedBy,reportedAt,reason,details?,revision}.
   Required by Report Not Completed action. Timing/correction/state effects TBD;
   non-occurrence is not the same as an unsubmitted form.
-POST /api/observations/{observationId}/alerts -- NEW; own observee.
-  B: {reasonCode,details}. R: Alert with pending status.
-  Attach observation/candidate context server-side; persist AC work item/notification.
-  Agree reason codes, limits and pending-alert deduplication; demo reasons are samples.
-GET /api/evaluation-cycles/{cycleId}/alerts -- NEW; scoped AC/Admin.
-  Q: status?,type?,departmentId?. R: List<Alert>.
-GET /api/alerts/{alertId} -- own observee or scoped AC/Admin.
+POST /api/observations/{observationId}/alerts (COMPLETED); own observee.
+  B: {reasonCode,reason?,details,creationKey?}. R: Read-only Alert message.
+  Attach authorized observation context; notify every active AC in-app and queue email.
+  OTHER plus free-text reason; creationKey deduplicates retries of one message.
+GET /api/evaluation-cycles/{cycleId}/alerts (COMPLETED); scoped AC/Admin.
+  Q: type?,departmentId?. R: List<Alert>.
+GET /api/alerts/{alertId} (COMPLETED); own observee or scoped AC/Admin.
   R: Alert plus context,createdBy:User|null,allowedActions:string[].
-PATCH /api/alerts/{alertId} -- CONDITIONAL resolution flow; scoped AC/Admin.
-  B: {status:'acknowledged'|'resolved',resolutionNote?,expectedRevision}. R: Alert.
-  Agree lifecycle/re-alert rules. No automatic manual observer replacement.
+PATCH /api/alerts/{alertId} removed: no message lifecycle; returns 405.
 
 6. TEMPLATES AND WEB ASSESSMENTS
 ================================
@@ -329,7 +404,11 @@ GET /api/observation-templates/current (COMPLETED)
   R: most recently published active Template; 404 if none applies.
   Applicability is university-wide; cycleId is not supported (422).
 POST /api/observation-templates (COMPLETED) -- templates.manage, university-wide.
-  B: {title,criteria:Criterion[],commentPrompts,signatureLabels}. R: draft Template.
+  B: {title,criteria:Criterion[],commentPrompts,signatureLabels,creationKey?:UUID}. R: draft Template.
+  Reuse creationKey with the identical original payload to safely retry creation.
+  Returns the existing Template on replay (201); does not overwrite later edits.
+  Keys are unique and bound to the creator/content; mismatch returns 409 CREATION_KEY_REUSED.
+  Omitted keys retain legacy behavior without retry protection.
 PATCH /api/observation-templates/{templateId} (COMPLETED) -- templates.manage.
   B: {expectedRevision,title?,criteria?:Criterion[],commentPrompts?,signatureLabels?}.
   R: Template. Proposed arrays replace supplied sections; omitted sections unchanged.
@@ -344,9 +423,9 @@ POST /api/observation-templates/{templateId}/publish (COMPLETED) -- templates.ma
   New templates are inactive drafts. Publication activates them and records time.
   templates.read/manage can read drafts and published templates; assessment.read.own
   may read published templates only. Publication does not reassign old assessments.
-GET /api/observations/{observationId}/template (COMPLETED)
+GET /api/observations/{observationId}/template
   R: exact assigned Template, not latest. Authorized participants/reviewers only.
-GET /api/observations/{observationId}/assessment (COMPLETED)
+GET /api/observations/{observationId}/assessment
   R: {observationId,templateVersionId,assessment:Assessment|null,allowedActions}.
   Draft/observee/AC visibility requires agreed rules.
 PUT /api/observations/{observationId}/assessment -- proposed draft save.
@@ -394,11 +473,11 @@ DELETE /api/me/feedback-attachments/{attachmentId} -- OPTIONAL cleanup.
 
 8. AC REPORTS, REMINDERS AND BACKGROUND OPERATIONS
 ================================================
-GET /api/evaluation-cycles/{cycleId}/reports (COMPLETED) -- scoped AC/Admin.
+GET /api/evaluation-cycles/{cycleId}/reports -- scoped AC/Admin.
   Q: departmentId?,hiringLevelId?. R: {cycleId,asOf,definitionsVersion,
     summary:{facultyDue,overdue,unmatched,incomplete},
     byHiringLevel:[{hiringLevelId,name,due,outstanding}],availableViews}.
-GET /api/evaluation-cycles/{cycleId}/faculty-status (COMPLETED) -- NEW.
+GET /api/evaluation-cycles/{cycleId}/faculty-status -- NEW.
   Q: hiringLevelId?,evaluationStatus?,signedUp?:boolean,departmentId?,q?.
   R: List<{professor:User,hiringLevel,lastEvaluation:{semester:{id,name},completedAt}|null,
     evaluationStatus,signupId,observationId}>. Scoped AC/Admin.
@@ -410,20 +489,22 @@ GET /api/evaluation-cycles/{cycleId}/faculty-status (COMPLETED) -- NEW.
   all other response fields, filters, list pagination and the URL are unchanged.
   This is a response-contract change for the backend implementer, not a schema
   migration or an implemented faculty-status handler in this frontend branch.
-GET /api/evaluation-cycles/{cycleId}/attention (COMPLETED) -- NEW; scoped AC/Admin.
+GET /api/evaluation-cycles/{cycleId}/attention -- NEW; scoped AC/Admin.
   Q: issue?:overdue|unmatched|incomplete|alert|expiredApproval,departmentId?.
   R: List<{id,faculty:User,issue,observationStatus,observationId,alertId?,
     approvalRequestId?,createdAt,allowedActions}>. Agree sorting/multi-issue deduplication.
-GET /api/evaluation-cycles/{cycleId}/metrics (COMPLETED) -- scoped AC/Admin.
+GET /api/evaluation-cycles/{cycleId}/metrics -- scoped AC/Admin.
   Q: departmentId? if supported. R: {cycleId,available,availableAt,generatedAt,
     formulaVersion,metrics:[{key,label,value:number|null,unit,numerator?,denominator?,
     unavailableReason?}]}.
   Operational counts are live; final KPIs follow feedback deadline. Return unavailable
   rather than invented values. All KPI formulas/denominators remain to be agreed.
-POST /api/evaluation-cycles/{cycleId}/notifications -- scoped AC/Admin reminders.
+POST /api/evaluation-cycles/{cycleId}/notifications (COMPLETED); scoped AC/Admin reminders.
   B: {kind,recipientFilter:{evaluationStatus?,observationStatus?,departmentId?,
     hiringLevelId?,professorIds?},channels?:('inApp'|'email')[],message?}.
-  R: {operationId,recipientCount,notificationCount,status} if queued.
+  R: {dispatchId,recipientCount,notificationCount,emailQueuedCount,status:"completed"}.
+  Completed means dispatch committed; email is queued for the separate SMTP job.
+  Omitted channels default to inApp and email. Email-only is hidden from the inbox.
   Server authorizes recipients; agree templates, channel policy and retries.
 GET /api/operations/{operationId} -- OPTIONAL, needed if using 202 async contracts.
   R: {id,type,status,createdAt,completedAt,summary?,error?:{code,message}}.
@@ -431,16 +512,18 @@ GET /api/operations/{operationId} -- OPTIONAL, needed if using 202 async contrac
 
 9. SHARED HEADER NOTIFICATIONS
 ==============================
-GET /api/notifications
+GET /api/notifications (COMPLETED)
   Q: read?:all|unread,after?:incremental cursor; normal cursor/limit pagination.
   R: {items:Notification[],pageInfo,unreadCount,latestCursor}.
-  Own records only; define after vs pagination semantics. Resolve approved targets
-  to routes, not arbitrary trusted external links.
-GET /api/notifications/unread-count
+  Own records only, including AC/Admin. Read grant: notifications.read.own.
+  Newest-first timestamp/UUID keyset cursors; after uses an inclusive timestamp
+  watermark with boundary-ID deduplication. See NOTIFICATIONS_BACKEND.md.
+  Approved observation/acObservation targets are resolved against current access.
+GET /api/notifications/unread-count (COMPLETED)
   R: {unreadCount,asOf}. May be combined with the list response if agreed.
-PATCH /api/notifications/{notificationId}
+PATCH /api/notifications/{notificationId} (COMPLETED)
   B: {read:boolean}. R: Notification. Own record only; server sets readAt.
-POST /api/notifications/mark-all-read
+POST /api/notifications/mark-all-read (COMPLETED)
   B: {}. R: {updatedCount,cutoff,unreadCount}. Server cutoff preserves new arrivals.
 Workflow services create notifications transactionally/idempotently. No browser API
 for inventing system notifications. Header logout continues to use Auth.js.
@@ -563,3 +646,36 @@ reports; AC alerts/non-occurrence; templates; assessment lifecycle; survey/evide
 shared header notifications/reminders; and Admin destination management.
 Test direct authorization, ownership, deadlines, stale revisions, concurrent pairing,
 idempotent retries/jobs, historical templates, private attachments and paginated counts.
+
+October 28 notification implementation: all four inbox/read-state endpoints above
+are completed. Read updates require both notifications.read.own and
+notifications.update.own; shared workflow creation is internal/transactional.
+Email for most/all notifications is planned but explicitly not implemented yet.
+See NOTIFICATIONS_BACKEND.md for snapshot/cutoff semantics and delivery plans.
+
+October 28 alert/reminder implementation: see ALERTS_REMINDERS_BACKEND.md.
+Alerts use OTHER plus free-text reason, revision-checked pending -> acknowledged
+-> resolved, and existing observation/reporter duplicate protection. AC writes
+require alerts.manage with observations.read. Reminders reuse report predicates,
+require notifications.send/cycles.read (plus filter read grants), support optional
+Idempotency-Key, persist in-app synchronously and queue email transactionally.
+The email worker uses Mailpit locally; see EMAIL_DELIVERY.md. No optional
+operations endpoint is needed. This supersedes older reason/lifecycle/template TBD notes for
+the implemented generic in-app scope.
+
+
+October 28 alert creation correction: POST observation alerts allows multiple
+independent alerts per observation. Optional body creationKey UUID identifies one
+submission for retries (201 new, 200 retry, 409 key reused with changed content).
+Without a key each POST creates a new alert. Existing alert history is retained.
+
+
+October 28 faculty messages (supersedes alert lifecycle):
+Faculty alerts are simple messages to AC, with no acknowledgement/resolution
+workflow. PATCH /api/alerts/{alertId} is removed (405); lifecycle fields are omitted
+from GET responses and status filtering is unsupported. Old records/audit fields
+are retained. Every active AC account receives one in-app notification and queued
+email, independently of alerts.manage. Admin and custom committee roles with
+observations.read plus notifications.send remain included. Duplicate role membership
+does not duplicate delivery. Messages include sender and full text; observation
+access remains independently enforced. Multiple messages/retry keys remain supported.

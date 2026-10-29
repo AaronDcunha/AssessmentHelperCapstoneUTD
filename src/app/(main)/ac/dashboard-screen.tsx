@@ -21,20 +21,19 @@ export default function AcDashboardPage() {
   return (
     <div className="space-y-ah-48 pt-ah-16">
       <CycleSelector />
-      {report.error && <p role="alert" className="rounded-ah-8 bg-danger-bg p-ah-12 text-body text-danger">Dashboard totals are currently unavailable.</p>}
       <section aria-label="Evaluation cycle summary" className="grid grid-cols-1 gap-ah-16 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Faculty due" value={report.data.summary.facultyDue} className="w-full" />
-        <MetricCard label="Overdue" value={report.data.summary.overdue} tone="danger" className="w-full" />
+        <MetricCard label="Faculty due" value={report.data.summary.facultyDue ?? "—"} className="w-full" />
+        <MetricCard label="Overdue" value={report.data.summary.overdue ?? "—"} tone="danger" className="w-full" />
         <MetricCard label="Unmatched" value={report.data.summary.unmatched} className="w-full" />
         <MetricCard label="Incomplete" value={report.data.summary.incomplete} className="w-full" />
       </section>
+      {!!report.data.summary.needsReview && <p className="text-caption text-muted">{report.data.summary.needsReview} faculty need eligibility review and are excluded from due/overdue totals.</p>}
 
       <section aria-labelledby="needs-attention-heading" className="space-y-ah-16">
         <div className="flex min-h-9 items-center justify-between gap-ah-16">
           <h2 id="needs-attention-heading" className="text-section text-ink">Needs attention</h2>
           <TextAction href="/ac/observations">View all</TextAction>
         </div>
-        {attention.error && <p role="alert" className="rounded-ah-8 bg-danger-bg p-ah-12 text-body text-danger">Needs-attention data is currently unavailable.</p>}
         <div className="overflow-x-auto rounded-ah-8 border border-border bg-surface">
           <table className="w-full min-w-[760px] border-collapse">
             <thead><tr className="h-ah-40 bg-canvas">

@@ -21,13 +21,18 @@ The frontend calls the proposal shapes in `AssessmentHelper_API_Contract_Draft_v
 - `GET /api/observations/{observationId}/candidates`
 - existing `GET /api/observations/{observationId}` for the revision required by regeneration
 
-The signup and candidate reads are backed by authorized Prisma queries. Recommendation
-generation, release and regeneration remain backend Task 2 work; mutation failures
-are shown without substituting synthetic frontend data.
+The signup and candidate reads are backed by authorized Prisma queries. Main now
+provides recommendation generation and release services, and the frontend refreshes
+after those operations. Per-observation regeneration remains pending backend work;
+its failure is shown without substituting synthetic frontend data.
 
 The release contract requires `generationId`, but no separate read-current-generation endpoint is defined. The frontend retains the ID returned by generation/regeneration and also accepts an optional `generationId` from the candidate response if Task 2 includes it. If a previously generated list is loaded without that ID, release remains unavailable and the UI asks the AC user to regenerate first rather than inventing an identifier.
 
 Candidate course history is displayed when the candidate response supplies `courseHistory`; the draft `Candidate` shape does not currently guarantee this Figma field, so the UI displays an em dash when absent.
+
+The temporary browser-only records used to review the two dialogs were removed. The
+screen now renders only API/database data. The dialogs use a document-body portal and
+root scroll lock so opening a modal does not reposition the shared sidebar account.
 
 ## Verification
 

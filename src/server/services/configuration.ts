@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { Prisma, PrismaClient } from "../../generated/prisma/client";
 import { ConfigurationError, commentPrompts, criteria, date, deadlines, fields, invalid, object, revision,
   signatureLabels, text, timeZone, uuid, type ConfigurationUser } from "../configuration-validation";
@@ -102,14 +102,36 @@ function validateTemplate(input: unknown, update: boolean) {
 }
 export async function createTemplate(prisma: PrismaClient, user: ConfigurationUser, input: unknown) {
   authorize(user, ["templates.manage"]);
-  const body = validateTemplate(input, false);
-  return prisma.$transaction(async db => {
-    const template = await db.observationTemplate.create({ data: { templateName: body.title as string, isActive: false, status: "draft",
+  const { creationKey: suppliedKey, ...payload } = object(input);
+  const creationKey = suppliedKey === undefined ? undefined : uuid(suppliedKey).toLowerCase();
+  const body = validateTemplate(payload, false);
+  // Bind the key to the creator and original request, independently of JSON field
+  // order. Hash before generated criterion/comment IDs enter the persisted record.
+  const canonical = (value: unknown): unknown => Array.isArray(value) ? value.map(canonical)
+    : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => [key, canonical(item)])) : value;
+  const creationHash = creationKey ? createHash("sha256").update(JSON.stringify(canonical({ userId: user.id, payload }))).digest("hex") : undefined;
+  async function replay(db: Prisma.TransactionClient) {
+    const existing = await db.observationTemplate.findUnique({ where: { creationKey: creationKey! }, select: { templateId: true, creationHash: true } });
+    if (!existing) return null;
+    if (existing.creationHash !== creationHash) throw new ConfigurationError(409, "CREATION_KEY_REUSED", "This creation key belongs to a different request. Retry the original request or start a new template.");
+    return getTemplate(db, user, existing.templateId);
+  }
+  try { return await prisma.$transaction(async db => {
+    if (creationKey) { const existing = await replay(db); if (existing) return existing; }
+    const template = await db.observationTemplate.create({ data: { ...(creationKey ? { creationKey, creationHash } : {}), templateName: body.title as string, isActive: false, status: "draft",
       commentPrompts: (body.commentPrompts ?? []) as Prisma.InputJsonValue,
       signatureLabels: (body.signatureLabels ?? { observer: "Observer", observee: "Observee" }) as Prisma.InputJsonValue } });
     await saveCriteria(db, template.templateId, body.criteria as Questions, new Set());
     return getTemplate(db, user, template.templateId);
-  });
+  }); } catch (error) {
+    // Concurrent attempts can both miss the initial lookup. The unique index
+    // resolves that race; read the winner only after the losing transaction ends.
+    if (creationKey && error && typeof error === "object" && "code" in error && error.code === "P2002") {
+      const existing = await replay(prisma);
+      if (existing) return existing;
+    }
+    throw error;
+  }
 }
 async function readTemplate(db: Prisma.TransactionClient, id: string, expected: unknown) {
   const rev = revision(expected);

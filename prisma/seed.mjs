@@ -46,7 +46,10 @@ async function seed() {
     for (const [table,rows] of Object.entries(tables)) {
       // Keep AC edits to the demo cycle/template/questions when rerunning the seed.
       const preserve = ['evaluation_cycle','observation_template','template_criterion'].includes(table);
-      await upsert(table,rows,keys[table],preserve ? [] : undefined);
+      // Semester dates are insert defaults only: never overwrite AC-configured
+      // boundaries (or their revision) when refreshing imported catalog data.
+      const updates = table === 'semester' ? ['term_code','term_name'] : preserve ? [] : undefined;
+      await upsert(table,rows,keys[table],updates);
     }
     await upsert('role',['Faculty','Admin','AC'].map(name=>({role_id:stableId(`role:${name}`),role_name:name})),['role_id']);
     await upsert('permission',[...new Set(Object.values(rolePermissions).flat())].map(name=>({permission_id:stableId(`permission:${name}`),permission_name:name})),['permission_id']);

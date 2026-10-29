@@ -94,7 +94,9 @@ test("AC writes use POST for create and PATCH for edit", async () => {
 
   try {
     await acApi.createCycle(payload);
-    await acApi.updateCycle("cycle-1", { ...payload, expectedRevision: 2 });
+    const { semesterId, ...deadlines } = payload;
+    assert.ok(semesterId);
+    await acApi.updateCycle("cycle-1", { ...deadlines, expectedRevision: 2 });
   } finally {
     globalThis.fetch = originalFetch;
   }

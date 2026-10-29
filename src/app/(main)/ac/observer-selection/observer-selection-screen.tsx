@@ -110,7 +110,9 @@ export default function ObserverSelectionScreen({ canGenerate, canRelease, canRe
     try {
       const response = await acApi.generateRecommendations(cycleId);
       setGenerationId(response.generationId);
-      setNotice(`${response.generatedCount} ${response.generatedCount === 1 ? "list" : "lists"} generated. ${response.insufficientCount} insufficient; ${response.unmatchedCount} unmatched.`);
+      const resultDetails = response.insufficientCount == null || response.unmatchedCount == null
+        ? "" : ` ${response.insufficientCount} insufficient; ${response.unmatchedCount} unmatched.`;
+      setNotice(`Observer recommendations generated.${resultDetails}`);
       await loadRows();
     } catch (reason) {
       setActionError(reason instanceof Error ? reason.message : "Observer lists could not be generated.");
@@ -139,7 +141,8 @@ export default function ObserverSelectionScreen({ canGenerate, canRelease, canRe
         observationIds: selectedRows.map((row) => row.signup.observationId),
       });
       setReleaseOpen(false);
-      setNotice(`${response.releasedObservationIds.length} ${response.releasedObservationIds.length === 1 ? "list was" : "lists were"} released and ${response.notificationCount} ${response.notificationCount === 1 ? "notification was" : "notifications were"} created.`);
+      const notificationNotice = response.notificationCount == null ? "" : ` and ${response.notificationCount} ${response.notificationCount === 1 ? "notification was" : "notifications were"} created`;
+      setNotice(`${response.releasedObservationIds.length} ${response.releasedObservationIds.length === 1 ? "list was" : "lists were"} released${notificationNotice}.`);
       await loadRows();
     } catch (reason) {
       setActionError(reason instanceof Error ? reason.message : "The selected lists could not be released.");

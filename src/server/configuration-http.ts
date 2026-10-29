@@ -4,7 +4,7 @@ import { cycleReadPermissions, templateReadPermissions } from "./queries/configu
 export type Operation = "cycles.list" | "cycles.get" | "cycles.create" | "cycles.update" | "cycles.settings" |
   "semesters.list" | "templates.list" | "templates.get" | "templates.current" | "templates.create" | "templates.update" | "templates.publish";
 export function configurationHandler(operation:Operation, dependencies:{getUser:()=>Promise<ConfigurationUser|null>; execute:(operation:Operation,user:ConfigurationUser,url:URL,params:Record<string,string>,body:unknown)=>Promise<unknown>}) {
-  return async (request:Request,context?:{params:Promise<Record<string,string>>}) => {
+  return async (request:Request,context:{params:Promise<Record<string,string>>}) => {
     try {
       const user=await dependencies.getUser();
       if (!user) throw new ConfigurationError(401,"UNAUTHENTICATED","Sign in to access configuration.");

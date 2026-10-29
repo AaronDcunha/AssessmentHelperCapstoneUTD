@@ -2,7 +2,9 @@
 
 Faculty observation and assessment coordination using Next.js.
 
-Install Nodejs and Docker
+Install Node.js **24.22.1** (see `.nvmrc`) and Docker Desktop.
+
+After pulling dependency updates, follow [the teammate update instructions](docs/reference/DEPENDENCY_UPDATES.md).
 
 ## Login status
 
@@ -85,14 +87,28 @@ npm run db:seed
 
 Confirm the reset when prompted. **This deletes all data in the configured database**, including signups, assessments, and account changes, then recreates the tables and restores demo data.
 
-## Dependencies to revisit
+## Dependency security updates
 
-- Nodemailer: patched v10 is outside Auth.js beta's declared v7/v8 support; resolve compatibility before enabling email.
-- Prisma tooling: `deepmerge-ts` and `mysql2` findings remain.
-- ESLint tooling: `braces` dependency findings remain.
-- Avoid `npm audit fix --force`; it proposes incompatible downgrades. Recheck before deployment.
+Next.js, React, Prisma, the SMTP mailer and indirect dependencies have been patched.
+The current locked npm tree reports zero known audit vulnerabilities. See
+[DEPENDENCY_UPDATES.md](docs/reference/DEPENDENCY_UPDATES.md) for exact versions,
+remaining major-upgrade decisions, validation and teammate setup instructions.
 
 ## Deferred libraries
 
 - Zod: not added as an application dependency; use explicit server-side validation for now.
 - Testing: Vitest, React Testing Library, and Playwright are planned but not installed.
+
+
+## Local workflow emails
+
+New workflow notifications also queue email. With Mailpit running, configure
+`EMAIL_DELIVERY_ENABLED=true` and run `npm run jobs:email` in a separate terminal.
+Read captured mail at http://localhost:8025. The sender defaults to
+`noreply_course_evaluation@assessmenthelper.edu`; old notifications are not emailed.
+See [email delivery setup](docs/reference/EMAIL_DELIVERY.md) for migrations,
+Mailpit settings, retries and tests. Production dependency-upgrade work listed
+above remains separate from local Mailpit testing.
+
+
+Shared notification helper: see [NOTIFICATION_HELPER.md](docs/reference/NOTIFICATION_HELPER.md) for the canonical sendNotification function, specific-user/list/role audiences, optional email, transaction examples and Mailpit testing.

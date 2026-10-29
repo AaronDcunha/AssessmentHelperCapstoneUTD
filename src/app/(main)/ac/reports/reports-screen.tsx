@@ -23,21 +23,19 @@ export default function ReportsPage() {
   const normalize = (value: string) => value.toLowerCase().replaceAll(/[^a-z0-9]/g, "");
   const valueFor = (aliases: readonly string[]) => {
     const metric = metrics.data.metrics.find((item) => aliases.includes(normalize(item.key)) || aliases.includes(normalize(item.label)));
-    if (metric?.value == null) return null;
+    if (metric?.value == null) return "—";
     return metric.unit === "%" || metric.unit === "percent" ? `${metric.value}%` : metric.value;
   };
 
   return (
     <div className="space-y-ah-24">
       <CycleSelector />
-      {(metrics.error || report.error) && <p role="alert" className="rounded-ah-8 bg-danger-bg p-ah-12 text-body text-danger">Reports and KPI data are currently unavailable.</p>}
       <section aria-label="Key performance indicators" className="grid grid-cols-1 gap-ah-16 sm:grid-cols-2 xl:grid-cols-4">
-        {cards.map((card) => <MetricCard key={card.label} label={card.label} value={valueFor(card.aliases)}
-          loading={metrics.loading} error={metrics.error ? "Unavailable" : null} missingLabel="Unavailable" className="w-full" />)}
+        {cards.map((card) => <MetricCard key={card.label} label={card.label} value={valueFor(card.aliases)} className="w-full" />)}
       </section>
       <Section title="Executive summary" contentClassName="space-y-ah-12 text-body text-ink">
         {report.data.byHiringLevel.length > 0 ? report.data.byHiringLevel.map((item) => (
-          <p key={item.hiringLevelId}>{item.name}: {item.due} due, {item.outstanding} outstanding</p>
+          <p key={item.hiringLevelId}>{item.name}: {item.due ?? "—"} due, {item.outstanding} outstanding{!!item.needsReview && `, ${item.needsReview} need eligibility review`}</p>
         )) : <p className="text-muted">{report.error ? "Report summary is currently unavailable." : "No report summary is available."}</p>}
       </Section>
     </div>

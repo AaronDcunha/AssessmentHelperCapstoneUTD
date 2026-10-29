@@ -1,0 +1,40 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {createRequire} from 'node:module';
+import ts from 'typescript';
+const require=createRequire(import.meta.url);
+test('alert form retries preserve the submission key, then a successful new report gets a fresh key',async()=>{
+ const slots=[];let cursor=0,fail=true,refreshes=0;const calls=[];
+ const react={useState(initial){const i=cursor++;if(!(i in slots))slots[i]=initial;return [slots[i],value=>{slots[i]=value;}];},useRef(initial){const i=cursor++;return slots[i]??(slots[i]={current:initial});}};
+ const source=readFileSync(new URL('../../src/components/observations/faculty-participation-controls.tsx',import.meta.url),'utf8');
+ const localRequire=name=>{
+  if(name==='react')return react;
+  if(name==='react/jsx-runtime')return require(name);
+  if(name==='next/navigation')return {useRouter:()=>({refresh(){refreshes++;}})};
+  if(name==='@/components/ui/button')return {Button:'Button'};
+  if(name==='@/components/ui/form-fields')return {Input:'Input',Select:'Select',Textarea:'Textarea'};
+  if(name==='@/lib/notifications-api')return {notifyNotificationChange(){}};
+  if(name==='@/lib/ac-api')return {acApi:{async createObservationAlert(id,body){calls.push({id,body});if(fail)throw Error('Outcome unknown; retry.');return {id:'saved'};}}};
+  if(name==='./faculty-api')return {postFacultyAction(){assert.fail('Alert must use the canonical endpoint');}};
+  throw Error('Unexpected import '+name);
+ };
+ const loaded={exports:{}};
+ new Function('require','module','exports',ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText)(localRequire,loaded,loaded.exports);
+ const render=()=>{cursor=0;return loaded.exports.FacultyIssueControl({observationId:'observation-1',kind:'ALERT'});};
+ function nodes(tree){if(!tree||typeof tree!=='object')return [];return [tree,...[tree.props?.children].flat(Infinity).flatMap(nodes)];}
+ const find=(type,label)=>nodes(render()).find(e=>e.type===type&&(label===undefined||e.props.label===label));
+ find('Button').props.onClick();
+ const fill=()=>{find('Input','Reason').props.onChange({target:{value:'A separate issue'}});find('Textarea','Details').props.onChange({target:{value:'Full explanation'}});};
+ fill();await find('form').props.onSubmit({preventDefault(){}});
+ assert.equal(calls.length,1);assert.match(calls[0].body.creationKey,/^[a-f0-9-]{36}$/);
+ assert.equal(find('Input','Reason').props.value,'A separate issue');
+ assert.ok(nodes(render()).some(e=>e.props?.role==='status'&&e.props.children.includes('Outcome unknown')));
+ fail=false;await find('form').props.onSubmit({preventDefault(){}});
+ assert.equal(calls[1].body.creationKey,calls[0].body.creationKey);assert.equal(refreshes,1);
+ assert.equal(find('form'),undefined);
+ find('Button').props.onClick();assert.equal(find('Input','Reason').props.value,'');assert.equal(find('Textarea','Details').props.value,'');
+ fill();await find('form').props.onSubmit({preventDefault(){}});
+ assert.notEqual(calls[2].body.creationKey,calls[0].body.creationKey,'A deliberate second submission is a new alert, even with the same message');
+ assert.equal(refreshes,2);
+});

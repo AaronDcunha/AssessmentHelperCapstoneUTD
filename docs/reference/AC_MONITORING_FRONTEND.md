@@ -1,14 +1,5 @@
 # AC monitoring frontend integration
 
-October 29 database-read integration: all AC dashboard, Faculty Due/Overdue,
-Observation Progress, Observation Details, and Reports/KPI frontend demo fallbacks
-were removed. Their existing API contracts now have authorized Prisma read handlers
-backed by Docker PostgreSQL. Missing records render empty states; request failures
-render unavailable states. The handlers do not seed, synthesize, or mutate records.
-Evaluation history that cannot be determined from stored completed observations is
-reported as `unknown`. KPI formulas still marked unresolved in Implementation Notes
-return null/unavailable; the stored incomplete-observation count remains operational.
-
 October 23, 2026: fixes the list-envelope, real-cycle selection, and business-permission review findings on `feature/ac-monitoring-reports-final`.
 
 ## Lists and cycle selection

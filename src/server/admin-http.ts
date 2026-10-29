@@ -1,7 +1,7 @@
 import { ConfigurationError, object, sameOrigin, type ConfigurationUser } from "./configuration-validation";
 import { authorize, type Operation } from "./admin-validation";
 export function adminHandler(operation:Operation, dependencies:{getUser:()=>Promise<ConfigurationUser|null>; execute:(operation:Operation,user:ConfigurationUser,url:URL,params:Record<string,string>,body:unknown)=>Promise<unknown>}) {
-  return async (request:Request,context?:{params:Promise<Record<string,string>>}) => {
+  return async (request:Request,context:{params:Promise<Record<string,string>>}) => {
     try {
       const user=await dependencies.getUser();
       if (!user) throw new ConfigurationError(401,"UNAUTHENTICATED","Sign in to access administration.");

@@ -1,10 +1,160 @@
 ASSESSMENT HELPER IMPLEMENTATION NOTES
-October 29 AC database-read integration:
-All temporary AC monitoring and Observer Selection frontend records were removed.
-AC screens now display only authorized API data read through Prisma from PostgreSQL;
-unavailable resources show explicit unavailable/empty states and KPI formulas still
-awaiting agreement remain unavailable rather than using invented values. No seed,
-migration, or existing database record was changed for this integration.
+October 29, 2026 AC Observer Selection frontend:
+Added the protected `/ac/observer-selection` workflow, candidate and release dialogs,
+real signup/candidate reads, and calls to the recommendation generate/release APIs
+already present on main. The still-unimplemented per-observation regenerate endpoint
+fails visibly without substituting demo data. Temporary browser-only preview records
+used during UI review were removed before handoff; no database record was seeded or
+changed. Dialogs render outside the application flex layout and lock root scrolling
+so Safari does not move the sidebar account footer.
+
+October 27, 2026 full branch verification:
+Commit 70941d6 deliberately removed demo/test shortcuts from the product sidebar.
+Updated two stale navigation tests to assert business permissions, absence of demo
+shortcuts and no product access from test:admin alone; production navigation is
+unchanged. All 171 unit tests pass with TEST_DATABASE_PLANS=true (zero skips),
+including read-only local PostgreSQL EXPLAIN checks. Production npm run build
+passes outside the restricted sandbox; the sandbox run stalled in compilation.
+This supersedes older notes that the shared shell retains all test/demo links;
+the direct test routes and their access checks remain available.
+
+October 27, 2026 template creation retry protection:
+Template POST accepts an optional UUID creationKey. Editor retries preserve the
+original payload/key; uncertain outcomes lock edits until confirmed. Database unique
+keys converge repeated/concurrent requests on one draft; creator/content mismatch
+returns 409. Migration 20261027000000_template_creation_idempotency is deployed
+locally without reset/reseed. Existing null keys remain supported. See configuration
+backend/frontend references for contracts, checks and editor-session limits.
+
+October 27, 2026 template navigation guard:
+Unsaved template changes now prompt before sidebar/same-tab internal-link navigation.
+Successful saves and unmount remove protection; refresh/close keep native warnings.
+Cancelable Navigation API history traversals are guarded where the browser supports
+them. See AC_CONFIGURATION_FRONTEND.md for scope and browser limitations.
+
+October 26, 2026 AC Configuration Frontend (issue #52):
+Cycle forms and semester settings now use the implemented configuration payloads,
+real semester choices, revisions and semester-zone deadline conversion. Template
+editing supports drafts/published records, all three sections, preserved IDs/custom
+scales, save/publication and unsaved preview. No backend/schema/seed, Faculty,
+History, Admin or monitoring changes. See AC_CONFIGURATION_FRONTEND.md for reference
+mapping, frontend assumptions and controlled verification; no real configuration
+records were changed for demonstrations. This supersedes older configuration-form
+frontend deferrals, without changing the implemented backend contract.
+
+October 26, 2026 demo semester seed dates:
+User supplied Fall 2026 boundaries: August 31 through December 16, 2026.
+Newly seeded Fall 2026 records include those dates; other semesters remain null.
+Reseeding preserves existing semester boundaries and revisions, including AC edits.
+Existing null boundaries are not backfilled by reseeding. The local Fall 2026
+record was configured separately during review. No reset or reseed is required.
+
+October 26, 2026 weekly progress handoff:
+Core Faculty implementation retained; this pass adds focused service regression
+coverage only. No UI, History, schema or application database changes. See the
+weekly handoff in FACULTY_DASHBOARD_BACKEND.md for fresh check results, remaining
+configuration/AC integration work and working assumptions awaiting team confirmation.
+Do not treat earlier populated/concurrency/build results as rerun in this pass.
+
+October 26, 2026 Faculty workflow completion (supersedes earlier blocked Faculty notes):
+Current user authorized documented assumptions and necessary additive migrations.
+Eligibility uses current rank intervals, prior evaluation/teaching/hire evidence,
+first-semester exclusion and voluntary signup; missing all evidence stays Unknown.
+Relevant cycles and active participant observations have verified explicit selectors.
+Generation/release, initial invitations, accepted meeting references, transactional
+final pairing/cancellation, retained attempts, automatic bounded resends, expired
+acceptance requests and AC review APIs now work. Reuse configuration/Admin services.
+Observer-private drafts, separate acknowledgements and final locking retain assigned
+templates and validate actual options/prompts. Non-occurrence/committee reports,
+participant feedback and private owner-only evidence persist. Assumptions: initial
+evaluation after first semester; current rank for intervals; UUID-ordered matching
+of up to five compatible same-department/level signed-up candidates; 48-hour windows
+capped by observation deadline; uncontacted candidates precede a second automatic
+window; AC may explicitly reopen the latest unsuperseded expired window. Reports
+follow appointment start and precede acknowledgements; feedback uses required 1-5
+satisfaction and optional difficulties/suggestions once per observation/role.
+Private evidence: PDF/PNG/JPEG, 5 MiB, three uploads per participant/observation.
+These are surfaced assumptions, not KPI, retention or AC privacy policies.
+Migration 20261026000000_faculty_workflows is deployed without reset/reseed; existing
+counts remain 539 users and zero downstream business records. Actual Fall 2026
+semester dates remain null and require AC configuration. No dates were fabricated.
+Run jobs:faculty separately for expiry/resends. Exact contracts, assumptions and
+verification are in FACULTY_DASHBOARD_BACKEND.md. History remains completely unchanged.
+
+October 26, 2026 Faculty integration with main (supersedes earlier Faculty configuration assumptions):
+Reuse the shared Prisma configuration cycle scope for own teaching/signups/selected
+observations/candidacies, including AC/Admin using Faculty screens. A sole relevant
+nonclosed valid cycle supplies context; multiple cycles leave dependent actions
+unavailable with an explanation. Automatic Faculty cycle selection is not agreed.
+Calendar options use configured semester startsOn/endsOn/timeZone, retain the
+exclusive observation-deadline date, and block when boundaries are missing. No
+holiday exceptions or new eligibility policy are invented. Existing missing-history
+signup restrictions remain pending agreement; current Admin interval/hire-date
+settings are inputs, not a complete eligibility service.
+First assessment save uses the latest published active template by publishedAt,
+then UUID descending. Retain assigned templates, actual labeled rating options,
+comment prompts and signature labels. Reject intermediate values absent from sparse
+scales; include template revisions/options/prompts in stale-write protection.
+No new schema/migration, reseed, authentication or History change is introduced.
+Selected candidate dates and recommendation-release persistence remain absent.
+Required invitation acceptance/final pairing/resends/expired approval and report,
+survey and alert gaps are not resolved by configuration. UC2/UC4/UC5 already define
+voluntary signup, first-semester exclusion, 48-hour initial windows, final pairing,
+and separate acknowledgement/finalization; missing-data eligibility, overlapping
+cycles, retry/cutoff/races, report permissions/timing/effects, survey details and
+alert lifecycle still need agreement. See FACULTY_DASHBOARD_BACKEND.md.
+
+October 26 AC integration follow-up: rebased #55 onto current main. Hiring-level
+lookup unwraps the Admin items response; reports.read permits this read-only
+lookup without granting hiring-level mutation access. Assessment reads also accept the Faculty
+writer responses {answers:{criterionId:value},comments:string,promptAnswers:{id:text}};
+return ID-keyed answer/comment arrays and preserve the free comment as generalComments.
+The Faculty workflow added issue/expired-acceptance records; #55 attention currently
+exposes overdue/unmatched/incomplete only, with alert/expiredApproval marked unavailable.
+The October 25 schema-absence explanation below is historical, not current schema status.
+
+October 25, 2026 AC monitoring backend (#55):
+The five cycle report/attention/faculty-status/observations/metrics reads and three
+observation detail/template/assessment reads use the shared Prisma Client and
+current business grants. Lists use UUID cursor pagination; AC reporting is
+university-wide, with optional department/hiring-level filters. Participants have
+own-observation access only. Attention returns overdue faculty and observation issues: unmatched
+means no selected observer on an unfinished non-cancelled record; incomplete means
+a scheduled/past record with an observer and no locked assessment. These operational
+definitions do not establish non-occurrence. Observation filters accept the frontend
+in-progress/complete/incomplete/unmatched values and stored uppercase statuses.
+Faculty lastEvaluation resolves the last completed observation in an earlier term
+and returns its own semester:{id,name}. Eligibility uses the current hiring-level
+interval and completed evaluation terms, excluding cancelled records and future terms.
+The professor's process explanation allows annual evaluations in Spring or Fall of
+the next calendar year; its two-year example is Spring 2025 -> due Spring 2027,
+overdue Fall 2027. Current-cycle completion restarts the interval. First-semester
+hires are excluded when configured semester dates establish that fact. Without
+history, the first required evaluation date remains unresolved: show Needs review,
+also used for unknown terms and unresolved two-year summer boundaries. Reports
+count these separately, excluding them from due/overdue totals. Due filters, hiring-
+level breakdowns and overdue attention use this same calculation. Sources: professor
+process_explanation_to_all (1).docx and current CS 4485 project Google Doc
+1o-_pRKhNvYHcNcdtE_PDLqty7tLI0NgqsDc04donL08 (read October 25), which confirms
+current hiring-level/interval changes affect status and second semester is earliest
+eligibility, not a confirmed first due date. October 25 user
+override: local development metrics now return fixed dummy KPI values, labelled
+source:demo and formulaVersion:demo in the API. These are not database calculations;
+production returns null values with reasons until formulas are agreed. Existing
+KPI cards display the supplied demo values; due/overdue fields use database counts.
+Alert/expired-approval attention
+is explicitly unavailable because the schema has no corresponding records.
+Assessment reads use the exact linked template, including inactive historical
+templates; only the selected observer can read an unlocked response pending a
+visibility decision. Locked responses are available to participants/authorized AC.
+Stored responses must use {answers:[{criterionId,value}],comments:[{promptId,text}]};
+unrecognized legacy formats return 409 rather than silently dropping answers.
+The schema has no assessment revision/submission timestamp: reads return null for
+those fields and make no save/finalize actions available. Recorded acknowledgements
+are mapped to their actual participant. No schema or lifecycle changes are added.
+Meeting options combine stored preferred dates with class schedules in the semester
+time zone; an appointment is matched by its stored start instant. Unmatched appointment
+metadata is reported unavailable, without inventing an end time or location.
 
 October 25 user deletion follow-up (supersedes user-DELETE-pending notes):
 User requested DELETE /api/users/{userId}. Implemented using Prisma Client in a Serializable transaction, requiring users.manage and same origin. No body; empty 204 success, 404 missing account. Self-deletion and loss of the last active managing Admin return 409. Teaching, signup, selected-observer, candidate and feedback references block deletion (409); use deactivation instead. Only an unreferenced profile, credentials, role links and owned notifications are removed with the account. History is never cascaded/anonymized. No migration is required. Existing frontend Delete User is connected. Isolated real-database verification passed, including rollback and session/account lookup invalidation.
@@ -276,6 +426,76 @@ October 19, 2026 Admin navigation update: temporarily include direct links to
 all existing component preview pages and Faculty/AC/Admin role probes under
 Admin, including Alert AC. All links require test:admin and retain route guards.
 
+October 18 local history integration (user-reported meeting direction):
+An authenticated history backend may return dummy data while Haris imports data.
+The initial GET /api/me/observation-history prototype was superseded on
+October 19 by GET /api/me/observations (see alignment note below).
+Database history and submitted forms remain separate from this dummy backend.
+
+October 19 history alignment (local, user-authorized):
+History now uses Aaron's GET /api/me/observations list/filter envelope instead
+of a separate history endpoint. The dummy provider follows Haris PR #49 at
+d3c4587: AppUser and Professor IDs are distinct; ownership is through the
+signup's professor or selected observer. This is not a running Prisma query.
+Unmodeled draft revision/lifecycle fields remain null; section.semester is an
+additive name lookup beyond the API draft's section fields.
+For template reads, Haris's October 18 clarification supersedes the earlier
+version-preservation guidance: current questions may be edited in place and
+older linked assessments may show changed question text. The reader uses
+templateId/responses; the responses Json layout still requires agreement
+with the form writer. No real submitted-form API is implemented here.
+
+October 19 History integration with updated main 33d84e7:
+The user's approved dummy-backend scope supersedes the earlier History-only
+empty-state restriction for this feature. Use /observations/history and the
+existing observations.read.own grant. /history only redirects; preserve the
+five Faculty links, shared layout, current login/database auth, and Admin tools.
+The dummy provider supports current AccountUser shapes, remains explicitly
+opt-in development data, and performs no database reads, writes, migrations,
+or seeding. Existing database/auth/schema/dashboard work is retained from main.
+October 19, 2026 Faculty dashboard backend (supersedes dashboard preview values):
+/dashboard now reads the signed-in user's own PostgreSQL data through the existing
+pg pool, with a read-only /api/me/dashboard aggregate. Sections enforce existing
+own-profile/evaluation/observation/notification grants independently. Responses
+are private/no-store; no History/navigation, authentication, schema, seed, package,
+or workflow mutation changes are included.
+Provisional current cycle: earliest observation deadline among well-ordered cycles
+whose feedback deadline has not passed. No opening/active flag exists in the schema.
+Evaluation uses the last locked, both-signed Observee assessment semester plus the
+current rank interval. Missing history/invalid data remains Unknown, without
+inferring eligibility from missing hire dates. First-semester/rank-history/signup
+policies remain unresolved. Current work prefers Observee before selected-Observer
+records in that cycle. Pending requests must be unanswered/unexpired and not paired,
+cancelled or completed. Activity is five latest own notifications, never fabricated.
+See FACULTY_DASHBOARD_BACKEND.md for exact temporary rules, API scope, and checks.
+
+October 19, 2026 Faculty dashboard workflow follow-up (current user scope):
+Include linked Faculty evaluation, signup, current observation/appointment,
+incoming requests and web form. History frontend, backend and navigation are
+explicitly excluded and unchanged. Existing uncommitted dashboard work is retained.
+Own assigned sections, weekly schedules, current-cycle signup, proposed dates and
+active incoming invitations now have authorized reads. Calendar options recur from
+stored weekly meetings from server-local today to before the observation deadline,
+in America/Chicago; past-started meetings and ambiguous multi-meeting dates are
+excluded. No semester boundaries/holiday exceptions exist; display this limitation,
+do not claim an authoritative academic calendar, and do not invent exceptions.
+Signup uses existing uniqueness, current-cycle ownership/deadline checks, and an
+atomic signup/observation/date transaction. Until missing-history/first-semester
+eligibility is agreed, require a completed evaluation in a prior semester; seeded
+missing-history accounts remain blocked instead of silently becoming eligible.
+Invitation decline rechecks own recipient, active window and pairing under locks;
+it records the response and the observee notification in one transaction.
+The user explicitly chose separate assessment acknowledgements followed by locking:
+the assigned observer saves drafts and submits/acknowledges first; the observee
+reviews and acknowledges independently. Derive the participant and timestamps from
+the server, freeze answers after observer submission, and atomically lock/complete
+after both acknowledgements. Reject stale form revisions and edits after locking.
+Templates/criteria come from stored data; use the assessment's existing template or
+the newest active template for its first save, then retain that template reference.
+No schema, migrations, dependencies, seed or auth changes are made. Remaining gaps:
+accepted candidate date and recommendation-release state lack schema fields;
+incomplete-report storage/window, survey questions/scale, and alert reason/lifecycle
+rules remain unspecified. Those actions stay unavailable with an explanation.
 October 23, 2026 Admin Dashboard frontend (Issue #50, Dashboard only):
 /admin uses the shared shell and requires users.read on the server. Navigation
 uses the same effective grant; role labels and test:admin alone do not grant
@@ -414,3 +634,194 @@ of existing users, pagination or lookup failures. Create requires an explicit ch
 POST/PATCH send actual booleans, including false. The Users filter offers All, Active
 and Inactive; its query serializes true/false and omits the parameter for All.
 API response validators reject status strings. No schema or backend handlers changed.
+
+October 28, 2026 Faculty History branch refresh:
+Merged current origin/main into feature/faculty-history, retaining the original
+History UI and current main's Faculty workflows, shared shell and authorization.
+Removed the unused FacultyHistoryScreen duplicate. The own-observation API
+remains an opt-in development prototype; real records, submitted-form alignment,
+notifications, shared delivery/email and alerts belong to the next endpoint branch.
+
+October 28, 2026 History frontend endpoint alignment:
+History retains its existing toolbar/table and uses shared typography, radius,
+color and border tokens without custom surface shadows. It now renders in all
+build modes; preview query overrides remain development-only. The existing
+GET /api/me/observations client handles private paginated reads, cancellation,
+loading/empty/denied/error states and retry. Its list adapter accepts the current
+nested semester response without requiring the old redundant semesterId.
+The submitted-form reader now consumes existing observation assessment/template
+endpoints: templateVersionId, id/title/order, answer/comment arrays, and general
+comments. It displays locked forms only, rejects mismatched or malformed data,
+and shows unavailable timestamps without inventing completion dates.
+No backend, authentication, schema or database changes are included. The own-list
+provider remains development-only until the separate endpoint implementation.
+
+October 28 History sample removal: the development own-observation route now
+returns an empty list instead of generated demo observations. Fixtures remain
+for isolated unit tests only; real database reads remain follow-up work.
+
+October 28, 2026 database-backed own-observation endpoint (supersedes History prototype):
+GET /api/me/observations now uses Prisma reads with observations.read.own and
+session-derived observee/selected-observer membership, including for AC/Admin.
+Cycle, semester, participation, exact stored status and existing AC assessment
+categories filter in the database. UUID keyset pagination defaults to 20/max 100;
+cursors are checked within the same caller/filter scope. All responses are private,
+no-store with structured errors. No dummy records, schema changes or mutations.
+The endpoint is shared across History, Dashboard and active Observations; it does
+not impose a current-cycle or completed-only rule. Existing Dashboard aggregates
+remain unchanged. See PERSONAL_OBSERVATIONS_BACKEND.md for the contract and tests.
+
+October 28 History detail navigation:
+History now links View details to /observations/details?observationId=<selected ID>
+instead of opening its duplicate record/form modal. The existing Faculty details
+route accepts a specific ID for read-only historical viewing; without an ID it
+retains the active workflow. Selected-record views reuse the shared observation
+progress, meeting and assessment components used by AC, with Back to History.
+The page checks observations.read.own and gates assessment loading separately by
+assessment.read.own; the existing observation APIs enforce access to each record.
+Malformed/repeated IDs do not fall back to a different current observation.
+
+October 28, 2026 Notifications frontend (supersedes no-screen/unavailable-bell notes):
+Implemented /notifications from Figma Shared node 16:3270 with the All/Unread
+selector, Mark All Read and Notification/Details/Action table, plus explicit
+individual read/unread, pagination, refresh and loading/empty/error states.
+The shared permission-gated bell links to the page and consumes the unread count
+endpoint; failures show no fabricated count. All four Draft V2 notification APIs
+are called as contracts; no backend handlers, migrations, email or jobs are added.
+Only the existing authorized observation details destination is enabled initially;
+unknown target kinds remain unavailable pending backend mapping agreement.
+See NOTIFICATIONS_FRONTEND.md for API details, permissions, state handling and QA.
+
+October 28, 2026 Notifications backend (supersedes frontend-only endpoint status):
+All four notification endpoints now use Prisma with personal inbox ownership,
+read/update permissions, structured private responses, cursor pagination and
+snapshot/cutoff-safe read-state mutations. Destination/event metadata and inbox
+indexes were added in 20261028000000_notifications and applied locally without
+reset. Shared transaction-aware/idempotent in-app creation is used by the existing
+Prisma Faculty workflow producers; legacy SQL writers remain in their original
+atomic transactions. See NOTIFICATIONS_BACKEND.md for scope and verification.
+User clarification: email is planned for most/all workflow notifications, but do
+not implement its backend yet. No email sending, outbox, job or SMTP work is added.
+
+October 28 notification interaction update (current user direction):
+Notifications support selecting loaded rows and marking only the selection read
+through sequential existing PATCH calls. Confirmed changes are retained on partial
+failure; failed/unattempted selections remain and uncertain writes require refresh.
+All View controls open a full-message dialog and mark unread messages read when
+permitted. Table messages are truncated to two lines. Optional authorized record
+links appear inside the dialog, including no link when no destination is mapped.
+The open message survives removal from the Unread filter; read-only users may view
+without a write request. Long dialogs scroll the message with Close kept visible.
+No endpoint/schema/email changes are introduced by this frontend update.
+
+October 28, 2026 remaining task endpoints:
+Added the three canonical Alert create/list/detail reads/writes plus conditional
+PATCH, and the single AC cycle reminder POST. User confirmed acknowledgement then
+resolution and preserving free-text alert reasons. The existing Faculty issue
+ALERT path delegates to the canonical service. AC context/reminder controls use the
+same endpoints, with no duplicate History or reminder API. Notification/email
+separation is retained: inApp only; email requests return EMAIL_NOT_ENABLED without
+partial sending. 20261028010000_alerts_reminders was applied locally without reset.
+See ALERTS_REMINDERS_BACKEND.md for permissions, lifecycle, filters, idempotency,
+verified behavior and existing unrelated schema/build limitations.
+
+October 28 alert sender visibility:
+Notification responses now add optional sender:{id,name}|null. Faculty alert
+notifications resolve it from their exact faculty-issue event key and the stored
+reporter, only when current observation/alert access permits it. This works for
+already-created alerts without editing notification messages or guessing names.
+The notification table/detail dialog show From, and alert context shows Submitted
+by using createdBy. Other notifications with no recorded sender say Sender not
+recorded in the dialog. No client-supplied sender is accepted by write endpoints.
+
+
+October 28 email delivery (supersedes earlier deferred-email notes):
+New workflow notifications now default to both inApp and email. Additive migration
+20261028020000_notification_email uses an INSERT-only trigger to atomically enqueue
+both Prisma and existing pg writers, with no historical backfill or read-action
+emails. A separate Prisma/Nodemailer job sends through local Mailpit, using
+noreply_course_evaluation@assessmenthelper.edu, with claim leases and bounded
+retries. AC reminders support email-only, inApp-only or both; channel choices are
+in the idempotency hash. The frontend sends both and reports email as queued.
+No public mail endpoint. See EMAIL_DELIVERY.md for setup and delivery limits.
+
+
+October 28 multiple alerts (user-confirmed):
+Faculty can submit multiple separate alerts for one observation, even while another
+is pending. Each keeps its own acknowledgement/resolution history and notifications.
+The optional UUID creationKey deduplicates retries of one submission, not all alerts
+for an observation. Different content with a reused key returns 409. The form retains
+the key across errors and generates a new key after success. Migration
+20261028030000_multiple_observation_alerts preserves existing reports and leaves
+NOT_OCCURRED deduplication intact.
+
+
+October 28 faculty messages (supersedes alert lifecycle):
+Faculty alerts are simple messages to AC, with no acknowledgement/resolution
+workflow. PATCH /api/alerts/{alertId} is removed (405); lifecycle fields are omitted
+from GET responses and status filtering is unsupported. Old records/audit fields
+are retained. Every active AC account receives one in-app notification and queued
+email, independently of alerts.manage. Admin and custom committee roles with
+observations.read plus notifications.send remain included. Duplicate role membership
+does not duplicate delivery. Messages include sender and full text; observation
+access remains independently enforced. Multiple messages/retry keys remain supported.
+
+
+October 28 unified Faculty observation details:
+The current no-ID details route resolves the selected workflow observation and
+uses the same ObservationDetails component/API as History. Cycle/observation
+selectors and active form, non-occurrence, feedback, recommendation, pairing and
+AC-message actions remain. Actions display only after the authorized details read
+succeeds. History stays read-only. Assessment loading uses the current own grant;
+proposed meeting options retain the shared labels, locations and time zones.
+
+October 28 observation details display: Faculty messages are no longer automatically embedded in current or History observation details. Messages remain in Notifications. Explicit AC View message links still show the selected message context.
+
+
+
+October 28 signup navigation: the signup route redirects to current observation
+details when the authorized selected-cycle workflow already contains a signup.
+The form also guards against displaying another submission for an existing signup,
+and successful signup replaces the page with observation details. My Evaluation
+and Observations switch their signup link to View Observation Details when signed
+up. Existing database uniqueness, transaction locks and duplicate API rejection
+remain enforced. This does not block signup for another cycle.
+
+
+October 28 dashboard previews and evaluation display:
+Recent activity normalizes whitespace and truncates messages at 180 Unicode
+characters, with a two-line visual limit and a Notifications link for full text.
+My Evaluation displays Signed up for an existing selected-cycle signup, and
+Completed when the latest completed evaluation belongs to the selected semester.
+Signing up is not completion; annual/biennial due calculations, AC reporting and
+backend eligibility rules are unchanged. The UI explains pending completion.
+
+
+October 28 dashboard signup status correction:
+Dashboard now reads hasCurrentSignup through Prisma for the signed-in faculty
+member and selected cycle under signups.read.own. Dashboard and My Evaluation
+share the same Signed up / Completed / requirement-label display helper. The
+dashboard signup shortcut also becomes View Observation Details after signup.
+Observer participation alone never implies an own signup, and a missing grant or
+cycle is not treated as an unsigned state. Eligibility/due rules are unchanged.
+
+
+October 28 shared notification integration:
+sendNotification(input, tx?) is the canonical server helper for specific users,
+user lists, roles (including all active AC/Admin through existing inheritance),
+or effective-permission audiences. It deduplicates overlaps and skips inactive
+accounts. New calls default to inApp; email:true opts into queued SMTP. Existing
+alerts, reminders and Prisma invitation workflows explicitly preserve their email
+behavior and pass existing transactions. No schema or public endpoint was added.
+Legacy pg writes retain their atomic trigger/outbox integration. See
+NOTIFICATION_HELPER.md for the supported API, examples and verified Mailpit delivery.
+
+
+October 28 dependency security update:
+Next/eslint-config-next 16.4.3, React/DOM 19.2.9, aligned Prisma 7.10.1 and patched
+indirect dependencies are locked. SMTP imports the official Nodemailer 10.2.1 via
+smtp-mailer alias, avoiding Auth.js Credentials provider optional v7/v8 peer
+conflicts. Mailpit is pinned to 1.32.0; Node target 24.22.1 is recorded in version
+files/engines. No new database migration or reset. The old Admin/AC optional route
+context typings were corrected; full production build now passes. See
+DEPENDENCY_UPDATES.md for compatibility, verification and teammate update steps.

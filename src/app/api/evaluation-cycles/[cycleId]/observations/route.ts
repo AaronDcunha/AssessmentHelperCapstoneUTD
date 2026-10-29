@@ -1,2 +1,3 @@
-import { acReadHandler } from "@/server/ac-monitoring-api";
-export const GET = acReadHandler("observations");
+import { monitoringHandler } from "@/server/ac-reports-api";
+
+export const GET = monitoringHandler("observations");

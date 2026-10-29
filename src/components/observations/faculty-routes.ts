@@ -14,12 +14,15 @@ export const facultyRoutes = {
 } as const;
 
 export const facultyPageHeaders = {
-  // Screenshot-provided semester is display-only preview content, not an active cycle.
-  [facultyRoutes.dashboard]: { title: "Faculty Dashboard", subtitle: "Fall 2026", facultyLayout: true },
+  [facultyRoutes.dashboard]: { title: "Faculty Dashboard", facultyLayout: true },
   [facultyRoutes.evaluation]: { title: "My Evaluation", facultyLayout: true },
   [facultyRoutes.requests]: { title: "Observer Requests", facultyLayout: true },
   [facultyRoutes.observations]: { title: "Observations", facultyLayout: true },
-  [facultyRoutes.history]: { title: "Observation History", facultyLayout: true },
+  [facultyRoutes.history]: {
+    title: "Observation History",
+    subtitle: "Review your observations across semesters.",
+    facultyLayout: true,
+  },
   [facultyRoutes.signup]: { title: "Sign Up for Observation", facultyLayout: true },
   [facultyRoutes.recommendations]: { title: "Recommended Observers", facultyLayout: true },
   [facultyRoutes.confirmed]: { title: "Choose Confirmed Observer", facultyLayout: true },
