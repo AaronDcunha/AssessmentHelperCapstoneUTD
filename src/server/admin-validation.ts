@@ -60,9 +60,15 @@ export function levelInput(value: unknown, create: boolean) {
   return {data, expectedRevision:create ? undefined : revision(b.expectedRevision)};
 }
 export type GrantRole = {roleId: string; roleName: string; rolePermissions: {permission: {permissionName: string}}[]};
+export function effectiveRoleNames(assignedNames: string[]) {
+  const names = new Set(assignedNames);
+  if (names.has("Admin")) names.add("AC");
+  if (names.has("AC")) names.add("Faculty");
+  return [...names];
+}
 export function effectivePermissions(roles: GrantRole[], assignedIds: string[]) {
   const assigned = roles.filter(r => assignedIds.includes(r.roleId));
-  const names = new Set(assigned.map(r => r.roleName));
-  const included = roles.filter(r => assignedIds.includes(r.roleId) || (names.has("Admin") && ["AC","Faculty"].includes(r.roleName)) || (names.has("AC") && r.roleName === "Faculty"));
+  const names = effectiveRoleNames(assigned.map(r => r.roleName));
+  const included = roles.filter(r => names.includes(r.roleName));
   return [...new Set(included.flatMap(r => r.rolePermissions.map(p => p.permission.permissionName)))].sort();
 }

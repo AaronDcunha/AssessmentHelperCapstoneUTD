@@ -23,12 +23,19 @@ export async function markAllNotificationsRead(db: NotificationDatabase, user: C
 
 type NotificationWriter = Pick<Prisma.TransactionClient,"notification">;
 export type WorkflowNotification = { userId:string; eventKey:string; type:string; title:string; message:string; observationId?:string; channels?: ("inApp"|"email")[] };
+export function validateWorkflowNotification(input:Omit<WorkflowNotification,"userId">) {
+  for(const [value,limit] of [[input.eventKey,300],[input.type,100],[input.title,2000]] as const)
+    if(typeof value!=="string"||!value.trim()||value.length>limit)throw new Error("Invalid workflow notification.");
+  if(typeof input.message!=="string"||input.message.length>20000)throw new Error("Invalid workflow notification.");
+  if(input.observationId!==undefined)notificationId(input.observationId);
+  const channels=input.channels??["inApp","email"];
+  if(!Array.isArray(channels)||!channels.length||new Set(channels).size!==channels.length||channels.some(channel=>channel!=="inApp"&&channel!=="email"))throw new Error("Invalid notification channels.");
+}
 /** Call inside the workflow's existing transaction; no network I/O or email delivery here. */
 export async function createWorkflowNotification(db: NotificationWriter, input: WorkflowNotification) {
+  validateWorkflowNotification(input);
   const userId=notificationId(input.userId), targetId=input.observationId?notificationId(input.observationId):null;
-  if(!input.eventKey.trim() || input.eventKey.length>300 || !input.type.trim() || input.type.length>100 || !input.title.trim() || input.title.length>2000 || input.message.length>20000) throw new Error("Invalid workflow notification.");
   const channels=input.channels??["inApp","email"];
-  if(!channels.length || channels.some(channel=>channel!=="inApp"&&channel!=="email"))throw new Error("Invalid notification channels.");
   return db.notification.upsert({where:{userId_eventKey:{userId,eventKey:input.eventKey}},
     create:{userId,eventKey:input.eventKey,notificationType:input.type,title:input.title,message:input.message,targetKind:targetId?"observation":null,targetId,inAppEnabled:channels.includes("inApp"),emailRequested:channels.includes("email")},update:{eventKey:input.eventKey}});
 }

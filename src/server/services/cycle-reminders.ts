@@ -3,8 +3,8 @@ import type { Prisma } from "../../generated/prisma/client";
 import { ConfigurationError,uuid,type ConfigurationUser } from "../configuration-validation";
 import { reminderInput,workflowGrant } from "../alert-reminder-validation";
 import { facultyStatuses,observationWhere } from "../queries/ac-reports";
-import { createWorkflowNotification } from "./notifications";
-type Database=Pick<Prisma.TransactionClient,"reminderDispatch"|"notification"|"professor"|"observation"|"evaluationCycle"|"hiringLevel">;
+import { sendNotification } from "./notification-delivery";
+type Database=Pick<Prisma.TransactionClient,"appUser"|"role"|"reminderDispatch"|"notification"|"professor"|"observation"|"evaluationCycle"|"hiringLevel">;
 export async function sendCycleReminders(db:Database,user:ConfigurationUser,cycleId:string,body:unknown,idempotencyKey?:string){
  workflowGrant(user,"notifications.send","cycles.read");uuid(cycleId);const input=reminderInput(body),dispatchId=idempotencyKey?uuid(idempotencyKey):randomUUID();
  if(input.params.has("evaluationStatus"))workflowGrant(user,"reports.read");
@@ -31,6 +31,6 @@ export async function sendCycleReminders(db:Database,user:ConfigurationUser,cycl
  const recipients=await db.professor.findMany({where:{AND:clauses},select:{userId:true},orderBy:{professorId:"asc"},take:1001});
  if(recipients.length>1000)throw new ConfigurationError(413,"TOO_MANY_RECIPIENTS","Narrow the recipient filter to at most 1000 faculty members.");
  await db.reminderDispatch.create({data:{dispatchId,cycleId,createdById:user.id,requestHash:hash,recipientCount:recipients.length}});
- for(const recipient of recipients)await createWorkflowNotification(db,{userId:recipient.userId,eventKey:`reminder:${dispatchId}`,type:`AC_REMINDER_${input.kind.toUpperCase()}`,title:`${cycle.semester.termName} reminder`,message:input.message,channels:input.channels});
+ await sendNotification({recipients:{userIds:recipients.map(recipient=>recipient.userId)},eventKey:`reminder:${dispatchId}`,type:`AC_REMINDER_${input.kind.toUpperCase()}`,title:`${cycle.semester.termName} reminder`,message:input.message,email:input.channels.includes("email"),inApp:input.channels.includes("inApp")},db);
  return outcome(recipients.length);
 }

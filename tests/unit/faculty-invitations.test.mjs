@@ -43,10 +43,14 @@ function fixture() {
   const attempt = { attemptId: id(4), status: 'PENDING', invitedAt: new Date('2000-01-01'), expiresAt: new Date('2099-01-01') };
   const write = name => async input => { writes.push({ name, input }); return { count: 1 }; };
   const db = {
+    appUser: { findMany: async ({where}) => {
+      assert.equal(where.isActive,true);
+      return where.OR.flatMap(clause=>(clause.userId?.in??[]).map(userId=>({userId,userRoles:[]})));
+    } },
     observation: { findUnique: async () => record, findMany: async () => [record], updateMany: write('revision'), update: write('observation') },
     observationCandidate: { findUnique: async () => candidate, update: write('candidate') },
     invitationAttempt: { findFirst: async () => attempt, update: write('attempt') },
-    notification: { upsert: async input => { writes.push({ name: 'notification', input: { data: input.create } }); return input.create; } },
+    notification: { upsert: async input => { writes.push({ name: 'notification', input: { data: input.create } }); return {notificationId:id(5),...input.create}; } },
   };
   return { db, record, candidate, attempt, writes };
 }

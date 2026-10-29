@@ -171,3 +171,11 @@ selectors and active form, non-occurrence, feedback, recommendation, pairing and
 AC-message actions remain. Actions display only after the authorized details read
 succeeds. History stays read-only. Assessment loading uses the current own grant;
 proposed meeting options retain the shared labels, locations and time zones.
+
+
+Shared notification entry point: server/services/notification-delivery.ts exports
+sendNotification(input, tx?). It owns active-recipient resolution and deduplication;
+services/notifications.ts remains the low-level persistence/read-state layer.
+Authorized workflow services pass their existing Prisma transaction. Recipient role
+inheritance shares effectiveRoleNames/effectivePermissions from admin-validation.ts.
+See NOTIFICATION_HELPER.md for examples and email opt-in behavior.

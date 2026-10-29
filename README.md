@@ -107,3 +107,6 @@ Read captured mail at http://localhost:8025. The sender defaults to
 See [email delivery setup](docs/reference/EMAIL_DELIVERY.md) for migrations,
 Mailpit settings, retries and tests. Production dependency-upgrade work listed
 above remains separate from local Mailpit testing.
+
+
+Shared notification helper: see [NOTIFICATION_HELPER.md](docs/reference/NOTIFICATION_HELPER.md) for the canonical sendNotification function, specific-user/list/role audiences, optional email, transaction examples and Mailpit testing.

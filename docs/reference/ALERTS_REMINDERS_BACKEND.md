@@ -64,11 +64,12 @@ faculty population used by AC faculty reporting, not arbitrary account recipient
 The synchronous implementation limits recipients to 1000 and asks for narrower
 filters beyond that limit. Existing eligibility ambiguities remain unchanged.
 
-channels defaults to ["inApp"]. Any request including email fails with 501
-EMAIL_NOT_ENABLED before any dispatch or notification is created; channels are
-never silently dropped. In-app delivery is synchronous, so 200 returns
-{dispatchId,recipientCount,notificationCount,status:"completed"}; no 202 operation
-polling endpoint or background delivery job is necessary.
+channels defaults to ["inApp","email"]. Either channel or both are supported.
+The dispatch returns 200 with
+{dispatchId,recipientCount,notificationCount,emailQueuedCount,status:"completed"}.
+Completed means the dispatch transaction committed, not that SMTP delivered mail.
+Email is queued for the separate worker; no public operation-polling endpoint is
+needed. See EMAIL_DELIVERY.md and NOTIFICATION_HELPER.md.
 
 Optional Idempotency-Key is a UUID. A ReminderDispatch audit record and per-recipient
 notification event keys are committed with the notifications. Reusing the same key,

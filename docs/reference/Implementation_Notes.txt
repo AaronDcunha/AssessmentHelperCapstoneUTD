@@ -795,3 +795,14 @@ share the same Signed up / Completed / requirement-label display helper. The
 dashboard signup shortcut also becomes View Observation Details after signup.
 Observer participation alone never implies an own signup, and a missing grant or
 cycle is not treated as an unsigned state. Eligibility/due rules are unchanged.
+
+
+October 28 shared notification integration:
+sendNotification(input, tx?) is the canonical server helper for specific users,
+user lists, roles (including all active AC/Admin through existing inheritance),
+or effective-permission audiences. It deduplicates overlaps and skips inactive
+accounts. New calls default to inApp; email:true opts into queued SMTP. Existing
+alerts, reminders and Prisma invitation workflows explicitly preserve their email
+behavior and pass existing transactions. No schema or public endpoint was added.
+Legacy pg writes retain their atomic trigger/outbox integration. See
+NOTIFICATION_HELPER.md for the supported API, examples and verified Mailpit delivery.

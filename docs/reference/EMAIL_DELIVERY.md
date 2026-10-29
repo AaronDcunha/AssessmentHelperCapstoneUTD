@@ -48,7 +48,11 @@ writers without splitting their transactions or changing their workflow rules.
 The delivery worker uses Prisma Client model operations; it does not use manual
 SQL. The trigger is managed in the migration, so schema-push alone is insufficient.
 
-The shared creation service accepts optional `channels: ('inApp'|'email')[]`,
+For new integrations, use sendNotification(input, tx?) from services/notification-delivery.ts;
+it defaults to in-app and accepts email:true. Existing workflows explicitly preserve
+both channels. See [NOTIFICATION_HELPER.md](NOTIFICATION_HELPER.md) for examples.
+
+The lower-level compatibility creation service accepts optional `channels: ('inApp'|'email')[]`,
 defaulting to both. Recurring attempts for the same recipient/event keep the
 original content/channel decision and do not create a second outbox row. Read,
 unread and mark-all-read actions never queue email. Existing notifications are

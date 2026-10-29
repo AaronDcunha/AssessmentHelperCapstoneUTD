@@ -124,3 +124,10 @@ from the matching FacultyIssue reporter and event key under current observation
 access. Existing alert notifications gain this metadata without a migration or
 message rewrite. Notification previews/dialogs show From; alert context shows
 Submitted by from createdBy. Unrecorded senders are not guessed or labeled System.
+
+
+New feature integration: use [sendNotification](NOTIFICATION_HELPER.md), the shared
+server helper for active users, account lists, role or permission audiences and
+optional email. It resolves/deduplicates recipients and reuses transactional
+creation/outbox delivery. Pass the existing workflow transaction; email is opt-in
+for new helper calls. Existing workflows explicitly retain both channels.

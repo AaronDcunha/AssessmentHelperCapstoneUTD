@@ -6,9 +6,7 @@ import { getPrisma } from "../prisma";
 import { FacultyActionError } from "./faculty-errors";
 import { meetingOccurrence } from "./faculty-meetings";
 import { facultyDate, type WeeklyMeeting } from "./faculty-calendar";
-import { effectivePermissions } from "../admin-validation";
-import { createWorkflowNotification } from "./notifications";
-import { grantInclude } from "../queries/admin";
+import { sendNotification } from "./notification-delivery";
 
 type Tx = Prisma.TransactionClient;
 type Identity = Pick<AccountUser, "id" | "permissions">;
@@ -81,13 +79,10 @@ export async function observerAvailable(db: Tx, record: ObservationRecord, profe
 }
 type NotificationContext = { eventKey: string; observationId: string };
 async function notify(db: Tx, userId: string, title: string, message: string, context: NotificationContext) {
-  await createWorkflowNotification(db, { userId, title, message, type: "FACULTY_WORKFLOW", ...context });
+  await sendNotification({ recipients:{userId}, email:true, title, message, type: "FACULTY_WORKFLOW", ...context },db);
 }
 export async function notifyCommittee(db: Tx, title: string, message: string, context: NotificationContext) {
-  const roles = await db.role.findMany({ include: grantInclude });
-  const roleIds = roles.filter(role => effectivePermissions(roles, [role.roleId]).includes("late-acceptance.review")).map(role => role.roleId);
-  const recipients = await db.appUser.findMany({ where: { isActive: true, userRoles: { some: { roleId: { in: roleIds } } } }, select: { userId: true } });
-  for (const recipient of recipients) await notify(db, recipient.userId, title, message, context);
+  await sendNotification({recipients:{permissions:["late-acceptance.review"]},email:true,title,message,type:"FACULTY_WORKFLOW",...context},db);
 }
 async function invite(db: Tx, candidateId: string, record: ObservationRecord, now: Date) {
   const latest = await db.invitationAttempt.findFirst({ where: { candidateId }, orderBy: { number: "desc" } });

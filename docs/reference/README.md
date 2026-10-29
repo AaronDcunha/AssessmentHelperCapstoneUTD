@@ -65,3 +65,6 @@ endpoint, their frontend wiring and permissions.
 
 Email delivery: see EMAIL_DELIVERY.md for the transactional outbox, separate SMTP
 worker, Mailpit setup, channel selection, retry handling and tests.
+
+
+Shared notification helper: see [NOTIFICATION_HELPER.md](NOTIFICATION_HELPER.md) for the canonical sendNotification function, specific-user/list/role audiences, optional email, transaction examples and Mailpit testing.
