@@ -128,3 +128,54 @@ October 28 personal observation list: authorized Prisma reads and response mappi
 live in src/server/queries/personal-observations.ts. The thin /api/me/observations
 route supplies session identity and structured private responses. See
 PERSONAL_OBSERVATIONS_BACKEND.md; existing Faculty pg aggregates are unchanged.
+
+October 28 Notifications backend: shared validation/HTTP handling lives in
+notification-validation.ts and notifications-http.ts, authorized inbox reads in
+queries/notifications.ts, and read-state/shared creation in services/notifications.ts.
+Route adapters are thin and Prisma operations use repeatable-read transactions.
+Email delivery remains a documented future service/job; no mail implementation.
+
+October 28 alerts/reminders: authorized reads are in queries/alerts.ts, workflow
+mutations in services/alerts.ts and services/cycle-reminders.ts, and boundary
+validation/HTTP adapters in alert-reminder-*.ts. Existing AC report filter helpers
+are reused. One Serializable Prisma transaction owns each alert/reminder mutation;
+email jobs remain unimplemented by explicit user instruction.
+
+
+October 28 email delivery (supersedes earlier deferred-email notes):
+New workflow notifications now default to both inApp and email. Additive migration
+20261028020000_notification_email uses an INSERT-only trigger to atomically enqueue
+both Prisma and existing pg writers, with no historical backfill or read-action
+emails. A separate Prisma/Nodemailer job sends through local Mailpit, using
+noreply_course_evaluation@assessmenthelper.edu, with claim leases and bounded
+retries. AC reminders support email-only, inApp-only or both; channel choices are
+in the idempotency hash. The frontend sends both and reports email as queued.
+No public mail endpoint. See EMAIL_DELIVERY.md for setup and delivery limits.
+
+
+October 28 faculty messages (supersedes alert lifecycle):
+Faculty alerts are simple messages to AC, with no acknowledgement/resolution
+workflow. PATCH /api/alerts/{alertId} is removed (405); lifecycle fields are omitted
+from GET responses and status filtering is unsupported. Old records/audit fields
+are retained. Every active AC account receives one in-app notification and queued
+email, independently of alerts.manage. Admin and custom committee roles with
+observations.read plus notifications.send remain included. Duplicate role membership
+does not duplicate delivery. Messages include sender and full text; observation
+access remains independently enforced. Multiple messages/retry keys remain supported.
+
+
+October 28 unified Faculty observation details:
+The current no-ID details route resolves the selected workflow observation and
+uses the same ObservationDetails component/API as History. Cycle/observation
+selectors and active form, non-occurrence, feedback, recommendation, pairing and
+AC-message actions remain. Actions display only after the authorized details read
+succeeds. History stays read-only. Assessment loading uses the current own grant;
+proposed meeting options retain the shared labels, locations and time zones.
+
+
+Shared notification entry point: server/services/notification-delivery.ts exports
+sendNotification(input, tx?). It owns active-recipient resolution and deduplication;
+services/notifications.ts remains the low-level persistence/read-state layer.
+Authorized workflow services pass their existing Prisma transaction. Recipient role
+inheritance shares effectiveRoleNames/effectivePermissions from admin-validation.ts.
+See NOTIFICATION_HELPER.md for examples and email opt-in behavior.

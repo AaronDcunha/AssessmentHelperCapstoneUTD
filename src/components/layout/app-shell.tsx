@@ -3,6 +3,7 @@
 import { useId, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 import { AccountDropdown } from "./account-dropdown";
 import { Sidebar, type SidebarProps } from "./sidebar";
 import { PageHeader, type PageHeaderProps } from "./page-header";
@@ -15,11 +16,12 @@ export type AppShellProps = {
   user?: SidebarProps["user"];
   headerUser?: PageHeaderProps["user"];
   notificationAction?: PageHeaderProps["notificationAction"];
+  canReadNotifications?: boolean;
   subtitle?: string;
   pageHeaders?: Record<string, { title: string; subtitle?: string; facultyLayout?: boolean; contentSpacing?: "default" | "spacious"; showUnavailableControls?: boolean }>;
 };
 
-export function AppShell({ children, authorizedSections, user, headerUser, notificationAction, subtitle, pageHeaders }: AppShellProps) {
+export function AppShell({ children, authorizedSections, user, headerUser, notificationAction, canReadNotifications = false, subtitle, pageHeaders }: AppShellProps) {
   const pathname = usePathname();
   const navigationId = useId();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -58,6 +60,7 @@ export function AppShell({ children, authorizedSections, user, headerUser, notif
         <div className="mx-auto w-full max-w-[1096px]">
           <PageHeader title={header?.title ?? current?.label ?? "Assessment Helper"}
             subtitle={header?.subtitle ?? subtitle} user={headerUser} notificationAction={notificationAction}
+            notificationControl={canReadNotifications ? <NotificationBell /> : undefined}
             accountControl={headerUser && !headerUser.action ? (
               <AccountDropdown name={headerUser.name} initials={headerUser.initials}
                 onLogout={() => signOut({ redirectTo: "/login" })} />

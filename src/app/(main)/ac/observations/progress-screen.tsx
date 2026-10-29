@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { ReminderControl } from "@/components/ac/reminder-control";
+import { CycleAlerts } from "@/components/ac/cycle-alerts";
 import { useCallback, useState } from "react";
 import { CycleSelector, useAcCycle } from "@/components/ac/cycle-context";
 import { useApiResource } from "@/components/ac/use-api-resource";
@@ -16,7 +18,7 @@ function courseLabel(row: ObservationItem) {
   return course?.code || course?.title || course?.name || "—";
 }
 
-export default function ObservationProgressPage() {
+export default function ObservationProgressPage({canSendReminders=false}:{canSendReminders?:boolean} = {}) {
   const [status, setStatus] = useState("all");
   const { cycles, selectedCycle, selection } = useAcCycle();
   const cycleId = selectedCycle?.id;
@@ -34,6 +36,8 @@ export default function ObservationProgressPage() {
         </Select>
         <CycleSelector allowAll />
       </div>
+      <ReminderControl cycleId={selection === "all" ? undefined : cycleId} canSend={canSendReminders} recipientFilter={status!=="all"?{observationStatus:status}:{}} />
+      <CycleAlerts cycleId={selection === "all" ? undefined : cycleId} />
       <div className="overflow-x-auto rounded-ah-8 border border-border bg-surface">
         <table className="w-full min-w-[760px] table-fixed border-collapse">
           <thead><tr className="h-[80px] bg-canvas">

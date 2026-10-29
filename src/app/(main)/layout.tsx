@@ -45,9 +45,11 @@ export default async function MainLayout({ children }: { children: ReactNode }) 
     <AppShell
       authorizedSections={filterNavigation(sections, item => item.id in acPermissions ? canAccessAcPage(user.permissions, item.id as AcPage) : !!item.permission && user.permissions.includes(item.permission))}
       user={{ name: user.name, initials: user.name, description: user.roles.join(" · ") }}
+      canReadNotifications={user.permissions.includes("notifications.read.own")}
       headerUser={{ name: user.name, initials: user.name }}
       pageHeaders={{
         ...facultyPageHeaders,
+        "/notifications": { title: "Notifications", facultyLayout: true },
         ...acPageHeaders,
         [adminRoutes.dashboard]: { ...adminHeader, title: "Admin Dashboard" },
         [adminRoutes.users]: { ...adminHeader, title: "Users" },

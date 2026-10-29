@@ -52,3 +52,19 @@ Record agreed changes in `Implementation_Notes.txt` and update affected guidance
 
 Personal observation list: see `PERSONAL_OBSERVATIONS_BACKEND.md` for implemented
 GET /api/me/observations, personal ownership, database filters, pagination and tests.
+
+Notifications frontend: see NOTIFICATIONS_FRONTEND.md for the Figma-based shared
+page, header bell, read-state API clients and frontend-only verification scope.
+
+Notifications backend: see NOTIFICATIONS_BACKEND.md for the four implemented
+personal inbox/read-state APIs, migration and shared creation service. New notification runtime code uses Prisma Client.
+
+Alerts/reminders: see ALERTS_REMINDERS_BACKEND.md for the implemented observation
+alert create, cycle alert list, individual alert read/update, and AC cycle reminder
+endpoint, their frontend wiring and permissions.
+
+Email delivery: see EMAIL_DELIVERY.md for the transactional outbox, separate SMTP
+worker, Mailpit setup, channel selection, retry handling and tests.
+
+
+Shared notification helper: see [NOTIFICATION_HELPER.md](NOTIFICATION_HELPER.md) for the canonical sendNotification function, specific-user/list/role audiences, optional email, transaction examples and Mailpit testing.

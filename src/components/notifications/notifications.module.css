@@ -1,0 +1,49 @@
+.table {
+  width: 100%;
+  min-width: 680px;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+.table th,
+.table td {
+  height: 80px;
+  width: auto;
+  overflow-wrap: anywhere;
+}
+.table tr + tr,
+.table tbody tr {
+  border-top: 1px solid var(--border);
+}
+.table .readAction {
+  min-height: 24px;
+  min-width: 0;
+  padding: 0;
+  justify-content: flex-start;
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+}
+.filter {
+  background: var(--surface);
+}
+.filter:disabled {
+  background: var(--neutral-bg);
+}
+.table .selectionCell {
+  width: 48px;
+  text-align: center;
+}
+.table .selectedRow td {
+  background: var(--light);
+}
+.messagePreview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.detailDialog[open] {
+  display: flex;
+  flex-direction: column;
+}

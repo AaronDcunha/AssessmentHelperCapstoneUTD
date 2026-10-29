@@ -96,3 +96,17 @@ Confirm the reset when prompted. **This deletes all data in the configured datab
 
 - Zod: not added as an application dependency; use explicit server-side validation for now.
 - Testing: Vitest, React Testing Library, and Playwright are planned but not installed.
+
+
+## Local workflow emails
+
+New workflow notifications also queue email. With Mailpit running, configure
+`EMAIL_DELIVERY_ENABLED=true` and run `npm run jobs:email` in a separate terminal.
+Read captured mail at http://localhost:8025. The sender defaults to
+`noreply_course_evaluation@assessmenthelper.edu`; old notifications are not emailed.
+See [email delivery setup](docs/reference/EMAIL_DELIVERY.md) for migrations,
+Mailpit settings, retries and tests. Production dependency-upgrade work listed
+above remains separate from local Mailpit testing.
+
+
+Shared notification helper: see [NOTIFICATION_HELPER.md](docs/reference/NOTIFICATION_HELPER.md) for the canonical sendNotification function, specific-user/list/role audiences, optional email, transaction examples and Mailpit testing.

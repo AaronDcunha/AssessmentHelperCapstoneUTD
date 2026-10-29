@@ -1,17 +1,25 @@
 "use client";
-import { useState } from "react";
+import { notifyNotificationChange } from "@/lib/notifications-api";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/form-fields";
+import { acApi } from "@/lib/ac-api";
 import { postFacultyAction } from "./faculty-api";
 import type { FacultyWorkflow } from "@/server/queries/faculty-workflow";
 
 export function FacultyIssueControl({ observationId, kind }: { observationId: string; kind: "ALERT" | "NOT_OCCURRED" }) {
   const router = useRouter(), [opened, setOpened] = useState(false), [reason, setReason] = useState(""), [details, setDetails] = useState(""), [pending, setPending] = useState(false), [message, setMessage] = useState("");
-  return <div className="space-y-ah-16"><Button variant="secondary" onClick={() => setOpened(!opened)}>{kind === "ALERT" ? "Alert Assessment Committee" : "Report Not Completed"}</Button>
+  const alertRequest=useRef<{body:string;key:string}|null>(null);
+  return <div className="space-y-ah-16"><Button variant="secondary" disabled={pending} onClick={() => setOpened(!opened)}>{kind === "ALERT" ? "Alert Assessment Committee" : "Report Not Completed"}</Button>
     {opened && <form className="space-y-ah-16 rounded-ah-8 border border-border bg-surface p-ah-24" onSubmit={async event => {
       event.preventDefault(); if (pending) return; setPending(true); setMessage("");
-      try { const result = await postFacultyAction<{ message: string }>("issues", { observationId, kind, reason, details }); setMessage(result.message); setOpened(false); router.refresh(); }
+      try {
+        const serialized=JSON.stringify({observationId,reason,details});
+        if(kind==="ALERT"&&alertRequest.current?.body!==serialized)alertRequest.current={body:serialized,key:crypto.randomUUID()};
+        const result = kind === "ALERT" ? await acApi.createObservationAlert(observationId, { reasonCode: "OTHER", reason, details, creationKey:alertRequest.current!.key }).then(() => ({ message: "Your alert was saved. The Assessment Committee has an in-app notification and email delivery is queued." })) : await postFacultyAction<{ message: string }>("issues", { observationId, kind, reason, details });
+        alertRequest.current=null; notifyNotificationChange(); setMessage(result.message); setReason(""); setDetails(""); setOpened(false); router.refresh();
+      }
       catch (error) { setMessage(error instanceof Error ? error.message : "The report could not be saved."); }
       finally { setPending(false); }
     }}><Input label="Reason" required maxLength={2000} value={reason} onChange={event => setReason(event.target.value)} /><Textarea label="Details" maxLength={20000} value={details} onChange={event => setDetails(event.target.value)} /><Button type="submit" disabled={pending}>Submit Report</Button></form>}

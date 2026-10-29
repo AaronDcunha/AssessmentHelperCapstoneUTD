@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "jobs:email": "node --import ./scripts/server-loader.mjs --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/email-worker.ts",
+    "jobs:email:once": "npm run jobs:email -- --once",
     "jobs:faculty": "node --import ./scripts/server-loader.mjs --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/scheduler.ts",
     "db:generate": "prisma generate",
     "predev": "prisma generate",

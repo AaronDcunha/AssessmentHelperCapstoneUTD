@@ -12,6 +12,8 @@ import { postFacultyAction } from "./faculty-api";
 import type { FacultyWorkflow } from "@/server/queries/faculty-workflow";
 import { FacultyCycleSelector, FacultyObservationSelector } from "./faculty-cycle-selector";
 import { FacultyFeedbackControl, FacultyIssueControl } from "./faculty-participation-controls";
+import { ObservationDetails } from "./observation-details";
+import { evaluationProgressLabel } from "@/lib/evaluation-progress-label";
 
 function dateTime(value: string, timeZone = "America/Chicago") {
   return new Intl.DateTimeFormat("en-US", { timeZone, dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
@@ -29,17 +31,19 @@ function Back({ href = routes.dashboard }: { href?: string }) {
 
 export function EvaluationScreen({ data }: { data: FacultyWorkflow | null }) {
   const evaluation = data?.dashboard.evaluation, cycle = data?.dashboard.cycle;
-  const labels = { due: "Due", overdue: "Overdue", notDue: "Not due", unknown: "Unknown", ineligible: "Ineligible" };
+  const completedThisSemester = !!cycle && evaluation?.lastCompletedEvaluation?.semesterId === cycle.semesterId;
+  const status = evaluationProgressLabel(evaluation?.status, !!data?.existingSignup, cycle?.semesterId, evaluation?.lastCompletedEvaluation?.semesterId);
   return <div className="space-y-ah-24">
     <FacultyCycleSelector dashboard={data?.dashboard} />
     <Block title="Evaluation status"><div className={panel}>
-      <p>Status: {evaluation && data?.dashboard.access.evaluation ? labels[evaluation.status] : "Unavailable"}</p><p>Hiring level: {evaluation?.hiringLevel ?? "Unavailable"}</p><p>Last evaluation: {evaluation?.lastCompletedEvaluation?.semester ?? (data?.dashboard.access.evaluation ? "None recorded" : "Unavailable")}</p>
-      {evaluation?.status === "unknown" && <p className="text-muted">{evaluation.reason}</p>}
+      <p>Status: {data?.dashboard.access.evaluation ? status : "Unavailable"}</p><p>Hiring level: {evaluation?.hiringLevel ?? "Unavailable"}</p><p>Last evaluation: {evaluation?.lastCompletedEvaluation?.semester ?? (data?.dashboard.access.evaluation ? "None recorded" : "Unavailable")}</p>
+      {data?.existingSignup && !completedThisSemester && <p className="text-muted">You’re signed up for this semester. The evaluation remains pending until your observation and assessment are completed.</p>}
+      {!data?.existingSignup && evaluation?.status === "unknown" && <p className="text-muted">{evaluation.reason}</p>}
     </div></Block>
     <Block title="Current cycle"><div className={panel}>
       <p>{cycle?.semester ?? data?.dashboard.cycleReason ?? (data ? "No evaluation cycle is available." : "Evaluation data is temporarily unavailable.")}</p><p className="text-muted">Signup deadline: {cycle ? dateTime(cycle.signupDeadline, cycle.timeZone) : "Unavailable"}</p><p className="text-muted">Observation deadline: {cycle ? dateTime(cycle.observationDeadline, cycle.timeZone) : "Unavailable"}</p>
     </div></Block>
-    <div className="flex flex-wrap gap-ah-16"><ButtonLink href={routes.signup} className="min-w-[240px]">Sign Up</ButtonLink><Back /></div>
+    <div className="flex flex-wrap gap-ah-16"><ButtonLink href={data?.existingSignup ? routes.details : routes.signup} className="min-w-[240px]">{data?.existingSignup ? "View Observation Details" : "Sign Up"}</ButtonLink><Back /></div>
   </div>;
 }
 
@@ -51,6 +55,7 @@ export function SignupScreen({ data }: { data: FacultyWorkflow | null }) {
   const [pending, setPending] = useState(false);
   const [saved, setSaved] = useState(false);
   const section = data?.sections.find(section => section.id === sectionId);
+  if (data?.existingSignup) return <div className="space-y-ah-24"><p role="status">You have already signed up for this semester’s evaluation.</p><ButtonLink href={routes.details}>View Observation Details</ButtonLink></div>;
   return <form className="space-y-ah-32" onSubmit={async (event) => {
     event.preventDefault();
     if (pending || saved) return;
@@ -59,7 +64,7 @@ export function SignupScreen({ data }: { data: FacultyWorkflow | null }) {
     setPending(true); setFeedback("");
     try {
       const response = await postFacultyAction<{ message: string }>("signup", { sectionId, dates });
-      setSaved(true); setFeedback(response.message); router.refresh();
+      setSaved(true); setFeedback(response.message); router.replace(routes.details); router.refresh();
     } catch (error) { setFeedback(error instanceof Error ? error.message : "Signup was not submitted. Please try again."); }
     finally { setPending(false); }
   }}>
@@ -182,7 +187,7 @@ export function ObservationsScreen({ data }: { data: FacultyWorkflow | null }) {
       {data?.observation ? <><p>{data.observation.course}.{data.observation.section} · {data.observation.status}</p><p className="text-muted">As {data.observation.participation === "observee" ? "Observee" : "Observer"}</p><ButtonLink href={routes.details} variant="secondary">View Current Observation</ButtonLink>{data.observation.scheduledAt && <ButtonLink href={routes.appointment} variant="secondary">View Appointment</ButtonLink>}</> : <p>{data ? "No active observation records are available." : "Observation data is temporarily unavailable."}</p>}
     </div></Block>
     <FacultyFeedbackControl data={data} />
-    <div className="flex flex-wrap gap-ah-16"><ButtonLink href={routes.signup}>Sign Up for Observation</ButtonLink><Back /></div>
+    <div className="flex flex-wrap gap-ah-16"><ButtonLink href={data?.existingSignup ? routes.details : routes.signup}>{data?.existingSignup ? "View Observation Details" : "Sign Up for Observation"}</ButtonLink><Back /></div>
   </div>;
 }
 
@@ -200,22 +205,19 @@ function IncompleteReportButton({ primary = false }: { primary?: boolean }) {
   return <Button variant={primary ? "primary" : "secondary"} disabled aria-describedby="observation-actions-unavailable">Report Not Completed</Button>;
 }
 
-export function ObservationDetailsScreen({ data }: { data: FacultyWorkflow | null }) {
+export function ObservationDetailsScreen({ data, canReadAssessment = false }: { data: FacultyWorkflow | null; canReadAssessment?: boolean }) {
   const record = data?.observation;
   return <div className="space-y-ah-24">
     <FacultyCycleSelector dashboard={data?.dashboard} /><FacultyObservationSelector dashboard={data?.dashboard} />
-    <Block title="Observation"><div className={panel}>
-      <RecordFields fields={["Course / Section", ["Observer", "Observee"], "Scheduled date and time"]} values={{ "Course / Section": record && `${record.course}.${record.section}`, Observer: record?.observer ?? "Not assigned", Observee: record?.observee, "Scheduled date and time": record?.scheduledAt ? dateTime(record.scheduledAt, data?.dashboard.cycle?.timeZone) : "Not scheduled" }} />
-    </div></Block>
-    <Block title="Progress"><div className={panel}><RecordFields fields={[["Status", "Your participation"]]} values={{ Status: record?.status, "Your participation": record?.participation }} />{!record && <p>{data ? "No current observation is available." : "Observation data is temporarily unavailable."}</p>}{record?.proposedDates.map(option => <p key={option.date}>{option.date} · {option.meetingTime}</p>)}</div></Block>
+    {record ? <ObservationDetails key={record.id} observationId={record.id} canReadAssessment={canReadAssessment} backHref={routes.observations} backLabel="Back to Observations">
     <Block title="Actions"><div className="grid max-w-[992px] gap-ah-16 md:grid-cols-3">
       <ButtonLink variant="secondary" href={routes.form}>View Observation Form</ButtonLink>
-      {record ? <FacultyIssueControl observationId={record.id} kind="NOT_OCCURRED" /> : <IncompleteReportButton />}
+      <FacultyIssueControl observationId={record.id} kind="NOT_OCCURRED" />
       <FacultyFeedbackControl data={data} />
     </div></Block>
     {record?.participation === "observee" && <><div className="flex flex-wrap gap-ah-16"><ButtonLink href={routes.recommendations} variant="secondary">View Recommendations</ButtonLink><ButtonLink href={routes.confirmed} variant="secondary">Choose Accepted Observer</ButtonLink></div><FacultyIssueControl observationId={record.id} kind="ALERT" /></>}
     <p id="observation-actions-unavailable" className="text-caption text-muted">Report non-occurrence after the appointment starts and before acknowledging. The observation form requires a scheduled observation and an assigned observer.</p>
-    <Back href={routes.observations} />
+    </ObservationDetails> : <><Block title="Observation"><div className={panel}><p>{data ? "No current observation is available." : "Observation data is temporarily unavailable."}</p></div></Block><Back href={routes.observations} /></>}
   </div>;
 }
 

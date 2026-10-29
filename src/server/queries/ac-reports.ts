@@ -36,7 +36,7 @@ function outstanding(now: Date): Prisma.ObservationWhereInput {
     AND: [{ OR: [{ signedAssessment: { is: null } }, { signedAssessment: { is: { isLocked: false } } }] }] };
 }
 const unmatched: Prisma.ObservationWhereInput = { status: { notIn: cancelled }, observerId: null, completedAt: null };
-function observationWhere(url: URL, cycleId: string, now: Date): Prisma.ObservationWhereInput {
+export function observationWhere(url: URL, cycleId: string, now: Date): Prisma.ObservationWhereInput {
   const id = ids(url), q = search(url), status = filter(url, "status"), assessment = filter(url, "assessmentStatus");
   const clauses: Prisma.ObservationWhereInput[] = [{ cycleId,
     signup: { professor: { ...(id.departmentId ? { departmentId: id.departmentId } : {}),
@@ -82,7 +82,7 @@ function termOrder(code: string) {
   return match ? Number(match[1]) * 10 + { s: 1, u: 2, f: 3 }[match[2] as "s" | "u" | "f"] : null;
 }
 
-async function facultyStatuses(db: Connection, url: URL, cycle: Prisma.EvaluationCycleGetPayload<{ include: { semester: true } }>) {
+export async function facultyStatuses(db: Connection, url: URL, cycle: Prisma.EvaluationCycleGetPayload<{ include: { semester: true } }>) {
   const id = ids(url), q = search(url), signedUp = filter(url, "signedUp");
   if (signedUp !== null && !["true", "false"].includes(signedUp)) invalid("signedUp must be true or false.");
   const include = { user: { select: personSelect }, hiringLevel: true,
@@ -225,6 +225,7 @@ export async function getObservation(db: Connection, user: ConfigurationUser, ob
   const o = await db.observation.findFirst({ where: { observationId: uuid(observationId),
     ...(broad ? {} : { OR: [{ signup: { professor: { userId: user.id } } }, { observer: { userId: user.id } }] }) },
     include: { ...observationInclude, timeOptions: { orderBy: { preferredDate: "asc" } },
+      facultyIssues: { where: { kind: "ALERT" }, select: { issueId: true }, orderBy: { createdAt: "desc" }, take: 1 },
       signedAssessment: { include: { template: { include: { criteria: { orderBy: { displayOrder: "asc" } } } } } } } });
   if (!o) throw new ConfigurationError(404, "NOT_FOUND", "Observation not found.");
   const a = o.signedAssessment;
@@ -232,6 +233,7 @@ export async function getObservation(db: Connection, user: ConfigurationUser, ob
     const proposed = meetings(o, o.timeOptions);
     const scheduled = o.scheduledAt ? proposed.find(m => m.startsAt === o.scheduledAt!.toISOString()) ?? null : null;
     return { observation: { ...observationResponse(o, user), scheduledMeeting: scheduled }, proposedMeetings: proposed,
+      pendingAlert: (broad || o.signup.professor.userId === user.id) && o.facultyIssues.length ? { id: o.facultyIssues[0].issueId } : null,
       progress: [{ key: "signup", label: "Signed up", state: "completed", completedAt: o.signup.signupDate },
         { key: "observer", label: "Observer selected", state: o.observerId ? "completed" : "pending", completedAt: null },
         { key: "scheduled", label: "Observation scheduled", state: o.scheduledAt ? "completed" : "pending", completedAt: null },

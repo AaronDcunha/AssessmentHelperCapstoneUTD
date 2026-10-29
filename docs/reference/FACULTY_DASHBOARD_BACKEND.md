@@ -193,3 +193,30 @@ The documented matching order, retry cap, missing-evidence treatment and eligibi
 edge cases remain working assumptions for team confirmation; they are not newly
 approved policy. Annual/biennial frequency, signup deadlines, automatic resend and
 expired-invitation approval are existing repo requirements, not open decisions.
+
+
+October 28 signup navigation: the signup route redirects to current observation
+details when the authorized selected-cycle workflow already contains a signup.
+The form also guards against displaying another submission for an existing signup,
+and successful signup replaces the page with observation details. My Evaluation
+and Observations switch their signup link to View Observation Details when signed
+up. Existing database uniqueness, transaction locks and duplicate API rejection
+remain enforced. This does not block signup for another cycle.
+
+
+October 28 dashboard previews and evaluation display:
+Recent activity normalizes whitespace and truncates messages at 180 Unicode
+characters, with a two-line visual limit and a Notifications link for full text.
+My Evaluation displays Signed up for an existing selected-cycle signup, and
+Completed when the latest completed evaluation belongs to the selected semester.
+Signing up is not completion; annual/biennial due calculations, AC reporting and
+backend eligibility rules are unchanged. The UI explains pending completion.
+
+
+October 28 dashboard signup status correction:
+Dashboard now reads hasCurrentSignup through Prisma for the signed-in faculty
+member and selected cycle under signups.read.own. Dashboard and My Evaluation
+share the same Signed up / Completed / requirement-label display helper. The
+dashboard signup shortcut also becomes View Observation Details after signup.
+Observer participation alone never implies an own signup, and a missing grant or
+cycle is not treated as an unsigned state. Eligibility/due rules are unchanged.

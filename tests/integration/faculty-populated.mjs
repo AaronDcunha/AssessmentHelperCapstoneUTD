@@ -227,8 +227,8 @@ try {
   await assert.rejects(invitations.declineFacultyInvitation(faculty[1], declinePayload));
   checked('decline validates ownership/window and updates candidate, attempt and notification atomically');
   const automatic = await freshInvitation(2, 1, 0);
-  await participation.reportFacultyIssue(faculty[2], { observationId: automatic.record.observationId, kind: 'ALERT', reason: 'List question', details: 'Need assistance' });
-  await participation.reportFacultyIssue(faculty[2], { observationId: automatic.record.observationId, kind: 'ALERT', reason: 'List question', details: 'Need assistance' });
+  await participation.reportFacultyIssue(faculty[2], { observationId: automatic.record.observationId, kind: 'ALERT', reason: 'List question', details: 'Need assistance', creationKey:automatic.record.observationId });
+  await participation.reportFacultyIssue(faculty[2], { observationId: automatic.record.observationId, kind: 'ALERT', reason: 'List question', details: 'Need assistance', creationKey:automatic.record.observationId });
   assert.equal(await prisma.facultyIssue.count({ where: { observationId: automatic.record.observationId, kind: 'ALERT' } }), 1);
   await expire(automatic.candidate.candidateId);
   await invitations.processFacultyInvitationExpiry();

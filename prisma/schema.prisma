@@ -28,6 +28,8 @@ model AppUser {
   // Notifications received by the user.
   notifications Notification[]
   facultyIssues FacultyIssue[]
+  reminderDispatches ReminderDispatch[]
+  updatedFacultyIssues FacultyIssue[] @relation("FacultyIssueUpdater")
   feedbackAttachments FeedbackAttachment[]
 
   @@map("app_user")
@@ -266,6 +268,8 @@ model EvaluationCycle {
   observations Observation[]
 
   @@map("evaluation_cycle")
+  reminderDispatches ReminderDispatch[]
+
 }
 
 // Records a professor signing up for an evaluation cycle.
@@ -403,8 +407,18 @@ model FacultyIssue {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   observation Observation @relation(fields: [observationId], references: [observationId], onDelete: Restrict)
   reporter AppUser @relation(fields: [reportedBy], references: [userId], onDelete: Restrict)
-  @@unique([observationId, reportedBy, kind])
+  occurrenceKey String @default("initial") @map("occurrence_key")
+  @@unique([observationId, reportedBy, kind, occurrenceKey], map: "faculty_issue_observation_reporter_kind_occurrence_key")
   @@map("faculty_issue")
+  revision Int @default(0)
+  acknowledgedAt DateTime? @map("acknowledged_at") @db.Timestamptz(6)
+  resolvedAt DateTime? @map("resolved_at") @db.Timestamptz(6)
+  resolutionNote String? @map("resolution_note")
+  updatedById String? @map("updated_by_id") @db.Uuid
+
+  updatedBy AppUser? @relation("FacultyIssueUpdater", fields: [updatedById], references: [userId], onDelete: SetNull)
+  @@index([kind, status, observationId])
+
 }
 
 // Stores assessment templates configured by the Assessment Committee.
@@ -523,8 +537,44 @@ model Notification {
   createdAt        DateTime  @default(now()) @map("created_at")
   readAt           DateTime? @map("read_at")
 
+  targetKind       String?   @map("target_kind")
+  targetId         String?   @map("target_id") @db.Uuid
+  eventKey         String?   @map("event_key")
+  inAppEnabled     Boolean   @default(true) @map("in_app_enabled")
+  emailRequested   Boolean   @default(true) @map("email_requested")
+  emailDelivery    NotificationEmail?
+
   // Each notification belongs to one user.
   user AppUser @relation(fields: [userId], references: [userId])
 
+  @@unique([userId, eventKey])
+  @@index([userId, createdAt, notificationId])
+  @@index([userId, isRead])
   @@map("notification")
+}
+
+model NotificationEmail {
+  notificationId String @id @map("notification_id") @db.Uuid
+  status String @default("pending")
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+  leaseToken String? @map("lease_token") @db.Uuid
+  leaseUntil DateTime? @map("lease_until") @db.Timestamptz(6)
+  sentAt DateTime? @map("sent_at") @db.Timestamptz(6)
+  lastError String? @map("last_error")
+  notification Notification @relation(fields: [notificationId], references: [notificationId], onDelete: Cascade)
+  @@index([status, nextAttemptAt])
+  @@map("notification_email")
+}
+
+model ReminderDispatch {
+  dispatchId String @id @map("dispatch_id") @db.Uuid
+  cycleId String @map("cycle_id") @db.Uuid
+  createdById String @map("created_by_id") @db.Uuid
+  requestHash String @map("request_hash")
+  recipientCount Int @map("recipient_count")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  cycle EvaluationCycle @relation(fields: [cycleId], references: [cycleId], onDelete: Restrict)
+  createdBy AppUser @relation(fields: [createdById], references: [userId], onDelete: Restrict)
+  @@map("reminder_dispatch")
 }
