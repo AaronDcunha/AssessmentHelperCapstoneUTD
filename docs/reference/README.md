@@ -69,7 +69,11 @@ worker, Mailpit setup, channel selection, retry handling and tests.
 
 Shared notification helper: see [NOTIFICATION_HELPER.md](NOTIFICATION_HELPER.md) for the canonical sendNotification function, specific-user/list/role audiences, optional email, transaction examples and Mailpit testing.
 
-
 Dependency/security updates: see [DEPENDENCY_UPDATES.md](DEPENDENCY_UPDATES.md) for
 patched versions, the Node runtime target, known deferred majors, commit contents
 and teammate installation steps.
+
+AC observer selection: see [AC_OBSERVER_SELECTION_BACKEND.md](AC_OBSERVER_SELECTION_BACKEND.md)
+for Issue #67's implemented signup GET, exact signups.read authorization, provisional
+university-wide scope, persisted meeting/release data, pagination and checks. Other
+Issue #67 endpoints and policy decisions are not completed by this read-only slice.

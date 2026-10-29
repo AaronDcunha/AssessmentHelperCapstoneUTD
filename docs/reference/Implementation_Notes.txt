@@ -1,4 +1,22 @@
 ASSESSMENT HELPER IMPLEMENTATION NOTES
+October 28, 2026 Issue #67 AC signup read (first independent portion):
+GET /api/evaluation-cycles/{cycleId}/signups now reads actual signup/observee,
+course/section/schedule, persisted proposed-option UUIDs and snapshots, observation
+identity/revision and existing generation/release markers through Prisma. Exact
+effective signups.read is required independently of Faculty participation or role
+labels; authentication reuses active-account resolution. University-wide AC access
+is a provisional implementation assumption matching current reporting, not a new
+department-access policy. Optional department/hiring-level/search filters and
+bounded signup-UUID cursor pagination are enforced in the database query.
+No generated status, matching outcome, candidate count or availability is inferred.
+Legacy missing meeting metadata stays null; no observation produces null markers
+and empty options. The schema permits multiple observations per signup; return
+409 AMBIGUOUS_OBSERVATION rather than selecting one silently (provisional safeguard).
+The API draft documents this endpoint's additive fields, nullability and errors.
+Matching, generation/release, notifications, Faculty workflows, grants, schema and
+migrations are unchanged. Matching/history, regeneration and candidate DTO decisions
+remain unresolved for the rest of #67. See AC_OBSERVER_SELECTION_BACKEND.md.
+
 October 27, 2026 full branch verification:
 Commit 70941d6 deliberately removed demo/test shortcuts from the product sidebar.
 Updated two stale navigation tests to assert business permissions, absence of demo

@@ -306,9 +306,30 @@ POST /api/evaluation-cycles/{cycleId}/signups
   Validate ownership, eligibility, signup window and nonempty unique eligible dates
   before observation deadline. Signup enters observer pool. Confirm one-course and
   duplicate-signup policy; one meeting per date is a current UI limitation.
-GET /api/evaluation-cycles/{cycleId}/signups -- scoped AC/Admin.
-  Q: departmentId?,hiringLevelId?,q?.
-  R: List<{signupId,observationId,observee:User,section:Section,proposedMeetings,signedUpAt}>.
+GET /api/evaluation-cycles/{cycleId}/signups (COMPLETED -- Issue #67 read only).
+  Requires current active authentication and the effective signups.read grant;
+  Faculty participation, own-read grants and role labels alone do not authorize it.
+  University-wide AC scope is a provisional implementation assumption matching
+  current reporting; departmentId filters the observee's Professor.departmentId.
+  Q: departmentId?,hiringLevelId?,q?,cursor?,limit? (default 20, maximum 100).
+  q is case-insensitive name/email/course code/title/section search, max 200 chars.
+  Cursor is a signup UUID, validated within the same cycle and filters; UUID order.
+  R: List<{signupId,observationId:string|null,observee:{id,name,email},section:Section,
+    proposedMeetings:[{id,sectionId,date,startsAt:string|null,endsAt:string|null,
+      timeZone:string|null,location:string|null}],signedUpAt,observationRevision:number|null,
+    recommendationGenerationId:string|null,recommendationsReleasedAt:string|null}>.
+  Observee id is the AppUser UUID. Proposed meeting id is the persisted time-option
+  UUID; metadata is the stored snapshot, including nulls for incomplete old rows.
+  No reconstructed meeting IDs/times, availability flag, match outcome, generated
+  status or candidate count is inferred. Raw generation/release markers are returned.
+  Missing observation: null observation fields and empty proposedMeetings. Multiple
+  observations for one signup: 409 AMBIGUOUS_OBSERVATION (provisional safeguard;
+  schema permits many, current signup creates one). No arbitrary record is chosen.
+  200 empty list for an existing cycle with no matching signups; 404 missing cycle;
+  400 unknown/repeated/empty query, excessive search or out-of-scope cursor;
+  422 invalid UUID/limit; 401 unauthenticated/inactive; 403 missing signups.read;
+  503 sanitized dependency failure. All responses are private, no-store.
+  Unknown/repeated filters are rejected. No deadline filter or new role grant.
 
 4. MATCHING AND INVITATIONS
 ===========================
