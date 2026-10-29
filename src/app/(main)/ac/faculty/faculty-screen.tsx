@@ -2,12 +2,10 @@
 
 import { useCallback, useState } from "react";
 import { CycleSelector, useAcCycle } from "@/components/ac/cycle-context";
-import { DemoDataNotice } from "@/components/ac/demo-data-notice";
 import { useApiResource } from "@/components/ac/use-api-resource";
 import { Select } from "@/components/ui/form-fields";
 import { TableCell } from "@/components/ui/table";
 import { acApi, type FacultyStatusItem, type HiringLevel, userDisplayName } from "@/lib/ac-api";
-import { DEMO_HIRING_LEVELS, demoFacultyStatuses } from "@/lib/ac-demo-data";
 
 const EMPTY_ROWS: FacultyStatusItem[] = [];
 const EMPTY_LEVELS: HiringLevel[] = [];
@@ -16,25 +14,23 @@ export default function FacultyDuePage() {
   const cycleId = useAcCycle().selectedCycle?.id;
   const [hiringLevelId, setHiringLevelId] = useState("all");
   const [evaluationStatus, setEvaluationStatus] = useState("all");
-  const demoRows = demoFacultyStatuses(hiringLevelId, evaluationStatus);
   const loader = useCallback(() => cycleId ? acApi.getFacultyStatus(cycleId, { hiringLevelId, evaluationStatus }) : Promise.resolve(EMPTY_ROWS), [cycleId, hiringLevelId, evaluationStatus]);
-  const result = useApiResource(loader, EMPTY_ROWS, demoRows);
+  const result = useApiResource(loader, EMPTY_ROWS);
   const levels = useApiResource(useCallback(() => acApi.getHiringLevels(), []), EMPTY_LEVELS);
-  const displayedLevels = result.error ? DEMO_HIRING_LEVELS : levels.data;
 
   return (
     <div className="space-y-ah-24">
       <CycleSelector />
       <div className="grid min-h-[88px] max-w-[976px] grid-cols-1 gap-ah-16 md:grid-cols-2">
         <Select label="Hiring level" name="hiringLevel" value={hiringLevelId} onChange={(event) => setHiringLevelId(event.target.value)} className="h-control-56">
-          <option value="all">All</option>{displayedLevels.map((level) => <option key={level.id} value={level.id}>{level.name}</option>)}
+          <option value="all">All</option>{levels.data.map((level) => <option key={level.id} value={level.id}>{level.name}</option>)}
         </Select>
         <Select label="Due / Overdue" name="evaluationStatus" value={evaluationStatus} onChange={(event) => setEvaluationStatus(event.target.value)} className="h-control-56">
           <option value="all">All</option><option value="due">Due</option><option value="overdue">Overdue</option>
         </Select>
       </div>
 
-      {result.error && <DemoDataNotice />}
+      {(result.error || levels.error) && <p role="alert" className="rounded-ah-8 bg-danger-bg p-ah-12 text-body text-danger">Faculty status data is currently unavailable.</p>}
 
       <div className="overflow-x-auto rounded-ah-8 border border-border bg-surface">
         <table className="w-full min-w-[760px] table-fixed border-collapse">

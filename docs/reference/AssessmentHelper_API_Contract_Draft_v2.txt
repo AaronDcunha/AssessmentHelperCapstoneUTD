@@ -233,7 +233,7 @@ POST /api/evaluation-cycles/{cycleId}/signups
   Validate ownership, eligibility, signup window and nonempty unique eligible dates
   before observation deadline. Signup enters observer pool. Confirm one-course and
   duplicate-signup policy; one meeting per date is a current UI limitation.
-GET /api/evaluation-cycles/{cycleId}/signups -- scoped AC/Admin.
+GET /api/evaluation-cycles/{cycleId}/signups (COMPLETED) -- scoped AC/Admin.
   Q: departmentId?,hiringLevelId?,q?.
   R: List<{signupId,observationId,observee:User,section:Section,proposedMeetings,signedUpAt}>.
 
@@ -252,7 +252,7 @@ POST /api/evaluation-cycles/{cycleId}/recommendations/release -- scoped AC/Admin
 POST /api/observations/{observationId}/recommendations/regenerate -- scoped AC/Admin.
   B: {reason?,expectedRevision}. R: {generationId,observationId,candidateCount,
     unmatched,revision}. Preserve previous responses and invitation attempts.
-GET /api/observations/{observationId}/candidates
+GET /api/observations/{observationId}/candidates (COMPLETED)
   Q: responseStatus?. R: {observationId,releasedAt,proposedMeetings:Meeting[],
     items:Candidate[],pageInfo}. Own observee sees only released list; AC sees scope.
 POST /api/observations/{observationId}/invitations -- own observee.
@@ -295,11 +295,11 @@ and notify AC informationally. Retry limits/timing/cutoff remain unresolved.
 GET /api/me/observations
   Q: cycleId?,semesterId?,participation?:observer|observee,status?,assessmentStatus?.
   R: List<Observation>. Supports dashboard/history; define current-observation rule.
-GET /api/observations/{observationId}
+GET /api/observations/{observationId} (COMPLETED)
   R: {observation:Observation,proposedMeetings:Meeting[],progress:[{key,label,state,
     completedAt}],pendingAlert:Alert|null,templateVersionId}.
   Participants or scoped authorized AC/Admin; redact data by caller visibility.
-GET /api/evaluation-cycles/{cycleId}/observations -- scoped AC/Admin.
+GET /api/evaluation-cycles/{cycleId}/observations (COMPLETED) -- scoped AC/Admin.
   Q: status?,assessmentStatus?,departmentId?,hiringLevelId?,observeeId?,observerId?,q?.
   R: List<Observation>. Include form state and authorized view actions.
 POST /api/observations/{observationId}/incomplete-report -- own observee.
@@ -344,9 +344,9 @@ POST /api/observation-templates/{templateId}/publish (COMPLETED) -- templates.ma
   New templates are inactive drafts. Publication activates them and records time.
   templates.read/manage can read drafts and published templates; assessment.read.own
   may read published templates only. Publication does not reassign old assessments.
-GET /api/observations/{observationId}/template
+GET /api/observations/{observationId}/template (COMPLETED)
   R: exact assigned Template, not latest. Authorized participants/reviewers only.
-GET /api/observations/{observationId}/assessment
+GET /api/observations/{observationId}/assessment (COMPLETED)
   R: {observationId,templateVersionId,assessment:Assessment|null,allowedActions}.
   Draft/observee/AC visibility requires agreed rules.
 PUT /api/observations/{observationId}/assessment -- proposed draft save.
@@ -394,11 +394,11 @@ DELETE /api/me/feedback-attachments/{attachmentId} -- OPTIONAL cleanup.
 
 8. AC REPORTS, REMINDERS AND BACKGROUND OPERATIONS
 ================================================
-GET /api/evaluation-cycles/{cycleId}/reports -- scoped AC/Admin.
+GET /api/evaluation-cycles/{cycleId}/reports (COMPLETED) -- scoped AC/Admin.
   Q: departmentId?,hiringLevelId?. R: {cycleId,asOf,definitionsVersion,
     summary:{facultyDue,overdue,unmatched,incomplete},
     byHiringLevel:[{hiringLevelId,name,due,outstanding}],availableViews}.
-GET /api/evaluation-cycles/{cycleId}/faculty-status -- NEW.
+GET /api/evaluation-cycles/{cycleId}/faculty-status (COMPLETED) -- NEW.
   Q: hiringLevelId?,evaluationStatus?,signedUp?:boolean,departmentId?,q?.
   R: List<{professor:User,hiringLevel,lastEvaluation:{semester:{id,name},completedAt}|null,
     evaluationStatus,signupId,observationId}>. Scoped AC/Admin.
@@ -410,11 +410,11 @@ GET /api/evaluation-cycles/{cycleId}/faculty-status -- NEW.
   all other response fields, filters, list pagination and the URL are unchanged.
   This is a response-contract change for the backend implementer, not a schema
   migration or an implemented faculty-status handler in this frontend branch.
-GET /api/evaluation-cycles/{cycleId}/attention -- NEW; scoped AC/Admin.
+GET /api/evaluation-cycles/{cycleId}/attention (COMPLETED) -- NEW; scoped AC/Admin.
   Q: issue?:overdue|unmatched|incomplete|alert|expiredApproval,departmentId?.
   R: List<{id,faculty:User,issue,observationStatus,observationId,alertId?,
     approvalRequestId?,createdAt,allowedActions}>. Agree sorting/multi-issue deduplication.
-GET /api/evaluation-cycles/{cycleId}/metrics -- scoped AC/Admin.
+GET /api/evaluation-cycles/{cycleId}/metrics (COMPLETED) -- scoped AC/Admin.
   Q: departmentId? if supported. R: {cycleId,available,availableAt,generatedAt,
     formulaVersion,metrics:[{key,label,value:number|null,unit,numerator?,denominator?,
     unavailableReason?}]}.

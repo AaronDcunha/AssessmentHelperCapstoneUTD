@@ -16,6 +16,7 @@ const acPageHeaders = {
   "/ac": { title: "AC Dashboard", facultyLayout: true },
   "/ac/cycles": { title: "Evaluation Cycles", facultyLayout: true },
   "/ac/cycles/new": { title: "Create Evaluation Cycle", facultyLayout: true },
+  "/ac/observer-selection": { title: "Observer Selection", facultyLayout: true },
   "/ac/faculty": { title: "Faculty Due / Overdue", facultyLayout: true },
   "/ac/observations": { title: "Observation Progress", facultyLayout: true },
   "/ac/template": { title: "Observation Template", facultyLayout: true },
@@ -35,6 +36,7 @@ export default async function MainLayout({ children }: { children: ReactNode }) 
 
     "ac.dashboard": { href: "/ac", permission: "reports.read" },
     "ac.cycles": { href: "/ac/cycles", permission: "cycles.read" },
+    "ac.observerSelection": { href: "/ac/observer-selection", permission: "signups.read" },
     "ac.faculty": { href: "/ac/faculty", permission: "reports.read" },
     "ac.progress": { href: "/ac/observations", permission: "observations.read" },
     "ac.template": { href: "/ac/template", permission: "templates.manage" },

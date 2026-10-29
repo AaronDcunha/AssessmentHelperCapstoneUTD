@@ -1,4 +1,11 @@
 ASSESSMENT HELPER IMPLEMENTATION NOTES
+October 29 AC database-read integration:
+All temporary AC monitoring and Observer Selection frontend records were removed.
+AC screens now display only authorized API data read through Prisma from PostgreSQL;
+unavailable resources show explicit unavailable/empty states and KPI formulas still
+awaiting agreement remain unavailable rather than using invented values. No seed,
+migration, or existing database record was changed for this integration.
+
 October 25 user deletion follow-up (supersedes user-DELETE-pending notes):
 User requested DELETE /api/users/{userId}. Implemented using Prisma Client in a Serializable transaction, requiring users.manage and same origin. No body; empty 204 success, 404 missing account. Self-deletion and loss of the last active managing Admin return 409. Teaching, signup, selected-observer, candidate and feedback references block deletion (409); use deactivation instead. Only an unreferenced profile, credentials, role links and owned notifications are removed with the account. History is never cascaded/anonymized. No migration is required. Existing frontend Delete User is connected. Isolated real-database verification passed, including rollback and session/account lookup invalidation.
 

@@ -23,6 +23,7 @@ Authentication backend: see `AUTH_BACKEND.md` for database-backed login, develop
 | `AC_CONFIGURATION_BACKEND.md` | Implemented configuration endpoints, access rules, migrations, and verification |
 
 | `AC_MONITORING_FRONTEND.md` | AC list/cycle integration, business page guards, deferred work and verification |
+| `AC_OBSERVER_SELECTION_FRONTEND.md` | Observer-selection Figma implementation, permissions, planned API integration and verification |
 | `PROJECT_STRUCTURE.md` | Proposed directories and responsibilities |
 | `Expanded Use Cases.docx` / `.txt` | UC1â€“UC13 workflow descriptions; TXT is a paragraph-text extraction for AI/search |
 | `process_explanation_to_all.docx` / `.txt` | Faculty/AC process and draft KPI definitions |
