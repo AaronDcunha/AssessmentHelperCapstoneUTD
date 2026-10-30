@@ -20,6 +20,7 @@ function fixture() {
   const course = { courseId: id(4), courseCode: 'CS 4348', courseTitle: 'Operating Systems', departmentId: id(5), courseLevel: 4000 };
   const meetings = ['Monday', 'Wednesday'].map((dayOfWeek, i) => ({ meetingId: id(6 + i), dayOfWeek, startTime: '10:00', endTime: '11:15', location: 'Current room' }));
   const record = { observationId: id(2), cycleId: id(8), workflowRevision: 5, recommendationGenerationId: id(9), recommendationsReleasedAt: null,
+    currentDraftListId: id(14), currentReleasedListId: null,
     cycle: { semesterId: semester.semesterId, observationDeadline: new Date('2026-11-30T23:00:00Z') },
     signup: { professorId: id(10), professor: { departmentId: course.departmentId }, section: { sectionId: id(11), semesterId: semester.semesterId, semester, course, classMeetings: meetings } },
     timeOptions: [
@@ -27,15 +28,18 @@ function fixture() {
       { timeOptionId: id(13), preferredDate: new Date('2026-11-11'), startsAt: null, endsAt: null, timeZone: null, location: null },
     ] };
   const assignment = { section: { semesterId: semester.semesterId, semester, course, classMeetings: [] } };
-  const candidates = [20, 21].map((n, i) => ({ candidateId: id(n), observationId: record.observationId, professorId: id(30 + i), status: 'ELIGIBLE',
+  const candidates = [20, 21].map((n, i) => ({ candidateId: id(n), observationId: record.observationId, recommendationListId: id(14), professorId: id(30 + i), status: 'ELIGIBLE',
     invitedAt: null, expiresAt: null, respondedAt: null, acceptedOptionId: null, attempts: [],
     professor: { user: { userId: id(40 + i), fullName: `Candidate ${i}`, email: 'SECRET' }, teaches: [assignment, assignment] } }));
-  const f = { record, course, semester, candidates, appointments: [], active: true, signedUp: true, calls: [] };
+  const lists = [{ listId: id(14), observationId: record.observationId, generationId: id(9), generatedAt: now, publishedAt: null, origin: 'GENERATED' }];
+  const f = { record, course, semester, candidates, lists, appointments: [], active: true, signedUp: true, calls: [] };
   f.db = readOnly({
+    recommendationList: readOnly({ findFirst: async ({ where }) => lists.find(list => list.listId === where.listId && list.observationId === where.observationId) ?? null }),
     observation: readOnly({ findUnique: async () => record, findMany: async () => f.appointments }),
     observationCandidate: readOnly({ findMany: async args => {
       f.calls.push(args);
       const rows = candidates.filter(candidate => candidate.observationId === args.where.observationId
+        && candidate.recommendationListId === args.where.recommendationListId
         && (!args.where.candidateId || args.where.candidateId.in.includes(candidate.candidateId)));
       return rows.map(candidate => {
         const attempts = candidate.attempts.slice().sort((a, b) => b.number - a.number).slice(0, 1);
@@ -183,6 +187,25 @@ test('pagination applies latest response filtering before the limit and isolates
   await assert.rejects(f.read('cursor=' + id(20) + '&responseStatus=DECLINED'), error => error.status === 400);
   f.candidates.length = 0;
   assert.deepEqual((await f.read()).items, []);
+});
+
+test('AC reads resolve one list, isolate its cursor and can explicitly inspect preserved history without writes', async () => {
+  const f = fixture();
+  f.lists.push({ ...f.lists[0], listId: id(15), publishedAt: now });
+  f.candidates.push({ ...f.candidates[0], candidateId: id(22), recommendationListId: id(15) });
+  f.record.currentReleasedListId = id(15);
+  assert.deepEqual((await f.read()).items.map(item => item.id), [id(20), id(21)]);
+  const released = await f.read('listId=' + id(15));
+  assert.equal(released.list.id, id(15)); assert.equal(released.currentDraftListId, id(14));
+  assert.deepEqual(released.items.map(item => item.id), [id(22)]);
+  await assert.rejects(f.read('listId=' + id(15) + '&cursor=' + id(20)), error => error.status === 400);
+  f.record.currentDraftListId = null;
+  assert.deepEqual((await f.read()).items.map(item => item.id), [id(22)]);
+  f.record.currentReleasedListId = null;
+  assert.equal((await f.read()).list, null); assert.deepEqual((await f.read()).items, []);
+  assert.equal((await f.read('listId=' + id(14))).items.length, 2);
+  f.lists.push({ ...f.lists[0], listId: id(16), observationId: id(99) });
+  await assert.rejects(f.read('listId=' + id(16)), error => error.status === 404);
 });
 
 function route(db, authResult = actor) {

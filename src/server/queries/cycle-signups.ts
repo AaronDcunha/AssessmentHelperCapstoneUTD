@@ -37,6 +37,7 @@ const select = {
   // ambiguity instead of silently selecting a record or combining separate lists.
   observations: { take: 2, orderBy: { observationId: "asc" as const }, select: {
     observationId: true, workflowRevision: true, recommendationGenerationId: true, recommendationsReleasedAt: true,
+    currentDraftListId: true, currentReleasedListId: true,
     timeOptions: { orderBy: [{ preferredDate: "asc" as const }, { timeOptionId: "asc" as const }], select: {
       timeOptionId: true, preferredDate: true, startsAt: true, endsAt: true, timeZone: true, location: true,
     } },
@@ -69,6 +70,8 @@ function signupResponse(row: SignupRow) {
     observationRevision: observation?.workflowRevision ?? null,
     recommendationGenerationId: observation?.recommendationGenerationId ?? null,
     recommendationsReleasedAt: observation?.recommendationsReleasedAt?.toISOString() ?? null,
+    currentDraftListId: observation?.currentDraftListId ?? null,
+    currentReleasedListId: observation?.currentReleasedListId ?? null,
   };
 }
 

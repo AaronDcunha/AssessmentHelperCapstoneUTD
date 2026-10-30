@@ -11,9 +11,9 @@ const deadlineBody={signupDeadline:'2026-10-31T23:59:00Z',observationDeadline:'2
 const user={id,permissions:['cycles.manage','templates.manage']};
 const faculty={id,permissions:['course-sections.read.own','signups.read.own','observations.read.own','assessment.read.own']};
 const origin='http://localhost:3000';
-const operations=['cycles.list','cycles.get','cycles.create','cycles.update','cycles.settings','semesters.list',
+const operations=['cycles.list','cycles.get','cycles.create','cycles.update','cycles.settings','semesters.list','semesters.create','semesters.delete',
   'templates.list','templates.get','templates.current','templates.create','templates.update','templates.publish'];
-const writes=new Set(['cycles.create','cycles.update','cycles.settings','templates.create','templates.update','templates.publish']);
+const writes=new Set(['semesters.create','semesters.delete','cycles.create','cycles.update','cycles.settings','templates.create','templates.update','templates.publish']);
 function request(operation,headers={},body='{}') {
   return new Request(origin+'/api/configuration',{method:writes.has(operation)?'POST':'GET',
     headers:{'content-type':'application/json',origin,...headers},...(writes.has(operation)?{body}:{})});

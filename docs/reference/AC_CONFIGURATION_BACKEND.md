@@ -105,3 +105,10 @@ npm run lint
 Integration tests require local PostgreSQL and permission to create/drop a temporary schema. They apply the checked-in migrations, then use Prisma for fixtures, reads/writes, faculty scope, pagination, publication, retained assessment answers, stale/concurrent updates and atomic settings. SQL in the test harness is confined to schema creation/removal and executing migration files. Only the randomly named temporary schema is removed; application tables are untouched. HTTP security tests exercise the same wrapper used by all configuration routes.
 
 `configuration-http.mjs` additionally requires a running, seeded development server (default `http://localhost:3000`, override `TEST_BASE_URL`). It signs in as the existing seeded Faculty/AC/Admin accounts and verifies every route, including denied direct mutations and foreign-origin requests. It does not modify application records. Development fixture accounts named `faculty`, `ac`, and `admin` intentionally do not have configuration business permissions; use seeded accounts for these checks.
+
+October 29, 2026 implemented semester lifecycle extension:
+POST /api/semesters {year,season,startsOn,endsOn,timeZone}; DELETE /api/semesters/{semesterId}
+{expectedRevision,expectedCycleRevision}, null cycle revision only when no cycle exists.
+Both require cycles.manage and existing same-origin JSON controls. Delete atomically
+removes the semester, its evaluation cycle and dependent course/workflow records.
+See FACULTY_INTEGRATION_FIXES.md for full behavior, retention and verification.

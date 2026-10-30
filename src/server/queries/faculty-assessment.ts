@@ -1,12 +1,13 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import type { QueryResultRow } from "pg";
+import type { Prisma } from "../../generated/prisma/client";
 import type { AccountUser } from "../account-auth";
-import { getPool } from "../db";
+import { getPrisma } from "../prisma";
+import { selectedFacultyObservation } from "../faculty-context";
 import { getFacultyDashboard } from "./faculty-dashboard";
 import { commentPrompts, signatureLabels } from "../configuration-validation";
 
-type Database = { query<Row extends QueryResultRow>(sql: string, values: unknown[]): Promise<{ rows: Row[] }> };
+type Database = Prisma.TransactionClient;
 export type Criterion = { id: string; prompt: string; type: string; min: number | null; max: number | null; required: boolean; options: { value: number; label: string }[] | null };
 export type CommentPrompt = { id: string; prompt: string; required: boolean; order: number };
 export type AssessmentAnswers = { answers: Record<string, string | number>; comments: string; promptAnswers?: Record<string, string> };
@@ -46,30 +47,22 @@ export function assessmentView(row: AssessmentRow, user: AccountUser): FacultyAs
 }
 
 export async function getFacultyAssessment(user: AccountUser, options: { database?: Database } = {}): Promise<FacultyAssessment | null> {
-  if (!user.permissions.includes("assessment.read.own")) return null;
-  const db = options.database ?? getPool();
-  const dashboard = await getFacultyDashboard(user, options);
-  if (!dashboard.currentObservation?.scheduledAt) return null;
-  const rows = await db.query<AssessmentRow>(`
-    SELECT o.observation_id AS "observationId", t.template_id AS "templateId", t.template_name AS title, t.description,
-      t.revision AS "templateRevision", t.comment_prompts AS "commentPrompts", t.signature_labels AS "signatureLabels", s.time_zone AS "timeZone",
-      co.course_code AS course, cs.section_code AS section, o.scheduled_at AS "scheduledAt", observer.full_name AS observer, observee.full_name AS observee,
-      CASE WHEN selected.user_id = $1 THEN 'observer' ELSE 'observee' END AS participation,
-      COALESCE(a.is_locked, false) AS locked, a.responses, a.observer_signed_at AS "observerSignedAt", a.observee_signed_at AS "observeeSignedAt",
-      COALESCE((SELECT json_agg(json_build_object('id', tc.criterion_id, 'prompt', tc.criterion_text, 'type', tc.question_type,
-        'min', tc.min_rating, 'max', tc.max_rating, 'required', tc.is_required, 'options', tc.options) ORDER BY tc.display_order, tc.criterion_id)
-        FROM public.template_criterion tc WHERE tc.template_id = t.template_id), '[]'::json) AS criteria
-    FROM public.observation o JOIN public.evaluation_signup es ON es.signup_id = o.signup_id
-    JOIN public.professor p ON p.professor_id = es.professor_id JOIN public.app_user observee ON observee.user_id = p.user_id
-    JOIN public.professor selected ON selected.professor_id = o.observer_id JOIN public.app_user observer ON observer.user_id = selected.user_id
-    JOIN public.course_section cs ON cs.section_id = es.section_id JOIN public.course co ON co.course_id = cs.course_id
-    JOIN public.semester s ON s.semester_id = cs.semester_id
-    JOIN public.evaluation_cycle ec ON ec.cycle_id = o.cycle_id
-    LEFT JOIN public.signed_assessment a ON a.observation_id = o.observation_id
-    JOIN public.observation_template t ON t.template_id = COALESCE(a.template_id,
-      (SELECT template_id FROM public.observation_template WHERE is_active AND status = 'published' ORDER BY published_at DESC, template_id DESC LIMIT 1))
-    WHERE o.observation_id = $2 AND (p.user_id = $1 OR selected.user_id = $1) AND o.scheduled_at <= $3
-      AND t.status = 'published' AND ec.observation_deadline > $3
-      AND upper(o.status) NOT IN ('NOT_OCCURRED', 'COMPLETED', 'CANCELLED', 'CANCELED')`, [user.id, dashboard.currentObservation.id, new Date()]);
-  return rows.rows[0] ? assessmentView(rows.rows[0], user) : null;
+  if (!["profile.read.own", "observations.read.own", "assessment.read.own"].every(grant => user.permissions.includes(grant))) return null;
+  const db = options.database ?? getPrisma();
+  const selectedId = await selectedFacultyObservation();
+  const dashboard = selectedId ? null : await getFacultyDashboard(user, options);
+  const observationId = selectedId ?? dashboard?.currentObservation?.id;
+  if (!observationId) return null;
+  const record = await db.observation.findFirst({ where: { observationId, OR: [{ signup: { professor: { userId: user.id } } }, { observer: { userId: user.id } }] }, include: { observer: { include: { user: true } }, signup: { include: { professor: { include: { user: true } }, section: { include: { course: true, semester: true } } } }, cycle: true, signedAssessment: true } });
+  const now = new Date();
+  if (!record?.observer || !record.scheduledAt || record.scheduledAt > now || ["NOT_OCCURRED", "CANCELLED", "CANCELED"].includes(record.status.toUpperCase())) return null;
+  const saved = record.signedAssessment;
+  if (!saved && (record.cycle.observationDeadline <= now || record.completedAt || record.status.toUpperCase() === "COMPLETED")) return null;
+  const template = saved ? await db.observationTemplate.findUnique({ where: { templateId: saved.templateId }, include: { criteria: { orderBy: [{ displayOrder: "asc" }, { criterionId: "asc" }] } } }) : await db.observationTemplate.findFirst({ where: { isActive: true, status: "published" }, orderBy: [{ publishedAt: "desc" }, { templateId: "desc" }], include: { criteria: { orderBy: [{ displayOrder: "asc" }, { criterionId: "asc" }] } } });
+  if (!template || template.status !== "published") return null;
+  const section = record.signup.section;
+  const view = assessmentView({ observationId: record.observationId, templateId: template.templateId, title: template.templateName, description: template.description, templateRevision: template.revision, commentPrompts: commentPrompts(template.commentPrompts) as CommentPrompt[], signatureLabels: signatureLabels(template.signatureLabels), timeZone: section.semester.timeZone, course: section.course.courseCode, section: section.sectionCode, scheduledAt: record.scheduledAt, participation: record.observer.userId === user.id ? "observer" : "observee", observer: record.observer.user.fullName, observee: record.signup.professor.user.fullName, locked: saved?.isLocked ?? false, responses: saved?.responses as AssessmentAnswers | null, observerSignedAt: saved?.observerSignedAt ?? null, observeeSignedAt: saved?.observeeSignedAt ?? null, criteria: template.criteria.map(criterion => ({ id: criterion.criterionId, prompt: criterion.criterionText, type: criterion.questionType, min: criterion.minRating, max: criterion.maxRating, required: criterion.isRequired, options: criterion.options as Criterion["options"] })) }, user);
+  // Expired and completed records remain readable; writes still obey deadlines.
+  if (record.cycle.observationDeadline <= now || record.completedAt || record.status.toUpperCase() === "COMPLETED") { view.canEdit = false; view.canAcknowledge = false; }
+  return view;
 }

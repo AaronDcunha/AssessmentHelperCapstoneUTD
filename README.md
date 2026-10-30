@@ -1,114 +1,120 @@
 # Assessment Helper
 
-Faculty observation and assessment coordination using Next.js.
+Faculty observation and assessment coordination using Next.js, PostgreSQL, and Auth.js.
 
-Install Node.js **24.22.1** (see `.nvmrc`) and Docker Desktop.
+## First-time setup
 
-After pulling dependency updates, follow [the teammate update instructions](docs/reference/DEPENDENCY_UPDATES.md).
+Install **Node.js 24.22.1** (see `.nvmrc`) and **Docker Desktop**. Run these commands from this project folder:
 
-## Login status
+```powershell
+npm ci
+Copy-Item .env.example .env
+```
 
-Login uses seeded PostgreSQL accounts and Auth.js sessions. Sample logins are generated locally in `prisma/demo-accounts.txt`. Successful login opens `/dashboard`. Faculty navigation is available to Faculty, AC, and Admin; only Admin sees and can access the test pages.
+Configure `.env`:
 
-Set `AUTH_DEMO_ENABLED=false` to use only database accounts. Optional reserved `faculty`/`ac`/`admin` logins require development mode and `AUTH_DEMO_ENABLED=true`.
-
-See [authentication backend details](docs/reference/AUTH_BACKEND.md).
-
-## Setup
-
-1. Open the project folder and run `npm ci`.
-2. Copy `.env.example` to `.env` (only on first setup).
-3. Replace the password placeholder in both `POSTGRES_PASSWORD` and `DATABASE_URL` with the same password.
-4. Start Docker, then run the commands below.
-
-PostgreSQL and Mailpit run in Docker; no separate installations needed.
-
-## Run locally
-
-### Local authentication setup
-
-Each teammate should generate their own Auth.js secret once, from the project folder:
+- Replace the password placeholder in both `POSTGRES_PASSWORD` and `DATABASE_URL` with the same password. Keep the database name, user, and port consistent too.
+- Replace `AUTH_SECRET` with a secret generated using the command below. Keep it across restarts; changing it signs users out.
+- Keep `AUTH_DEMO_ENABLED=false` for seeded database accounts and `EMAIL_DELIVERY_ENABLED=true` for local email testing.
 
 ```powershell
 node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 ```
 
-Copy the output into `.env.local`:
+Start Docker Desktop, then initialize the database:
 
-```dotenv
-AUTH_SECRET=paste_generated_value_here
-AUTH_DEMO_ENABLED=true
-```
-
-Keep `.env.local` private and uncommitted (it is ignored by Git). Reuse the same secret across restarts; changing it invalidates existing sessions. Restart `npm run dev` after changing these settings. Seeded login requires PostgreSQL to be running.
-
-### Start the services
-
-```bash
-#To Start
+```powershell
 docker compose up -d --wait
-npm run dev
-
-#To Stop Docker:
-docker compose down
-```
-
-- App: http://localhost:3000
-- Mailpit inbox: http://localhost:8025 (captures test emails only)
-- PostgreSQL: `localhost:5432`; SMTP: `localhost:1025`
-
-## Database setup and seeding
-
-With `.env` configured and Docker Desktop running:
-
-```sh
-docker compose up -d --wait postgres
 npm run db:setup
 ```
 
-Creates the tables and seeds demo data. Run once initially, then again for new migrations or seed additions. Each developer has their own database in a local Docker volume; it is not committed to Git. Data persists when containers stop. The script requires PostgreSQL to be running and never starts Docker itself.
+`db:setup` applies migrations, checks the schema, and seeds demo accounts/courses plus ten signup fixtures. It does **not** reset existing data or start Docker. Sample logins are written to `prisma/demo-accounts.txt`. Keep environment files and that login file private; they are ignored by Git.
 
-To rerun only the seed: `npm run db:seed`. Sample logins are generated locally in `prisma/demo-accounts.txt` (ignored by Git).
+## Start and stop locally
 
-To browse the database (keep PostgreSQL running):
+Start the Docker services, then run the app and each worker in **separate terminals**:
 
-```sh
-npx prisma studio
+```powershell
+docker compose up -d --wait
 ```
 
-### Reset and reseed
+| Terminal | Command | Purpose |
+| --- | --- | --- |
+| App | `npm run dev` | Website and APIs |
+| Email worker | `npm run jobs:email` | Delivers queued emails to Mailpit every minute |
+| Faculty scheduler | `npm run jobs:faculty` | Processes invitation expiry and automatic resends every five minutes |
 
-With PostgreSQL running, run:
+Workers do not start automatically with the app. To process one email batch instead, use `npm run jobs:email:once`.
 
-```sh
+- [App](http://localhost:3000) — sign in with a seeded account; access follows assigned permissions.
+- [Mailpit inbox](http://localhost:8025) — captures local test emails; it does not send to real inboxes.
+- PostgreSQL: `localhost:5432`; Mailpit SMTP: `localhost:1025` (defaults).
+
+To stop, press **Ctrl+C** in each app/worker terminal, then run `docker compose down`. Database and Mailpit data remain in Docker volumes.
+
+Optional reserved `faculty`/`ac`/`admin` mock logins require development mode and `AUTH_DEMO_ENABLED=true`; they are separate from seeded business accounts. Restart the app/workers after environment changes. `.env.local` can override `.env` for the app/workers; keep database credentials in `.env` consistent with Docker and database scripts.
+
+## Database maintenance
+
+Keep PostgreSQL running for these commands. Each developer has their own local database; Git does not share its contents.
+
+| Action | Command | Effect |
+| --- | --- | --- |
+| Apply updates and seed additions | `npm run db:setup` | Applies checked-in migrations and reruns the seed without resetting the database |
+| Apply migrations only | `npx prisma migrate deploy` | Updates tables without running the seed |
+| Rerun the seed only | `npm run db:seed` | Seeds basic demo data, then ten signup fixtures; preserves existing signups/progress |
+| Preview basic seed data | `npm run db:seed:preview` | No database reads/writes; generates the local demo-login reference; signup preview is separate |
+| Preview ten demo signups | `npm run db:seed:signups:preview` | Reads the database and lists the proposed signup fixtures; writes nothing |
+| Add ten demo signups | `npm run db:seed:signups` | Adds signups, unassigned observations, and three proposed meetings per new signup |
+| Browse records | `npx prisma studio` | Opens the database editor |
+
+The basic seed preserves existing cycle/template/question edits. It does not recreate manually added signups, matching, or completed assessments. Reseeding is not a reset and may update other seeded records.
+
+For team workflow testing, `npm run db:seed` runs both seeds in order automatically.
+`npm run db:setup` uses the same sequence after migrations. If the signup step fails,
+the basic seed remains saved; fix the reported configuration issue and rerun.
+The shared script is `prisma/seed-signups.mjs`. It uses the same ten demo professors,
+their real assigned sections, and valid future class dates in the current configured
+semester. Existing signups and any later workflow progress are preserved on reruns.
+It creates no matching, releases, invitations, assessments, or notifications.
+This local-only demo seed can bypass a closed signup deadline without
+changing normal signup rules. It requires configured semester dates and enough future
+meetings before the observation deadline; otherwise the entire batch rolls back.
+To explicitly target a cycle, use `npm run db:seed:signups -- --cycle-id=UUID`.
+After a database reset, `npm run db:seed` restores the basic data and ten signups together.
+
+### Reset the database and restore demo data
+
+**This deletes all data in the database/schema targeted by `.env`**, including added users, signups, observations, assessments, and local test fixtures. Confirm `DATABASE_URL` points to your intended local database first. Stop the app and workers; leave PostgreSQL running.
+
+```powershell
 npx prisma migrate reset
 npm run db:seed
 ```
 
-Confirm the reset when prompted. **This deletes all data in the configured database**, including signups, assessments, and account changes, then recreates the tables and restores demo data.
+Confirm the reset when prompted. The first command recreates the schema from migrations; the second restores the basic demo data, login reference, and ten signup fixtures. Then restart the app and workers.
 
-## Dependency security updates
+This does not clear Mailpit's captured messages or private attachment files. Avoid `docker compose down --volumes` unless you also intend to erase the Docker database and Mailpit volumes. Changing `POSTGRES_PASSWORD` in `.env` does not change the password inside an existing database volume.
 
-Next.js, React, Prisma, the SMTP mailer and indirect dependencies have been patched.
-The current locked npm tree reports zero known audit vulnerabilities. See
-[DEPENDENCY_UPDATES.md](docs/reference/DEPENDENCY_UPDATES.md) for exact versions,
-remaining major-upgrade decisions, validation and teammate setup instructions.
+## Checks and builds
 
-## Deferred libraries
+```powershell
+npm run lint
+npx next typegen
+npx tsc --noEmit
+node --import ./scripts/server-loader.mjs --test tests/unit/*.test.mjs
+```
 
-- Zod: not added as an application dependency; use explicit server-side validation for now.
-- Testing: Vitest, React Testing Library, and Playwright are planned but not installed.
+For a production build, run `npm run build`, then `npm start`. Email and Faculty workers still run separately. Integration/browser tests have their own database/server requirements; see the relevant feature reference before running them.
 
+After pulling changes, run `npm ci` when dependencies changed and `npm run db:setup` when migrations/seed data changed. Do not reset to resolve a migration error without checking the cause.
 
-## Local workflow emails
+## Further documentation
 
-New workflow notifications also queue email. With Mailpit running, configure
-`EMAIL_DELIVERY_ENABLED=true` and run `npm run jobs:email` in a separate terminal.
-Read captured mail at http://localhost:8025. The sender defaults to
-`noreply_course_evaluation@assessmenthelper.edu`; old notifications are not emailed.
-See [email delivery setup](docs/reference/EMAIL_DELIVERY.md) for migrations,
-Mailpit settings, retries and tests. Production dependency-upgrade work listed
-above remains separate from local Mailpit testing.
+- [Project references and feature guides](docs/reference/README.md)
+- [Authentication and permissions](docs/reference/AUTH_BACKEND.md)
+- [Email configuration, retries, and testing](docs/reference/EMAIL_DELIVERY.md)
+- [Shared notification helper](docs/reference/NOTIFICATION_HELPER.md)
+- [Dependency update instructions](docs/reference/DEPENDENCY_UPDATES.md)
 
-
-Shared notification helper: see [NOTIFICATION_HELPER.md](docs/reference/NOTIFICATION_HELPER.md) for the canonical sendNotification function, specific-user/list/role audiences, optional email, transaction examples and Mailpit testing.
+Validation currently uses explicit server-side checks. Vitest, React Testing Library, and Playwright are not installed; existing tests use the repository's Node/browser scripts.

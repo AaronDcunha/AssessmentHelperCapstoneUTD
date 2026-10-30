@@ -19,7 +19,7 @@ function cycleScope(user: ConfigurationUser): Prisma.EvaluationCycleWhereInput {
     { semester: relevantSemester(user.id) },
     { signups: { some: { professor: { userId: user.id } } } },
     { observations: { some: { observer: { userId: user.id } } } },
-    { observations: { some: { candidates: { some: { professor: { userId: user.id } } } } } },
+    { observations: { some: { currentReleasedList: { is: { publishedAt: { not: null }, candidates: { some: { professor: { userId: user.id } } } } } } } },
   ] };
 }
 
@@ -34,7 +34,7 @@ export async function getRelevantFacultyCycles(db: Connection, user: Configurati
     include: { semester: true }, orderBy: { cycleId: "asc" },
   });
 }
-function semesterResponse(s: Semester) {
+export function semesterResponse(s: Semester) {
   const term = /^(\d{2})([suf])$/.exec(s.termCode);
   return { id: s.semesterId, name: s.termName, year: term ? 2000 + Number(term[1]) : null,
     season: term ? ({ s: "Spring", u: "Summer", f: "Fall" }[term[2]]) : null,

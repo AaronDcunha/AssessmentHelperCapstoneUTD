@@ -7,6 +7,7 @@ import { FacultyActionError } from "./faculty-errors";
 import { meetingOccurrence } from "./faculty-meetings";
 import { facultyDate, type WeeklyMeeting } from "./faculty-calendar";
 import { sendNotification } from "./notification-delivery";
+import { requireCurrentReleasedCandidate } from "../recommendation-scope";
 
 type Tx = Prisma.TransactionClient;
 type Identity = Pick<AccountUser, "id" | "permissions">;
@@ -28,8 +29,8 @@ export async function facultyTransaction<T>(action: (db: Tx) => Promise<T>) {
     throw error;
   }
 }
-const observationInclude = { signup: { include: { professor: true, section: { include: { classMeetings: true, course: true, semester: true } } } }, cycle: true, signedAssessment: true, timeOptions: true } as const;
-export async function workflowObservation(db: Tx, id: string) {
+const observationInclude = { signup: { include: { professor: { include: { user: true } }, section: { include: { classMeetings: true, course: true, semester: true } } } }, cycle: true, signedAssessment: true, timeOptions: true, currentDraftList: true, currentReleasedList: true } as const;
+export async function workflowObservation(db: Pick<Tx, "observation">, id: string) {
   const record = await db.observation.findUnique({ where: { observationId: id }, include: observationInclude });
   if (!record) throw new FacultyActionError("Observation not found.", 404);
   return record;
@@ -54,7 +55,7 @@ export function availableOption(record: ObservationRecord, id: string, now: Date
   return { ...current, timeOptionId: id, date };
 }
 
-export async function observerAvailable(db: Tx, record: ObservationRecord, professorId: string, option: ReturnType<typeof availableOption>) {
+export async function observerAvailable(db: Pick<Tx, "professor" | "evaluationSignup" | "observation">, record: ObservationRecord, professorId: string, option: ReturnType<typeof availableOption>) {
   if (professorId === record.signup.professorId) return false;
   const profile = await db.professor.findUnique({ where: { professorId }, include: { user: true, teaches: { include: { section: { include: { classMeetings: true, course: true, semester: true } } } } } });
   if (!profile?.user.isActive || profile.departmentId !== record.signup.professor.departmentId) return false;
@@ -85,6 +86,9 @@ export async function notifyCommittee(db: Tx, title: string, message: string, co
   await sendNotification({recipients:{permissions:["late-acceptance.review"]},email:true,title,message,type:"FACULTY_WORKFLOW",...context},db);
 }
 async function invite(db: Tx, candidateId: string, record: ObservationRecord, now: Date) {
+  const member = await db.observationCandidate.findUnique({ where: { candidateId } });
+  if (!member || member.observationId !== record.observationId) throw new FacultyActionError("Candidate not found.", 404);
+  requireCurrentReleasedCandidate(record, member);
   const latest = await db.invitationAttempt.findFirst({ where: { candidateId }, orderBy: { number: "desc" } });
   const expiresAt = new Date(Math.min(now.getTime() + 48 * 3600000, record.cycle.observationDeadline.getTime()));
   if (expiresAt <= now) throw new FacultyActionError("The invitation deadline has passed.");
@@ -93,18 +97,37 @@ async function invite(db: Tx, candidateId: string, record: ObservationRecord, no
   await notify(db, candidate.professor.userId, "Observation invitation", "You have an observation invitation. Choose an available meeting before its response deadline.", { eventKey: `invitation:${candidateId}:${(latest?.number ?? 0) + 1}`, observationId: record.observationId });
 }
 
-export async function generateRecommendations(user: Identity, cycleId: string) {
+export async function generateRecommendations(user: Identity, cycleId: string, body: unknown = {}) {
   requireFacultyGrants(user, "recommendations.generate"); workflowId(cycleId);
+  const input = workflowInput(body, ["scope"]);
+  const scope = input.scope === undefined ? {} : workflowInput(input.scope, ["observationIds", "professorIds", "departmentId"]);
+  const idList = (value: unknown) => {
+    if (!Array.isArray(value) || value.length === 0 || value.length > 500) throw new FacultyActionError("Select between 1 and 500 signups.", 400);
+    return [...new Set(value.map(workflowId))];
+  };
+  const observationIds = scope.observationIds === undefined ? undefined : idList(scope.observationIds);
+  const professorIds = scope.professorIds === undefined ? undefined : idList(scope.professorIds);
+  const departmentId = scope.departmentId === undefined ? undefined : workflowId(scope.departmentId);
   return facultyTransaction(async db => {
     const cycle = await db.evaluationCycle.findUnique({ where: { cycleId } });
     const now = new Date();
     if (!cycle || cycle.signupDeadline >= now || cycle.observationDeadline <= now) throw new FacultyActionError("Generate recommendations after signup closes and before the observation deadline.");
     const generationId = randomUUID();
-    const records = await db.observation.findMany({ where: { cycleId, observerId: null, recommendationsReleasedAt: null, status: "PENDING" }, orderBy: { observationId: "asc" } });
+    const records = await db.observation.findMany({ where: {
+      cycleId, observerId: null, completedAt: null, signedAssessment: { is: null }, currentReleasedListId: null, recommendationsReleasedAt: null, recommendationLists: { none: { publishedAt: { not: null } } }, status: "PENDING",
+      ...(observationIds ? { observationId: { in: observationIds } } : {}),
+      ...(professorIds || departmentId ? { signup: {
+        ...(professorIds ? { professorId: { in: professorIds } } : {}),
+        ...(departmentId ? { professor: { departmentId } } : {}),
+      } } : {}),
+    }, orderBy: { observationId: "asc" } });
+    if (observationIds && records.length !== observationIds.length) throw new FacultyActionError("Some selected signups are no longer available for generation. Refresh and select them again.", 409);
     let generatedCount = 0;
     for (const item of records) {
       const record = await workflowObservation(db, item.observationId); open(record, now); await touchObservation(db, record);
-      await db.observationCandidate.deleteMany({ where: { observationId: record.observationId, status: "ELIGIBLE", invitedAt: null, attempts: { none: {} } } });
+      // Re-running initial generation may replace an unpublished draft, but never
+      // deletes the old membership or enables replacement of a released list.
+      const list = await db.recommendationList.create({ data: { observationId: record.observationId, generationId, generatedAt: now } });
       const pool = await db.evaluationSignup.findMany({ where: { cycleId, professorId: { not: record.signup.professorId } }, orderBy: { professorId: "asc" } });
       let count = 0;
       for (const member of pool) {
@@ -115,12 +138,12 @@ export async function generateRecommendations(user: Identity, cycleId: string) {
           catch (error) { if (!(error instanceof FacultyActionError)) throw error; }
         }
         if (!compatible) continue;
-        await db.observationCandidate.upsert({ where: { observationId_professorId: { observationId: record.observationId, professorId: member.professorId } }, create: { observationId: record.observationId, professorId: member.professorId }, update: {} });
+        await db.observationCandidate.create({ data: { observationId: record.observationId, recommendationListId: list.listId, professorId: member.professorId } });
         count++;
       }
       generatedCount += count;
-      await db.observation.update({ where: { observationId: record.observationId }, data: { recommendationGenerationId: generationId } });
-      if (count < 5) await notifyCommittee(db, "Observer list needs attention", `Observation ${record.observationId} has ${count} compatible candidates.`, { eventKey: `recommendation-shortfall:${generationId}:${record.observationId}`, observationId: record.observationId });
+      await db.observation.update({ where: { observationId: record.observationId }, data: { recommendationGenerationId: generationId, currentDraftListId: list.listId } });
+      if (count < 5) await notifyCommittee(db, "Observer list needs attention", `${record.signup.professor.user.fullName} has ${count} compatible ${count === 1 ? "candidate" : "candidates"} for their observation.`, { eventKey: `recommendation-shortfall:${generationId}:${record.observationId}`, observationId: record.observationId });
     }
     return { generationId, generatedCount };
   });
@@ -132,7 +155,7 @@ export async function declineFacultyInvitation(user: Identity, body: unknown) {
   return facultyTransaction(async db => {
     const candidate = await db.observationCandidate.findUnique({ where: { candidateId }, include: { professor: true } });
     if (!candidate || candidate.professor.userId !== user.id) throw new FacultyActionError("Forbidden", 403);
-    const record = await workflowObservation(db, candidate.observationId); await touchObservation(db, record);
+    const record = await workflowObservation(db, candidate.observationId); requireCurrentReleasedCandidate(record, candidate); await touchObservation(db, record);
     const now = new Date(); open(record, now);
     const attempt = await db.invitationAttempt.findFirst({ where: { candidateId }, orderBy: { number: "desc" } });
     if (!attempt || attempt.attemptId !== attemptId || record.observerId || candidate.status !== "PENDING" || attempt.status !== "PENDING" || attempt.invitedAt > now || attempt.expiresAt <= now) throw new FacultyActionError("This invitation changed, expired or was already answered.");
@@ -150,7 +173,7 @@ export async function requestLateAcceptance(user: Identity, body: unknown) {
   return facultyTransaction(async db => {
     const candidate = await db.observationCandidate.findUnique({ where: { candidateId }, include: { professor: true } });
     if (!candidate || candidate.professor.userId !== user.id) throw new FacultyActionError("Forbidden", 403);
-    const record = await workflowObservation(db, candidate.observationId); await touchObservation(db, record);
+    const record = await workflowObservation(db, candidate.observationId); requireCurrentReleasedCandidate(record, candidate); await touchObservation(db, record);
     const now = new Date(); open(record, now);
     const latest = await db.invitationAttempt.findFirst({ where: { candidateId }, orderBy: { number: "desc" }, include: { approval: true } });
     if (record.observerId || !latest || latest.attemptId !== attemptId || latest.expiresAt > now || !["PENDING", "EXPIRED"].includes(candidate.status)) throw new FacultyActionError("Only the latest expired, unanswered invitation can request approval.");
@@ -168,7 +191,7 @@ export async function reviewLateAcceptance(user: Identity, approvalId: string, b
   return facultyTransaction(async db => {
     const approval = await db.lateAcceptanceApproval.findUnique({ where: { approvalId }, include: { attempt: { include: { candidate: true } } } });
     if (!approval) throw new FacultyActionError("Approval request not found.", 404);
-    const record = await workflowObservation(db, approval.attempt.candidate.observationId); await touchObservation(db, record);
+    const record = await workflowObservation(db, approval.attempt.candidate.observationId); requireCurrentReleasedCandidate(record, approval.attempt.candidate); await touchObservation(db, record);
     const now = new Date(); open(record, now);
     const latest = await db.invitationAttempt.findFirst({ where: { candidateId: approval.attempt.candidateId }, orderBy: { number: "desc" } });
     if (approval.status !== "PENDING" || latest?.attemptId !== approval.attemptId || record.observerId || latest.expiresAt > now) throw new FacultyActionError("The approval request was decided or its invitation was superseded.");
@@ -181,12 +204,14 @@ export async function reviewLateAcceptance(user: Identity, approvalId: string, b
 /** Explicit scheduler entry point; never runs on a route import. Limit one automatic
  * resend per candidate, after all uncontacted recommendations, with fresh windows. */
 export async function processFacultyInvitationExpiry() {
-  const ids = await getPrisma().observation.findMany({ where: { observerId: null, recommendationsReleasedAt: { not: null }, cycle: { observationDeadline: { gt: new Date() } }, status: "PENDING" }, select: { observationId: true } });
+  const ids = await getPrisma().observation.findMany({ where: { observerId: null, currentReleasedList: { is: { publishedAt: { not: null } } }, cycle: { observationDeadline: { gt: new Date() } }, status: "PENDING" }, select: { observationId: true } });
   for (const id of ids) await facultyTransaction(async db => {
-    const record = await workflowObservation(db, id.observationId); await touchObservation(db, record);
+    const record = await workflowObservation(db, id.observationId);
+    if (!record.currentReleasedListId || !record.currentReleasedList?.publishedAt) return;
+    await touchObservation(db, record);
     const now = new Date(); open(record, now);
     if (record.observerId) return;
-    const candidates = await db.observationCandidate.findMany({ where: { observationId: record.observationId }, include: { attempts: { orderBy: { number: "desc" }, take: 1 } }, orderBy: { candidateId: "asc" } });
+    const candidates = await db.observationCandidate.findMany({ where: { observationId: record.observationId, recommendationListId: record.currentReleasedListId }, include: { attempts: { orderBy: { number: "desc" }, take: 1 } }, orderBy: { candidateId: "asc" } });
     let expired = false;
     for (const candidate of candidates) {
       const latest = candidate.attempts[0];
@@ -230,14 +255,27 @@ export async function releaseRecommendations(user: Identity, cycleId: string, bo
   if (input.observationIds !== undefined && (!Array.isArray(input.observationIds) || input.observationIds.length > 500)) throw new FacultyActionError("Invalid observation list.", 400);
   const ids = (input.observationIds as unknown[] | undefined)?.map(workflowId);
   return facultyTransaction(async db => {
-    const records = await db.observation.findMany({ where: { cycleId, recommendationGenerationId: generationId, ...(ids ? { observationId: { in: ids } } : {}) } });
+    const records = await db.observation.findMany({ where: { cycleId, recommendationGenerationId: generationId, ...(ids ? { observationId: { in: ids } } : {}) }, orderBy: { observationId: "asc" } });
     if (!records.length || (ids && records.length !== new Set(ids).size)) throw new FacultyActionError("No matching generated recommendation list was found.", 404);
     for (const item of records) {
       const record = await workflowObservation(db, item.observationId); open(record, new Date());
-      if (record.recommendationsReleasedAt) continue; // Retry does not duplicate notifications.
+      if (record.currentReleasedListId || record.recommendationsReleasedAt) {
+        if (!record.currentDraftListId && record.currentReleasedList?.publishedAt && record.currentReleasedList.generationId === generationId) continue;
+        throw new FacultyActionError("Replacement publication is not enabled.");
+      }
+      const list = record.currentDraftList;
+      if (!list || list.generationId !== generationId || list.publishedAt || record.observerId || record.signedAssessment
+        || await db.recommendationList.findFirst({ where: { observationId: record.observationId, publishedAt: { not: null } }, select: { listId: true } })) {
+        throw new FacultyActionError("An initial unpublished draft for an unpaired observation is required.");
+      }
+      if (await db.observationCandidate.findFirst({ where: { recommendationListId: list.listId, OR: [{ invitedAt: { not: null } }, { attempts: { some: {} } }, { status: { not: "ELIGIBLE" } }] }, select: { candidateId: true } })) {
+        throw new FacultyActionError("This imported draft has invitation history and requires review before publication.");
+      }
       await touchObservation(db, record);
-      await db.observation.update({ where: { observationId: record.observationId }, data: { recommendationsReleasedAt: new Date() } });
-      await notify(db, record.signup.professor.userId, "Observer recommendations ready", "Your released observer recommendations are ready for invitations.", { eventKey: `recommendations-released:${record.observationId}`, observationId: record.observationId });
+      const publishedAt = new Date();
+      await db.recommendationList.update({ where: { listId: list.listId }, data: { publishedAt } });
+      await db.observation.update({ where: { observationId: record.observationId }, data: { recommendationsReleasedAt: publishedAt, currentReleasedListId: list.listId, currentDraftListId: null } });
+      await notify(db, record.signup.professor.userId, "Observer recommendations ready", "Your released observer recommendations are ready for invitations.", { eventKey: `recommendations-released:${record.observationId}:${list.listId}`, observationId: record.observationId });
     }
     return { releasedObservationIds: records.map(item => item.observationId) };
   });
@@ -251,11 +289,12 @@ export async function sendFacultyInvitations(user: Identity, body: unknown) {
   return facultyTransaction(async db => {
     const record = await workflowObservation(db, id), now = new Date();
     if (record.signup.professor.userId !== user.id) throw new FacultyActionError("Forbidden", 403);
-    open(record, now); if (record.observerId || !record.recommendationsReleasedAt) throw new FacultyActionError("A released, unpaired observation is required.");
+    open(record, now); if (record.observerId || !record.currentReleasedList?.publishedAt) throw new FacultyActionError("A released, unpaired observation is required.");
     await touchObservation(db, record);
     for (const candidateId of ids) {
       const candidate = await db.observationCandidate.findUnique({ where: { candidateId } });
       if (!candidate || candidate.observationId !== id) throw new FacultyActionError("Choose only your released candidates.", 403);
+      requireCurrentReleasedCandidate(record, candidate);
       if (candidate.invitedAt) continue; // Initial-send retries never open another window.
       let compatible = false;
       for (const option of record.timeOptions) {
@@ -275,7 +314,7 @@ export async function acceptFacultyInvitation(user: Identity, body: unknown) {
   return facultyTransaction(async db => {
     const candidate = await db.observationCandidate.findUnique({ where: { candidateId }, include: { professor: true } });
     if (!candidate || candidate.professor.userId !== user.id) throw new FacultyActionError("Forbidden", 403);
-    const record = await workflowObservation(db, candidate.observationId); await touchObservation(db, record);
+    const record = await workflowObservation(db, candidate.observationId); requireCurrentReleasedCandidate(record, candidate); await touchObservation(db, record);
     const now = new Date(); open(record, now);
     const attempt = await db.invitationAttempt.findFirst({ where: { candidateId }, orderBy: { number: "desc" } });
     if (!attempt || attempt.attemptId !== attemptId || record.observerId) throw new FacultyActionError("This invitation was superseded or paired.");
@@ -298,14 +337,16 @@ export async function selectFacultyObserver(user: Identity, body: unknown) {
     if (!candidate) throw new FacultyActionError("Candidate not found.", 404);
     const record = await workflowObservation(db, candidate.observationId);
     if (record.signup.professor.userId !== user.id) throw new FacultyActionError("Forbidden", 403);
+    requireCurrentReleasedCandidate(record, candidate);
     await touchObservation(db, record); const now = new Date(); open(record, now);
     if (record.observerId === candidate.professorId && candidate.status === "SELECTED") return { message: "This appointment is already confirmed." };
+    if (record.signedAssessment) throw new FacultyActionError("Assessment work has started; a new observer cannot be selected.");
     if (record.observerId || candidate.status !== "ACCEPTED" || !candidate.acceptedOptionId) throw new FacultyActionError("Choose an accepted candidate for an unpaired observation.");
     const option = availableOption(record, candidate.acceptedOptionId, now);
     if (!await observerAvailable(db, record, candidate.professorId, option)) throw new FacultyActionError("The observer's availability changed. Choose another compatible observer.");
     await db.observation.update({ where: { observationId: record.observationId }, data: { observerId: candidate.professorId, scheduledAt: option.startsAt, scheduledEndsAt: option.endsAt, status: "CONFIRMED" } });
     await db.observationCandidate.update({ where: { candidateId }, data: { status: "SELECTED" } });
-    const others = await db.observationCandidate.findMany({ where: { observationId: record.observationId, candidateId: { not: candidateId }, status: { in: ["PENDING", "ACCEPTED", "ELIGIBLE", "EXPIRED"] } }, include: { professor: true } });
+    const others = await db.observationCandidate.findMany({ where: { observationId: record.observationId, recommendationListId: candidate.recommendationListId, candidateId: { not: candidateId }, status: { in: ["PENDING", "ACCEPTED", "ELIGIBLE", "EXPIRED"] } }, include: { professor: true } });
     await db.observationCandidate.updateMany({ where: { candidateId: { in: others.map(other => other.candidateId) } }, data: { status: "CANCELLED" } });
     await db.invitationAttempt.updateMany({ where: { candidateId: { in: others.map(other => other.candidateId) }, status: { in: ["PENDING", "ACCEPTED"] } }, data: { status: "CANCELLED" } });
     for (const other of others.filter(other => other.invitedAt)) await notify(db, other.professor.userId, "Observation invitation closed", "Another observer was selected for this observation.", { eventKey: `invitation-closed:${candidateId}`, observationId: record.observationId });

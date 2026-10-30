@@ -1,6 +1,7 @@
 // Fixture writes use a disposable schema, never application tables or migrations.
 import '../configuration-loader.mjs';
 import assert from 'node:assert/strict';
+import { recommendationFixture } from '../recommendation-fixtures.mjs';
 import { randomUUID } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import pg from 'pg';
@@ -51,6 +52,8 @@ try {
   const observation = await db.observation.create({ data: { signupId: signups[0].signupId, cycleId: cycles[0], workflowRevision: 7, recommendationGenerationId: generationId, recommendationsReleasedAt: releasedAt } });
   const draft = await db.observation.create({ data: { signupId: signups[1].signupId, cycleId: cycles[0] } });
   const foreign = await db.observation.create({ data: { signupId: signups[3].signupId, cycleId: cycles[1], recommendationGenerationId: randomUUID() } });
+  const releasedList = await recommendationFixture(db, observation.observationId, { released:true, generationId, publishedAt:releasedAt });
+  const draftList = await recommendationFixture(db, draft.observationId);
   const option = await db.observationTimeOption.create({ data: { observationId: observation.observationId, preferredDate: new Date('2026-11-09'), startsAt: new Date('2026-11-09T16:00:00Z'), endsAt: new Date('2026-11-09T17:15:00Z'), timeZone: 'America/Chicago', location: 'Snapshot room' } });
   await db.observationTimeOption.create({ data: { observationId: draft.observationId, preferredDate: new Date('2026-11-11') } });
   const foreignOption = await db.observationTimeOption.create({ data: { observationId: foreign.observationId, preferredDate: new Date('2027-03-01') } });
@@ -64,8 +67,10 @@ try {
   assert.equal(saved.proposedMeetings[0].id, option.timeOptionId);
   assert.equal(saved.proposedMeetings[0].location, 'Snapshot room');
   assert.equal(saved.recommendationGenerationId, generationId);
+  assert.equal(saved.currentReleasedListId,releasedList.listId); assert.equal(saved.currentDraftListId,null);
   assert.equal(saved.recommendationsReleasedAt, releasedAt.toISOString()); assert.equal(saved.observationRevision, 7);
   const legacy = all.items.find(item => item.observationId === draft.observationId);
+  assert.equal(legacy.currentDraftListId,draftList.listId); assert.equal(legacy.currentReleasedListId,null);
   assert.equal(legacy.proposedMeetings[0].startsAt, null); assert.equal(legacy.proposedMeetings[0].timeZone, null);
   const withoutObservation = all.items.find(item => item.signupId === signups[2].signupId);
   assert.equal(withoutObservation.observationId, null); assert.deepEqual(withoutObservation.proposedMeetings, []);

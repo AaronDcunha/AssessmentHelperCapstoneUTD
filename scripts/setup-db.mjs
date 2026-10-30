@@ -46,7 +46,7 @@ try {
   }
   run('Applying checked-in database migrations...',process.execPath,['node_modules/prisma/build/index.js','migrate','deploy']);
   run('Checking that the database matches the current schema...',process.execPath,['node_modules/prisma/build/index.js','migrate','diff','--from-config-datasource','--to-schema','prisma/schema.prisma','--exit-code']);
-  run('Populating demo data...',process.execPath,['prisma/seed.mjs']);
+  run('Populating demo data and ten signup fixtures...',process.execPath,['scripts/seed-demo.mjs']);
   console.log('\nDatabase setup complete. Run npx prisma studio to inspect it. Sample logins: prisma/demo-accounts.txt');
 } catch (error) {
   console.error(error.message);

@@ -1,9 +1,132 @@
-# AC observer selection backend: Issue #67 reads
+# AC observer selection backend: Issue #67
 
 Implemented reads: `GET /api/evaluation-cycles/{cycleId}/signups` and Phase 1
-`GET /api/observations/{observationId}/candidates`. Existing generation/release
-services are unchanged. Regeneration and new Faculty candidate-list access remain
-separate work pending the recorded team decisions.
+`GET /api/observations/{observationId}/candidates`, plus the versioned-list foundation
+described below. Initial generation/release use their existing APIs. Replacement
+generation/publication and new Faculty candidate-list access remain separate work.
+
+## October 30 integration with main 2edbfb4
+
+The Task 1 frontend uses these canonical GET routes and authorized queries. The
+duplicate observer-selection-api/queries/observer-selection adapters were removed.
+Generation accepts main's optional scope.observationIds (1–500), departmentId and
+professorIds, retaining all initial-only/list-preservation checks. An unavailable
+selected observation rejects the whole request before writes. Release payloads
+remain unchanged; each selected row supplies its own real generation identifier.
+Faculty Prisma queries, transaction-scoped reads, accepted meeting display and
+assessment workflowRevision coordination from main remain intact.
+
+The frontend handles absent observations, nullable meeting snapshots, courseHistory
+arrays, separate recorded candidate/response states and current list identities.
+Candidate pagination is pinned to the first resolved list. Regeneration controls
+remain disabled because no regenerate route exists; permissions do not enable an
+unavailable capability. Replacement generation/publication is still disabled.
+
+KPI calculations select current draft, otherwise current published membership;
+survey evidence uses only the current published list. Archived/abandoned candidate
+rows are preserved and excluded. The existing explicit permanent-semester-delete
+operation clears pointers and deletes lists after candidates, before observations,
+within the same authorized/revision-checked transaction. Its confirmation describes
+history deletion; ordinary recommendation workflows retain all history.
+
+Integration verification: Prisma validation/generation, Next route type generation,
+TypeScript, repository-wide ESLint and 287 unit tests pass. PostgreSQL suites run
+only in a disposable PostgreSQL 18 container: migration/backfill, populated Faculty
+(19 groups), Candidates, Signups, Alerts/Reminders, Personal Observations, KPI and
+Admin. No application database migrations or shared-environment seed commands run.
+Earlier local deployment/verification notes below describe the preceding slice.
+
+## Recommendation-list foundation (October 28, 2026)
+
+`RecommendationList` stores list/observation UUIDs, nullable generation UUID/time
+and publication time, origin and recordedAt. recordedAt is creation/import time;
+unknown historical generation time remains null. `Observation` has independent
+currentDraftListId/currentReleasedListId. Composite foreign keys prevent pointers
+and candidates from crossing observations. Candidate uniqueness is now list plus
+professor, allowing independent candidate IDs for the same person across lists.
+Existing attempts/approvals still reference their original candidate IDs.
+
+`20261028040000_recommendation_lists` imports one surviving set per observation
+with candidates or generation/release markers, using the observation UUID as its
+new import-list identity. It does not assert this was a historical generation UUID.
+Only an existing release timestamp establishes publication/current release. A
+generation marker without release establishes a draft. Candidate-only sets remain
+unpointed imports for explicit AC review, never inferred releases. Known empty
+generated/released lists are included. Existing rows, states, timestamps, final
+selections and assessments are preserved. No earlier lost lists are reconstructed.
+
+Initial generation still uses current-semester matching and the existing pool/
+compatibility checks. Re-running before release creates a fresh current draft,
+retaining the older draft and its candidate IDs. Generation skips released,
+selected, completed and assessment-started observations. Initial release atomically
+publishes the current draft, moves the pointer, clears the draft pointer, updates
+the legacy release timestamp and queues a shared-service notification keyed by
+observation and list UUID. The existing {generationId,observationIds?} contract and
+Serializable/revision conflict handling remain. An unchanged release retry does
+not notify again. Replacement release returns 409. Imported drafts with invitation
+or response history require review rather than silently becoming actionable.
+
+All Faculty candidate authorization uses the current released pointer AND a real
+list publication. `src/server/recommendation-scope.ts` supplies Prisma, pg and
+mutation guards. Faculty recommendations/requests/counts, candidate-derived cycle
+access, own alert context, invitation sends/responses/selection, late approvals
+and expiry/resends exclude drafts and historical lists. Final selection cancels
+only other members of its own current release. The older decline export now
+delegates to the canonical guarded Prisma action. No grants, matching rules,
+meeting UUIDs or null handling changed.
+
+AC Candidates accepts optional listId (must belong to the observation); default
+is draft then released. Pagination/cursors and response filters apply within that
+list. Imported unpointed sets can be reviewed explicitly. The response adds both
+current pointer IDs and list:{id,generationId,generatedAt,publishedAt,origin}|null.
+Legacy top-level generationId/releasedAt remain raw observation markers, so use
+list metadata when displaying an explicitly selected historical list. Signups
+adds nullable currentDraftListId/currentReleasedListId. These GETs remain read-only
+and independently authorized; no new Faculty access is introduced.
+
+Deployment: pause the Faculty scheduler and coordinate application/worker rollout.
+Run `npx prisma migrate deploy` and `npm run db:generate` before starting the updated
+application and scheduler. Old binaries cannot safely write list-less candidates;
+do not mix old writers with the new schema. No database reset/reseed is needed.
+This implementation tests upgrades in disposable PostgreSQL schemas/databases;
+it does not deploy the migration to the application database automatically.
+Read-only local deployment inspection found seven pending migrations, beginning
+with 20261026000000_faculty_workflows and including this foundation. The configured
+application database therefore needs the earlier migrations as well; integration
+success below is against fully migrated disposable databases, not that database.
+
+Checks: recommendation-migration.mjs verifies exact legacy record preservation,
+unknown metadata, empty/unclassified lists, uniqueness and ownership constraints.
+faculty-populated.mjs covers preserved drafts, atomic batch rollback, release
+retries, every mutation fence, hidden requests/counts/cycle scope, unchanged
+historical attempts/approvals during expiry and selection, and existing Faculty
+workflows. Candidates integration uses PostgreSQL READ ONLY transactions and
+fingerprints lists as well as workflow/notification records. Signups, Alerts and
+personal-observation integrations remain covered. Focused unit tests cover history
+selectors/cursors, authorization and disabled replacement publication.
+
+Verification for this foundation: Prisma validation/generation, TypeScript and
+repository-wide ESLint passed. The full unit suite passed 264 tests with one
+optional database-plan test skipped. All six isolated PostgreSQL suites passed:
+recommendation-migration, faculty-populated (16 groups), observation-candidates,
+cycle-signups, alerts-reminders and personal-observations. Application data was
+not migrated or seeded. Existing Node module-type/pg deprecation warnings remain.
+
+An additional whole-schema diff inspection flags pre-existing FK update-action
+differences from 20261026000000_faculty_workflows: faculty_issue (observation,
+reporter), feedback_attachment (owner, observation, feedback), invitation_attempt
+(candidate), late_acceptance_approval (attempt), observation_candidate (accepted
+option). That SQL defaults to ON UPDATE NO ACTION while the existing Prisma
+relations default to CASCADE. This migration changes none of those constraints.
+The new four ownership/pointer FKs explicitly use NO ACTION/RESTRICT and are checked
+against pg_constraint. Keep the older drift out of this migration; review it before
+relying on a successful whole-schema drift gate such as db:setup.
+
+Future work: enable replacement generation/publication only after implementing
+operation idempotency, publication cancellation and assignment archival. Aaron
+approved archiving/reopening a selected observation only before assessment work
+starts. Existing signed, partially signed, completed or closed observations must
+not be overwritten. Manual observer addition remains out of scope.
 
 ## Authorization and scope
 
@@ -120,8 +243,9 @@ The endpoint-specific API draft entry is authoritative for this partial contract
 - proposedMeetings retains persisted UUID/date/snapshot values, including nulls.
   availableMeetingOptionIds uses the existing live compatibility checks. Legacy
   schedule resolution may establish compatibility while snapshot values stay null.
-- generationId/releasedAt map existing observation markers. No view/generation
-  selector is accepted; no separate current draft or last released list is claimed.
+- generationId/releasedAt map legacy observation markers. The foundation adds
+  explicit list metadata and current draft/released pointers; listId selects one
+  observation-owned list. No view or generationId query selector is accepted.
 
 Pagination is ascending candidate UUID, default 20/max 100. Cursor membership is
 validated against the same observation/latest-response filter. Only the small

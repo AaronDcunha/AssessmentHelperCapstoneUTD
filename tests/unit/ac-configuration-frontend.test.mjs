@@ -92,3 +92,27 @@ test('errors distinguish authentication, permission, missing, conflicts, validat
     await assert.rejects(acApi.getTemplates(), error => !error.message.includes('Private server exception'));
   } finally { globalThis.fetch = originalFetch; }
 });
+
+test('semester lookup follows every cursor and rejects partial results on a failed later page', async () => {
+  const originalFetch = globalThis.fetch;
+  const semesters = [1, 2, 3].map(n => ({ id: `00000000-0000-4000-8000-00000000000${n}`, name: `Term ${n}` }));
+  const paths = [];
+  let fail = false;
+  globalThis.fetch = async path => {
+    paths.push(path);
+    const cursor = new URL(path, 'http://localhost').searchParams.get('cursor');
+    const index = cursor ? semesters.findIndex(item => item.id === cursor) + 1 : 0;
+    if (fail && index === 1) return Response.json({ error: { code: 'FIXTURE', message: 'Unavailable' } }, { status: 500 });
+    return Response.json({ items: [semesters[index]], pageInfo: { hasMore: index < 2, nextCursor: index < 2 ? semesters[index].id : null } });
+  };
+  try {
+    assert.deepEqual(await acApi.getSemesters(), semesters);
+    assert.deepEqual(paths, ['/api/semesters', '/api/semesters?cursor=' + semesters[0].id, '/api/semesters?cursor=' + semesters[1].id]);
+    fail = true;
+    await assert.rejects(acApi.getSemesters(), error => error.status === 500);
+    fail = false;
+    assert.deepEqual(await acApi.getSemesters(), semesters, 'Retry starts from the first page');
+    globalThis.fetch = async () => Response.json({ items: [], pageInfo: { hasMore: true, nextCursor: semesters[0].id } });
+    await assert.rejects(acApi.getSemesters(), /invalid pagination cursor/);
+  } finally { globalThis.fetch = originalFetch; }
+});

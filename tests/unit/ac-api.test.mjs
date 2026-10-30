@@ -7,7 +7,7 @@ test("AC reads use the documented cycle and observation endpoint paths", async (
   const calls = [];
   globalThis.fetch = async (input, init) => {
     calls.push({ input: String(input), method: init?.method ?? "GET" });
-    const list = /\/(faculty-status|attention|observations)(\?|$)/.test(String(input));
+    const list = /\/(faculty-status|attention|observations|signups|candidates)(\?|$)/.test(String(input));
     return Response.json(list ? { items: [], pageInfo: { nextCursor: null, hasMore: false } } : {});
   };
 
@@ -16,6 +16,8 @@ test("AC reads use the documented cycle and observation endpoint paths", async (
     await acApi.getFacultyStatus("cycle 1", { evaluationStatus: "overdue" });
     await acApi.getAttention("cycle 1");
     await acApi.getObservations("cycle 1", { status: "in-progress" });
+    await acApi.getObserverSelectionSignups("cycle 1");
+    await acApi.getObservationCandidates("observation 1");
     await acApi.getMetrics("cycle 1");
     await acApi.getObservation("observation 1");
     await acApi.getObservationTemplate("observation 1");
@@ -29,6 +31,8 @@ test("AC reads use the documented cycle and observation endpoint paths", async (
     "/api/evaluation-cycles/cycle%201/faculty-status?evaluationStatus=overdue",
     "/api/evaluation-cycles/cycle%201/attention",
     "/api/evaluation-cycles/cycle%201/observations?status=in-progress",
+    "/api/evaluation-cycles/cycle%201/signups",
+    "/api/observations/observation%201/candidates",
     "/api/evaluation-cycles/cycle%201/metrics",
     "/api/observations/observation%201",
     "/api/observations/observation%201/template",
@@ -43,6 +47,7 @@ test("all list readers unwrap envelopes and retrieve every page without losing f
     () => acApi.getFacultyStatus("cycle-id", { evaluationStatus: "overdue" }),
     () => acApi.getAttention("cycle-id", { issue: "unmatched" }),
     () => acApi.getObservations("cycle-id", { assessmentStatus: "submitted" }),
+    () => acApi.getObserverSelectionSignups("cycle-id"),
     () => acApi.getHiringLevels(),
   ];
   try {
@@ -78,6 +83,26 @@ test("empty lists remain arrays; malformed envelopes and repeated cursors fail c
   } finally { globalThis.fetch = originalFetch; }
 });
 
+test("candidate pages pin the list and response filter, preserving recorded states and null metadata", async () => {
+  const originalFetch = globalThis.fetch, paths = [];
+  const first = { observationId:"observation", generationId:null, releasedAt:null, list:{id:"list-a",generationId:"generation-a"},
+    proposedMeetings:[{id:"meeting",startsAt:null,endsAt:null,timeZone:null}], items:[{id:"first",status:"SELECTED",responseStatus:"ACCEPTED"}], pageInfo:{hasMore:true,nextCursor:"first"} };
+  try {
+    globalThis.fetch = async input => { paths.push(String(input)); return Response.json(paths.length===1 ? first : {...first,items:[{id:"second",status:"CANCELLED",responseStatus:null}],pageInfo:{hasMore:false,nextCursor:null}}); };
+    const result = await acApi.getObservationCandidates("observation",{responseStatus:"ACCEPTED"});
+    assert.equal(new URL(paths[1],"http://test").searchParams.get("listId"),"list-a");
+    assert.equal(new URL(paths[1],"http://test").searchParams.get("responseStatus"),"ACCEPTED");
+    assert.deepEqual(result.items.map(item=>[item.status,item.responseStatus]),[["SELECTED","ACCEPTED"],["CANCELLED",null]]);
+    assert.equal(result.proposedMeetings[0].startsAt,null);
+    assert.deepEqual(result.pageInfo,{hasMore:false,nextCursor:null});
+    let calls=0;
+    globalThis.fetch = async () => Response.json(++calls===1 ? first : {...first,list:{id:"list-b"}});
+    await assert.rejects(acApi.getObservationCandidates("observation"), error=>error.status===409);
+    globalThis.fetch = async () => Response.json(first);
+    await assert.rejects(acApi.getObservationCandidates("observation"), ApiRequestError);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
 test("AC writes use POST for create and PATCH for edit", async () => {
   const originalFetch = globalThis.fetch;
   const calls = [];
@@ -99,6 +124,28 @@ test("AC writes use POST for create and PATCH for edit", async () => {
   assert.deepEqual(calls.map(({ input, method }) => ({ input, method })), [
     { input: "/api/evaluation-cycles", method: "POST" },
     { input: "/api/evaluation-cycles/cycle-1", method: "PATCH" },
+  ]);
+});
+
+test("observer-selection mutations use the documented paths, methods and bodies", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (input, init) => {
+    calls.push({ input: String(input), method: init?.method, body: JSON.parse(String(init?.body)) });
+    return Response.json({ generationId: "generation-1", releasedObservationIds: [], candidateCount: 0 });
+  };
+  try {
+    await acApi.generateRecommendations("cycle 1");
+    await acApi.generateRecommendations("cycle 1", { scope: { observationIds: ["observation 1"] } });
+    await acApi.releaseRecommendations("cycle 1", { generationId: "generation 1", observationIds: ["observation 1"] });
+    await acApi.regenerateObservationRecommendations("observation 1", { expectedRevision: 3 });
+  } finally { globalThis.fetch = originalFetch; }
+
+  assert.deepEqual(calls, [
+    { input: "/api/evaluation-cycles/cycle%201/recommendations/generate", method: "POST", body: {} },
+    { input: "/api/evaluation-cycles/cycle%201/recommendations/generate", method: "POST", body: { scope: { observationIds: ["observation 1"] } } },
+    { input: "/api/evaluation-cycles/cycle%201/recommendations/release", method: "POST", body: { generationId: "generation 1", observationIds: ["observation 1"] } },
+    { input: "/api/observations/observation%201/recommendations/regenerate", method: "POST", body: { expectedRevision: 3 } },
   ]);
 });
 

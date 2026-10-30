@@ -1,12 +1,13 @@
 import type { ComponentProps } from "react";
 
-export type StatusBadgeStatus = "overdue" | "unmatched" | "incomplete";
+export type StatusBadgeStatus = "overdue" | "unmatched" | "incomplete" | "alert";
 
 export type StatusBadgeProps = ComponentProps<"span"> & {
   status: StatusBadgeStatus;
 };
 
 const statuses = {
+  alert: { label: "Alert", classes: "bg-neutral-bg text-ink" },
   overdue: { label: "Overdue", classes: "bg-danger-bg text-danger" },
   unmatched: { label: "Unmatched", classes: "bg-warning-bg text-warning" },
   incomplete: { label: "Incomplete", classes: "bg-neutral-bg text-ink" },

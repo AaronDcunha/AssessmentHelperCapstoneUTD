@@ -317,7 +317,8 @@ GET /api/evaluation-cycles/{cycleId}/signups (COMPLETED -- Issue #67 read only).
   R: List<{signupId,observationId:string|null,observee:{id,name,email},section:Section,
     proposedMeetings:[{id,sectionId,date,startsAt:string|null,endsAt:string|null,
       timeZone:string|null,location:string|null}],signedUpAt,observationRevision:number|null,
-    recommendationGenerationId:string|null,recommendationsReleasedAt:string|null}>.
+    recommendationGenerationId:string|null,recommendationsReleasedAt:string|null,
+    currentDraftListId:string|null,currentReleasedListId:string|null}>.
   Observee id is the AppUser UUID. Proposed meeting id is the persisted time-option
   UUID; metadata is the stored snapshot, including nulls for incomplete old rows.
   No reconstructed meeting IDs/times, availability flag, match outcome, generated
@@ -333,13 +334,32 @@ GET /api/evaluation-cycles/{cycleId}/signups (COMPLETED -- Issue #67 read only).
 
 4. MATCHING AND INVITATIONS
 ===========================
-POST /api/evaluation-cycles/{cycleId}/recommendations/generate -- scoped AC/Admin.
-  B: {scope?:{departmentId?,professorIds?:string[]}}.
+October 28 Issue #67 FOUNDATION OVERRIDE (implemented; proposals below otherwise remain):
+Generation POST accepts optional selected-observation/department/professor scope and returns {generationId,generatedCount}.
+It generates only initial unreleased/unpaired observations before the observation
+deadline and after signup closes; signed/assessment-started observations are excluded.
+Repeated initial generation preserves old drafts/candidate IDs and points to a new
+draft. Existing release accepts {generationId,observationIds?}, returning
+{releasedObservationIds}; the selected/all initial batch commits atomically.
+It publishes only a current uncontacted draft. Already released lists retry without
+duplicate notification; replacement publication returns 409 and is not enabled.
+All Faculty reads/actions/counts/workers require current released membership and
+list publication; observation release timestamps alone never grant access.
+The future regenerate endpoint, release-operation retry contract and selected-
+assignment archival are not implemented by this foundation. Aaron's approved
+future replacement publication cancels old invitations while preserving history;
+regeneration does not cancel. Reassignment is allowed only before assessment work
+starts, never by overwriting signed/partially signed/completed/closed observations.
+POST /api/evaluation-cycles/{cycleId}/recommendations/generate -- scoped AC/Admin. (COMPLETED; current response is generationId/generatedCount)
+  B: {scope?:{departmentId?,professorIds?:string[],observationIds?:string[]}}.
+  observationIds selects 1–500 exact signup observations in this cycle; unavailable,
+  paired, released or non-pending selections reject before writes. Generation remains
+  available only after signup closes and before the observation deadline.
   R: {generationId,cycleId,status,generatedCount,insufficientCount,unmatchedCount,
     generatedAt}; or 202 + operation tracking if asynchronous.
   After signup closes: up to five eligible, same-department/course-level candidates
   available for proposed meetings, excluding self. Ranking/overlap/capacity TBD.
-POST /api/evaluation-cycles/{cycleId}/recommendations/release -- scoped AC/Admin.
+POST /api/evaluation-cycles/{cycleId}/recommendations/release -- scoped AC/Admin. (COMPLETED; current response is releasedObservationIds)
   B: {generationId,observationIds?:string[]}.
   R: {releaseId,releasedObservationIds:string[],releasedAt,notificationCount}.
   Distinct from generation; create notifications idempotently.
@@ -351,11 +371,13 @@ GET /api/observations/{observationId}/candidates (PHASE 1 COMPLETED -- AC read o
   observation-detail grant. Provisional university-wide AC scope; no role-name
   shortcut. Own-read/released-own grants, signup, candidacy and observer membership
   do not authorize this route, even after release. Existing Faculty APIs unchanged.
-  Q: responseStatus?,cursor?,limit? (20 default, 100 maximum). Only one nonempty
+  Q: listId?,responseStatus?,cursor?,limit? (20 default, 100 maximum). Only one nonempty
   value per key. responseStatus matches the actual latest attempt's uppercase
   stored status, not an older attempt or the candidate's combined status. Null
   means no attempt; ELIGIBLE is returned as candidate status, not a response.
   R: {observationId,observationRevision,generationId:string|null,releasedAt:string|null,
+    currentDraftListId:string|null,currentReleasedListId:string|null,
+    list:{id,generationId:string|null,generatedAt:string|null,publishedAt:string|null,origin}|null,
     proposedMeetings:[{id,sectionId,date,startsAt:string|null,endsAt:string|null,
       timeZone:string|null,location:string|null}],items:[{id,observationId,
       professor:{id,name},status,responseStatus:string|null,outcome:string|null,
@@ -381,15 +403,21 @@ GET /api/observations/{observationId}/candidates (PHASE 1 COMPLETED -- AC read o
   Shared availableOption/observerAvailable compute current compatible persisted
   UUIDs. Stored proposal metadata stays nullable, including when the existing
   validator resolves a legacy proposal from the current stored schedule.
-  generationId/releasedAt are raw single-list observation markers, not separate
-  draft/released versions. No regeneration, selection, notification or write occurs.
+  listId selects an AC-authorized list within this observation (foreign/missing 404).
+  Default is current draft, otherwise current release, otherwise empty/null list.
+  Cursors and response filters are list-scoped. Explicit listId permits preserved
+  draft/history/unclassified-import reads; Faculty own grants still cannot access.
+  generationId/releasedAt remain raw legacy observation markers; selected list
+  metadata provides its own nullable generation/publication values. No generation,
+  selection, notification or write occurs during this GET.
   Repeatable-read HTTP transaction; private/no-store on success and errors. Existing
   observation with no candidates returns 200 empty items; missing observation 404;
   malformed UUID/limit 422; query/cursor errors 400; missing grant 403; no active
   identity 401; dependency failure sanitized 503. Inconsistent section/cycle or
   accepted option ownership returns 409. See AC_OBSERVER_SELECTION_BACKEND.md.
-  Deferred: own-observee released-list reads, versioned draft/released membership,
-  regeneration-after-release/invitations and the final response/outcome enums.
+  Deferred: new own-observee endpoint access, replacement generation/publication,
+  assignment archival and the final response/outcome enums. Membership and pointer
+  foundations/current-release Faculty guards are implemented.
 POST /api/observations/{observationId}/invitations -- own observee.
   B: {candidateIds:string[],expectedRevision}.
   R: {observationId,attempts:Attempt[],revision}.
@@ -559,8 +587,17 @@ GET /api/evaluation-cycles/{cycleId}/metrics -- scoped AC/Admin.
   Q: departmentId? if supported. R: {cycleId,available,availableAt,generatedAt,
     formulaVersion,metrics:[{key,label,value:number|null,unit,numerator?,denominator?,
     unavailableReason?}]}.
-  Operational counts are live; final KPIs follow feedback deadline. Return unavailable
-  rather than invented values. All KPI formulas/denominators remain to be agreed.
+  October 29 #76: implemented using Aaron's October 26 issue #76 calculation guide.
+  Q also accepts hiringLevelId. source:database, reportingMode:live-recalculation,
+  formulaVersion:kpi-2026-10-26. All seven metrics return numerator/denominator;
+  percentage zero denominators return null/N/A. List sufficiency uses unit:matches,
+  not percent, and is unavailable for incomplete/ambiguous generation. Matching
+  accuracy reuses Faculty matching against current data, not historical snapshots.
+  Participation Due is reconstructed from pre-cycle history/current rank. counts
+  includes baselineNeedsReview and generated/notGenerated/ambiguous list counts.
+  Reports add byHiringLevel.pendingStages and unmatchedFaculty signup records,
+  including signups without observations. Values stay live after feedbackDeadline;
+  no historical eligibility/rank/schedule snapshot or immutable final report exists.
 POST /api/evaluation-cycles/{cycleId}/notifications (COMPLETED); scoped AC/Admin reminders.
   B: {kind,recipientFilter:{evaluationStatus?,observationStatus?,departmentId?,
     hiringLevelId?,professorIds?},channels?:('inApp'|'email')[],message?}.
@@ -741,3 +778,18 @@ email, independently of alerts.manage. Admin and custom committee roles with
 observations.read plus notifications.send remain included. Duplicate role membership
 does not duplicate delivery. Messages include sender and full text; observation
 access remains independently enforced. Multiple messages/retry keys remain supported.
+October 30 KPI report response addendum:
+GET /api/evaluation-cycles/{cycleId}/reports returns byHiringLevel[].overdue
+(evaluation eligibility count) and overdueStages (pending-stage counts past the
+observation deadline). outstandingObservations contains observationId, signupId,
+hiringLevelId, stage, overdue and deadline. Upcoming appointments, cancelled work,
+finalized assessments and reported non-occurrence are not overdue pending actions.
+Unmatched faculty stages disregard cancelled observations' generations/releases.
+These flags do not change the evaluation-overdue formula or signup cutoff.
+
+October 29, 2026 implemented semester lifecycle extension:
+POST /api/semesters {year,season,startsOn,endsOn,timeZone}; DELETE /api/semesters/{semesterId}
+{expectedRevision,expectedCycleRevision}, null cycle revision only when no cycle exists.
+Both require cycles.manage and existing same-origin JSON controls. Delete atomically
+removes the semester, its evaluation cycle and dependent course/workflow records.
+See FACULTY_INTEGRATION_FIXES.md for full behavior, retention and verification.

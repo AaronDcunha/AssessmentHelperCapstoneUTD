@@ -1,6 +1,6 @@
 export type Page<T> = { items: T[]; pageInfo: { nextCursor: string | null; hasMore: boolean } };
 
-export type UserSummary = { id: string; name?: string | null; displayName?: string | null; username?: string | null };
+export type UserSummary = { id: string; name?: string | null; displayName?: string | null; username?: string | null; email?: string | null };
 export type Semester = { id: string; name: string; year?: number | null; season?: string | null; startsOn: string | null; endsOn: string | null; timeZone: string; revision: number };
 export type Cycle = {
   id: string; semesterId?: string;
@@ -12,7 +12,9 @@ export type Cycle = {
 export type ReportsResponse = {
   cycleId: string; asOf?: string; definitionsVersion?: string;
   summary: { facultyDue: number | null; overdue: number | null; unmatched: number; incomplete: number; needsReview?: number };
-  byHiringLevel: Array<{ hiringLevelId: string; name: string; due: number | null; outstanding: number; needsReview?: number }>;
+  byHiringLevel: Array<{ hiringLevelId: string; name: string; due: number | null; overdue?: number; outstanding: number; needsReview?: number; pendingStages?: Record<string, number>; overdueStages?: Record<string, number> }>;
+  outstandingObservations?: Array<{ observationId: string; signupId: string; hiringLevelId: string; stage: string; overdue: boolean; deadline: string }>;
+  unmatchedFaculty?: Array<{ signupId: string; professor: UserSummary; signupDate: string; course: string; section: string; stage: string }>;
   availableViews?: string[];
 };
 export type FacultyStatusItem = {
@@ -23,17 +25,52 @@ export type FacultyStatusItem = {
 export type AttentionItem = {
   id: string; faculty: UserSummary;
   issue: "overdue" | "unmatched" | "incomplete" | "alert" | "expiredApproval";
-  observationStatus: string | null; observationId?: string | null;
+  observationStatus: string | null; observationId?: string | null; alertId?: string | null;
 };
 export type ObservationMeeting = {
-  id: string; sectionId: string; date: string; startsAt: string; endsAt: string;
-  timeZone: string; location?: string | null; available?: boolean; reason?: string | null;
+  id: string; sectionId: string; date: string; startsAt: string | null; endsAt: string | null;
+  timeZone: string | null; location?: string | null; available?: boolean; reason?: string | null;
+};
+export type ObserverSelectionSignup = {
+  signupId: string; observationId: string | null; observee: UserSummary;
+  observationRevision?: number | null;
+  currentDraftListId?: string | null; currentReleasedListId?: string | null;
+  section: {
+    id: string; sectionNumber: string; semesterId?: string;
+    course: { id?: string; code: string; title?: string; departmentId?: string; level?: number };
+  };
+  proposedMeetings: ObservationMeeting[]; signedUpAt: string;
+};
+export type ObservationCandidate = {
+  id: string; observationId: string; professor: UserSummary;
+  status?: string;
+  availableMeetingOptionIds: string[]; responseStatus?: string | null; outcome?: string | null;
+  acceptedMeetingOptionId?: string | null;
+  courseHistory?: Array<{course:{id:string;code:string;title:string;departmentId:string;level:number};semester:{id:string;name:string}}> | null;
+};
+export type ObservationCandidatesResponse = {
+  observationId: string; generationId?: string | null; releasedAt: string | null;
+  observationRevision?: number;
+  currentDraftListId?: string | null; currentReleasedListId?: string | null;
+  list?: {id:string;generationId:string|null;generatedAt:string|null;publishedAt:string|null;origin:string} | null;
+  proposedMeetings: ObservationMeeting[]; items: ObservationCandidate[];
+  pageInfo: { nextCursor: string | null; hasMore: boolean };
+};
+export type RecommendationGenerationResponse = {
+  generationId: string; cycleId?: string; status?: string; generatedCount: number;
+  insufficientCount?: number; unmatchedCount?: number; generatedAt?: string;
+};
+export type RecommendationReleaseResponse = {
+  releaseId?: string; releasedObservationIds: string[]; releasedAt?: string; notificationCount?: number;
+};
+export type RecommendationRegenerationResponse = {
+  generationId: string; observationId: string; candidateCount: number; unmatched: boolean; revision: number;
 };
 export type ObservationItem = {
   id: string; observee?: UserSummary | null; observer?: UserSummary | null;
   course?: { code?: string; title?: string; name?: string } | string | null;
   section?: { course?: { code?: string; title?: string; name?: string } | null } | null;
-  status?: string | null; assessmentStatus?: string | null;
+  status?: string | null; assessmentStatus?: string | null; revision?: number;
   scheduledMeeting?: ObservationMeeting | null;
 };
 export type ObservationDetail = {
@@ -64,7 +101,9 @@ export type ObservationAssessmentResponse = {
 export type MetricsResponse = {
   cycleId: string; available: boolean; availableAt?: string | null; generatedAt?: string | null;
   formulaVersion?: string | null;
-  metrics: Array<{ key: string; label: string; value: number | null; unit?: string; unavailableReason?: string }>;
+  reportingMode?: string;
+  counts?: { baselineNeedsReview: number };
+  metrics: Array<{ key: string; label: string; value: number | null; unit?: string; numerator?: number; denominator?: number | null; unavailableReason?: string }>;
 };
 export type CycleWrite = { semesterId: string; signupDeadline: string; observationDeadline: string; feedbackDeadline: string };
 export type HiringLevel = { id: string; name: string; evaluationIntervalYears?: number; active?: boolean };
@@ -114,6 +153,24 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
 
 const cyclePath = (cycleId: string) => `/api/evaluation-cycles/${encodeURIComponent(cycleId)}`;
 
+async function requestCandidates(observationId: string, filters: { listId?: string; responseStatus?: string }) {
+  const path = `/api/observations/${encodeURIComponent(observationId)}/candidates`;
+  const first = await requestJson<ObservationCandidatesResponse>(path + queryString(filters));
+  if (!first || !Array.isArray(first.items) || typeof first.pageInfo?.hasMore !== "boolean") throw new ApiRequestError("Invalid candidate response.");
+  const items = [...first.items], cursors = new Set<string>();
+  let page = first;
+  while (page.pageInfo.hasMore) {
+    const cursor = page.pageInfo.nextCursor, listId = first.list?.id;
+    if (!cursor || cursors.has(cursor) || !listId) throw new ApiRequestError("Candidate pagination could not be completed.");
+    cursors.add(cursor);
+    page = await requestJson<ObservationCandidatesResponse>(path + queryString({ ...filters, listId, cursor }));
+    if (!page || !Array.isArray(page.items) || typeof page.pageInfo?.hasMore !== "boolean") throw new ApiRequestError("Invalid candidate response.");
+    if (page.list?.id !== listId) throw new ApiRequestError("The recommendation list changed. Refresh before continuing.", 409);
+    items.push(...page.items);
+  }
+  return { ...first, items, pageInfo: { hasMore: false, nextCursor: null } };
+}
+
 // Keep array-based page components, but unwrap the contract envelope and follow
 // every cursor so filters and "all semesters" do not silently omit later pages.
 async function requestList<T>(path: string, paginated = true): Promise<T[]> {
@@ -145,12 +202,23 @@ export const acApi = {
   sendReminders: (cycleId:string,body:{kind:string;recipientFilter:Record<string,unknown>;channels:string[];message:string},key:string) => requestJson<{recipientCount:number;notificationCount:number;emailQueuedCount:number;status:string}>(`/api/evaluation-cycles/${encodeURIComponent(cycleId)}/notifications`,{method:"POST",headers:{"Idempotency-Key":key},body:JSON.stringify(body)}),
   getEvaluationCycles: (filters: { semesterId?: string; status?: string } = {}) => requestList<Cycle>(`/api/evaluation-cycles${queryString(filters)}`),
   getEvaluationCycle: (cycleId: string) => requestJson<Cycle>(cyclePath(cycleId)),
+  createSemester: (body: { year: number; season: string; startsOn: string; endsOn: string; timeZone: string }) => requestJson<Semester>("/api/semesters", { method: "POST", body: JSON.stringify(body) }),
+  deleteSemester: (id: string, body: { expectedRevision: number; expectedCycleRevision: number | null }) => requestJson<{ deleted: boolean }>(`/api/semesters/${encodeURIComponent(id)}`, { method: "DELETE", body: JSON.stringify(body) }),
   getSemesters: () => requestList<Semester>("/api/semesters"),
   getReports: (cycleId: string, filters: { departmentId?: string; hiringLevelId?: string } = {}) => requestJson<ReportsResponse>(`${cyclePath(cycleId)}/reports${queryString(filters)}`),
   getFacultyStatus: (cycleId: string, filters: { hiringLevelId?: string; evaluationStatus?: string } = {}) => requestList<FacultyStatusItem>(`${cyclePath(cycleId)}/faculty-status${queryString(filters)}`),
   getAttention: (cycleId: string, filters: { issue?: string; departmentId?: string } = {}) => requestList<AttentionItem>(`${cyclePath(cycleId)}/attention${queryString(filters)}`),
   getObservations: (cycleId: string, filters: { status?: string; assessmentStatus?: string } = {}) => requestList<ObservationItem>(`${cyclePath(cycleId)}/observations${queryString(filters)}`),
-  getMetrics: (cycleId: string, filters: { departmentId?: string } = {}) => requestJson<MetricsResponse>(`${cyclePath(cycleId)}/metrics${queryString(filters)}`),
+  getObserverSelectionSignups: (cycleId: string) => requestList<ObserverSelectionSignup>(`${cyclePath(cycleId)}/signups`),
+  generateRecommendations: (cycleId: string, body: { scope?: { departmentId?: string; professorIds?: string[]; observationIds?: string[] } } = {}) =>
+    requestJson<RecommendationGenerationResponse>(`${cyclePath(cycleId)}/recommendations/generate`, { method: "POST", body: JSON.stringify(body) }),
+  releaseRecommendations: (cycleId: string, body: { generationId: string; observationIds?: string[] }) =>
+    requestJson<RecommendationReleaseResponse>(`${cyclePath(cycleId)}/recommendations/release`, { method: "POST", body: JSON.stringify(body) }),
+  regenerateObservationRecommendations: (observationId: string, body: { reason?: string; expectedRevision: number }) =>
+    requestJson<RecommendationRegenerationResponse>(`/api/observations/${encodeURIComponent(observationId)}/recommendations/regenerate`, { method: "POST", body: JSON.stringify(body) }),
+  getObservationCandidates: (observationId: string, filters: { listId?: string; responseStatus?: string } = {}) =>
+    requestCandidates(observationId, filters),
+  getMetrics: (cycleId: string, filters: { departmentId?: string; hiringLevelId?: string } = {}) => requestJson<MetricsResponse>(`${cyclePath(cycleId)}/metrics${queryString(filters)}`),
   getObservation: (observationId: string) => requestJson<ObservationDetail>(`/api/observations/${encodeURIComponent(observationId)}`),
   getObservationTemplate: (observationId: string) => requestJson<AssignedObservationTemplate>(`/api/observations/${encodeURIComponent(observationId)}/template`),
   getObservationAssessment: (observationId: string) => requestJson<ObservationAssessmentResponse>(`/api/observations/${encodeURIComponent(observationId)}/assessment`),

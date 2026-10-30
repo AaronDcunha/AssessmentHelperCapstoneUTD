@@ -3,7 +3,7 @@ import { ConfigurationError, pagination, uuid, type ConfigurationUser } from "..
 import { availableOption, observerAvailable, workflowObservation } from "../services/faculty-invitations";
 import { FacultyActionError } from "../services/faculty-errors";
 
-const allowed = new Set(["responseStatus", "cursor", "limit"]);
+const allowed = new Set(["responseStatus", "cursor", "limit", "listId"]);
 const invalid = (message: string): never => { throw new ConfigurationError(400, "INVALID_QUERY", message); };
 
 function filters(url: URL) {
@@ -17,7 +17,8 @@ function filters(url: URL) {
   // latest attempt's recorded value; never reinterpret SELECTED as a response.
   if (responseStatus && !/^[A-Z][A-Z_]{0,49}$/.test(responseStatus)) invalid("responseStatus must be a stored uppercase attempt status.");
   const { cursor, limit } = pagination(url);
-  return { responseStatus, cursor: cursor?.toLowerCase() ?? null, limit };
+  const listId = url.searchParams.get("listId");
+  return { responseStatus, cursor: cursor?.toLowerCase() ?? null, limit, listId: listId ? uuid(listId).toLowerCase() : null };
 }
 
 const attemptSelect = {
@@ -34,7 +35,7 @@ function teachingTermOrder(code: string): number | null {
 }
 
 /** Phase 1: university-wide AC observation reads only. This does not introduce
- * own-observee access or claim versioned draft/released membership. Call within
+ * own-observee access. Call within
  * a repeatable-read transaction so cursor/status/detail reads share a snapshot. */
 export async function getObservationCandidates(
   db: Prisma.TransactionClient, user: ConfigurationUser, observationId: string, url: URL, now = new Date(),
@@ -51,14 +52,19 @@ export async function getObservationCandidates(
   if (section.semesterId !== record.cycle.semesterId) {
     throw new ConfigurationError(409, "INCONSISTENT_OBSERVATION", "The observation's section and cycle semesters differ.");
   }
+  // Explicit history reads remain AC-only. Default to the current draft, then
+  // current release. Unclassified imports are never silently made current.
+  const listId = query.listId ?? record.currentDraftListId ?? record.currentReleasedListId;
+  const list = listId ? await db.recommendationList.findFirst({ where: { listId, observationId: id } }) : null;
+  if (listId && !list) throw new ConfigurationError(404, "NOT_FOUND", "Recommendation list not found.");
 
   // Filter latest recorded responses before pagination. Filtering attempts by
   // status before taking the latest would incorrectly match superseded windows.
   // Read only small state rows for this observation's existing single list.
-  const states = await db.observationCandidate.findMany({
-    where: { observationId: id }, orderBy: { candidateId: "asc" },
+  const states = list ? await db.observationCandidate.findMany({
+    where: { observationId: id, recommendationListId: list.listId }, orderBy: { candidateId: "asc" },
     select: { candidateId: true, attempts: { orderBy: { number: "desc" }, take: 1, select: { status: true } } },
-  });
+  }) : [];
   const matching = states.filter(candidate => !query.responseStatus || candidate.attempts[0]?.status === query.responseStatus);
   if (query.cursor && !matching.some(candidate => candidate.candidateId === query.cursor)) {
     invalid("Invalid cursor for this observation and response filter.");
@@ -66,7 +72,7 @@ export async function getObservationCandidates(
   const page = matching.filter(candidate => !query.cursor || candidate.candidateId > query.cursor).slice(0, query.limit + 1);
   const hasMore = page.length > query.limit, ids = page.slice(0, query.limit).map(candidate => candidate.candidateId);
   const candidates = ids.length ? await db.observationCandidate.findMany({
-    where: { observationId: id, candidateId: { in: ids } }, orderBy: { candidateId: "asc" },
+    where: { observationId: id, recommendationListId: list!.listId, candidateId: { in: ids } }, orderBy: { candidateId: "asc" },
     select: {
       candidateId: true, observationId: true, professorId: true, status: true,
       invitedAt: true, expiresAt: true, respondedAt: true, acceptedOptionId: true,
@@ -131,6 +137,9 @@ export async function getObservationCandidates(
   }
   return {
     observationId: id, observationRevision: record.workflowRevision,
+    currentDraftListId: record.currentDraftListId, currentReleasedListId: record.currentReleasedListId,
+    list: list ? { id: list.listId, generationId: list.generationId, generatedAt: list.generatedAt?.toISOString() ?? null,
+      publishedAt: list.publishedAt?.toISOString() ?? null, origin: list.origin } : null,
     generationId: record.recommendationGenerationId, releasedAt: record.recommendationsReleasedAt?.toISOString() ?? null,
     proposedMeetings: record.timeOptions.slice().sort((a, b) => a.preferredDate.getTime() - b.preferredDate.getTime() || a.timeOptionId.localeCompare(b.timeOptionId)).map(option => ({
       id: option.timeOptionId, sectionId: section.sectionId, date: option.preferredDate.toISOString().slice(0, 10),

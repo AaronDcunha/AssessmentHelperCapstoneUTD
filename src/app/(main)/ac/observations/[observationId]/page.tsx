@@ -5,5 +5,6 @@ export default async function ObservationDetailsPage({ params, searchParams }: {
   const user = await requireAcPage("ac.detail");
   const { observationId } = await params;
   const query = searchParams ? await searchParams : {};
-  return <ObservationDetails alertId={query.alertId} observationId={observationId} canReadAssessment={user.permissions.includes("assessments.read")} />;
+  return <ObservationDetails alertId={query.alertId} observationId={observationId} canReadAssessment={user.permissions.includes("assessments.read")}
+    {...(query.alertId ? { backHref: "/ac", backLabel: "Back to AC Dashboard" } : {})} />;
 }

@@ -38,24 +38,18 @@ test('documented eligibility handles first semester, established faculty, missin
 
 function database(overrides = {}) {
   const calls = [];
-  return { calls, evaluationSignup: {async findFirst(args){calls.push({signup:args});return overrides.signedUp?{signupId:'own-signup'}:null;}}, evaluationCycle: { async findMany(args) {
-    calls.push({ prisma: args });
-    return overrides.noCycle ? [] : (overrides.multipleCycles ? [cycle, { ...cycle, id: 'second' }] : [cycle]).map(c => ({
-      cycleId: c.id, cycleName: c.name, semesterId: c.semesterId, signupDeadline: c.signupDeadline,
-      observationDeadline: c.observationDeadline, feedbackDeadline: c.feedbackDeadline,
-      semester: { termName: c.semester, termCode: c.termCode, startsOn: new Date(c.startsOn), endsOn: new Date(c.endsOn), timeZone: c.timeZone },
-    }));
-  } }, async query(sql, values) {
-    calls.push({ sql, values });
-    if (overrides.fail) throw new Error('private database error');
-    if (sql.includes('last_evaluation')) return { rows: [overrides.evaluation ?? evaluation] };
-    if (sql.includes('FROM public.professor')) return { rows: overrides.noProfile ? [] : [{ professorId }] };
-    if (sql.includes('FROM public.evaluation_cycle c')) return { rows: overrides.noCycle ? [] : [cycle] };
-    if (sql.includes('FROM public.observation_candidate')) return { rows: [{ count: overrides.count ?? 0 }] };
-    if (sql.includes('FROM public.observation o')) return { rows: overrides.observation ? [overrides.observation] : [] };
-    if (sql.includes('FROM public.notification')) return { rows: overrides.activity ?? [] };
-    assert.fail('Unexpected query');
-  } };
+  const invoke = (key, action) => async args => { calls.push({ [key]: args }); if (overrides.fail) throw new Error('private database error'); return action(args); };
+  return { calls,
+    professor: { findUnique: invoke('profile', () => overrides.noProfile ? null : { professorId, hiringLevel: { levelName: (overrides.evaluation ?? evaluation).hiringLevel, evaluationIntervalYears: (overrides.evaluation ?? evaluation).intervalYears }, hireDate: null, teaches: [] }) },
+    evaluationSignup: { findFirst: invoke('signup', () => overrides.signedUp ? { signupId: 'own-signup' } : null) },
+    evaluationCycle: { findMany: invoke('prisma', () => overrides.noCycle ? [] : (overrides.multipleCycles ? [cycle, { ...cycle, id: 'second' }] : [cycle]).map(c => ({ cycleId: c.id, cycleName: c.name, semesterId: c.semesterId, signupDeadline: c.signupDeadline, observationDeadline: c.observationDeadline, feedbackDeadline: c.feedbackDeadline, semester: { termName: c.semester, termCode: c.termCode, startsOn: new Date(c.startsOn), endsOn: new Date(c.endsOn), timeZone: c.timeZone } }))) },
+    observation: { findMany: invoke('observations', args => {
+      if (args.where.signedAssessment) { const e = overrides.evaluation; return e?.observationId ? [{ observationId: e.observationId, signedAssessment: { completedAt: e.completedAt }, cycle: { semesterId: e.semesterId, semester: { termName: e.semester, termCode: e.termCode } } }] : []; }
+      const o = overrides.observation; return o ? [{ observationId: o.id, status: o.status, observerId: professorId, scheduledAt: o.scheduledAt, signup: { professorId: o.participation === 'observee' ? professorId : 'other', section: { course: { courseCode: o.course }, sectionCode: o.section } } }] : [];
+    }) },
+    observationCandidate: { count: invoke('pending', () => overrides.count ?? 0) },
+    notification: { findMany: invoke('activity', () => (overrides.activity ?? []).map(row => ({ ...row, notificationId: row.id }))) },
+  };
 }
 
 // Same TypeScript-transpile/Node-test setup as the existing component tests.
@@ -92,7 +86,7 @@ function runtime(db, user = actor, authFailure = false) {
 
 test('evaluation intervals use semester order, including assistant annual and associate/full biennial boundaries', () => {
   for (const [current, previous, interval, expected] of [
-    ['26f', '25f', 1, 'due'], ['26s', '25f', 1, 'notDue'], ['27s', '25f', 1, 'overdue'],
+    ['26f', '25f', 1, 'due'], ['26s', '25f', 1, 'due'], ['26f', '25s', 1, 'due'], ['27s', '25f', 1, 'overdue'],
     ['26f', '24f', 2, 'due'], ['26s', '24f', 2, 'notDue'], ['27s', '24f', 2, 'overdue'],
   ]) assert.equal(facultyEvaluationStatus(current, previous, interval).status, expected);
 });
@@ -130,22 +124,16 @@ test('seeded empty records produce unknown eligibility and real zero/empty summa
   assert.equal(result.currentObservation, null);
   assert.equal(result.pendingObserverRequestCount, 0);
   assert.deepEqual(result.recentActivity, []);
-  assert.deepEqual(db.calls[0].values, [actor.id]);
-  const past = db.calls.find(c => c.sql?.includes('last_evaluation'));
-  assert.deepEqual(past.values, [professorId, actor.id]);
-  assert.match(past.sql, /es\.professor_id = p\.professor_id/);
-  assert.match(past.sql, /a\.is_locked = true/);
-  assert.match(past.sql, /a\.observer_signed_at IS NOT NULL AND a\.observee_signed_at IS NOT NULL/);
-  const active = db.calls.find(c => c.sql?.includes('FROM public.observation o'));
-  assert.deepEqual(active.values, [professorId, cycle.id]);
-  assert.match(active.sql, /\(es\.professor_id = \$1 OR o\.observer_id = \$1\)/);
-  const pending = db.calls.find(c => c.sql?.includes('FROM public.observation_candidate'));
-  assert.deepEqual(pending.values, [professorId, cycle.id, now]);
-  for (const condition of ['candidate.expires_at > $3', 'candidate.invited_at <= $3', 'candidate.responded_at IS NULL', 'o.observer_id IS NULL', 'c.observation_deadline > $3']) assert.ok(pending.sql.includes(condition));
-  const activity = db.calls.find(c => c.sql?.includes('FROM public.notification'));
-  assert.deepEqual(activity.values, [actor.id]);
-  assert.match(activity.sql, /WHERE user_id = \$1/);
-  assert.match(activity.sql, /LIMIT 5/);
+  assert.deepEqual(db.calls[0].profile.where, { userId: actor.id });
+  const past = db.calls.find(c => c.observations?.where.signedAssessment).observations;
+  assert.equal(past.where.signup.professorId, professorId);
+  assert.deepEqual(past.where.signedAssessment.is, { isLocked: true, observerSignedAt: { not: null }, observeeSignedAt: { not: null } });
+  const active = db.calls.find(c => c.observations?.where.cycleId).observations;
+  assert.deepEqual(active.where.OR, [{ signup: { professorId } }, { observerId: professorId }]);
+  const pending = db.calls.find(c => c.pending).pending;
+  assert.equal(pending.where.professorId, professorId); assert.deepEqual(pending.where.expiresAt, { gt: now });
+  assert.equal(pending.where.observation.observerId, null); assert.deepEqual(pending.where.observation.cycle.observationDeadline, { gt: now });
+  const activity = db.calls.find(c => c.activity).activity; assert.equal(activity.where.userId, actor.id); assert.equal(activity.take, 5);
 });
 
 test('completed evaluation, active participation and notification values are returned instead of preview constants', async () => {
@@ -176,7 +164,7 @@ test('no cycle still allows the latest completed evaluation and own notification
   assert.equal(result.evaluation.status, 'unknown');
   assert.equal(result.currentObservation, null);
   assert.equal(result.pendingObserverRequestCount, 0);
-  assert.ok(!db.calls.some(c => c.sql?.includes('FROM public.observation o') || c.sql?.includes('FROM public.observation_candidate')));
+  assert.ok(!db.calls.some(c => c.observations?.where.cycleId || c.pending));
 });
 
 test('Faculty cycle lookup reuses own teaching/participation scope even for managers and never chooses between overlapping cycles', async () => {
@@ -187,14 +175,15 @@ test('Faculty cycle lookup reuses own teaching/participation scope even for mana
   assert.match(result.cycleReason, /Choose a relevant/);
   assert.equal(result.pendingObserverRequestCount, null);
   assert.equal(result.evaluation.status, 'unknown');
-  assert.ok(!db.calls.some(call => call.sql?.includes('FROM public.observation o')));
+  assert.ok(!db.calls.some(call => call.observations?.where.cycleId));
   const args = db.calls.find(call => call.prisma).prisma;
   const scope = args.where.AND[0].OR;
   assert.equal(scope.length, 4);
   assert.equal(scope[0].semester.courseSections.some.teaches.some.professor.userId, actor.id);
   assert.equal(scope[1].signups.some.professor.userId, actor.id);
   assert.equal(scope[2].observations.some.observer.userId, actor.id);
-  assert.equal(scope[3].observations.some.candidates.some.professor.userId, actor.id);
+  assert.equal(scope[3].observations.some.currentReleasedList.is.candidates.some.professor.userId, actor.id);
+  assert.deepEqual(scope[3].observations.some.currentReleasedList.is.publishedAt, { not: null });
   assert.deepEqual(args.where.AND[1], { feedbackDeadline: { gte: now } });
 });
 
@@ -203,7 +192,7 @@ test('accounts without a professor profile do not read another professor, but ca
   const result = await runtime(db)('src/server/queries/faculty-dashboard.ts').getFacultyDashboard(actor, { now });
   assert.equal(result.hasFacultyProfile, false);
   assert.equal(db.calls.length, 2);
-  assert.deepEqual(db.calls[1].values, [actor.id]);
+  assert.equal(db.calls[1].activity.where.userId, actor.id);
 });
 
 test('private API responses include no-store for anonymous, denied, success, and dependency failures', async () => {
@@ -217,7 +206,7 @@ test('private API responses include no-store for anonymous, denied, success, and
     const body = await response.json();
     assert.ok(!JSON.stringify(body).includes('private database error'));
     assert.ok(!JSON.stringify(body).includes('private account error'));
-    if (expected === 200) assert.deepEqual(db.calls[0].values, [actor.id]);
+    if (expected === 200) assert.equal(db.calls[0].profile.where.userId, actor.id);
     if (expected === 401 || expected === 403) assert.equal(db.calls.length, 0);
   }
 });

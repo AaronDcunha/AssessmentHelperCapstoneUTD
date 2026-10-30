@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import pg from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
+import { recommendationFixture } from '../recommendation-fixtures.mjs';
 const { PrismaClient } = await import('../../src/generated/prisma/client.ts');
 const { getObservationCandidates } = await import('../../src/server/queries/observation-candidates.ts');
 const connectionUrl = new URL(process.env.DATABASE_URL);
@@ -80,6 +81,9 @@ try {
     scheduledAt: new Date('2026-11-09T16:30:00Z'), scheduledEndsAt: new Date('2026-11-09T17:30:00Z') } });
   const foreignSignup = await db.evaluationSignup.create({ data: { cycleId: cycles[1], professorId: professors[0], sectionId: sections[5] } });
   const foreign = await db.observation.create({ data: { signupId: foreignSignup.signupId, cycleId: cycles[1] } });
+  const targetList = await recommendationFixture(db, target.observationId, { generationId });
+  const appointmentList = await recommendationFixture(db, appointment.observationId, { released: true });
+  const foreignList = await recommendationFixture(db, foreign.observationId);
   const option = await db.observationTimeOption.create({ data: { observationId: target.observationId, preferredDate: new Date('2026-11-09'),
     startsAt: new Date('2026-11-09T16:00:00Z'), endsAt: new Date('2026-11-09T17:15:00Z'), timeZone: 'America/Chicago', location: 'Snapshot room' } });
   const legacy = await db.observationTimeOption.create({ data: { observationId: target.observationId, preferredDate: new Date('2026-11-11') } });
@@ -88,7 +92,7 @@ try {
   const statuses = ['ACCEPTED', 'DECLINED', 'CANCELLED', 'PENDING', 'ELIGIBLE', 'EXPIRED'];
   for (let i = 0; i < statuses.length; i++) {
     const status = statuses[i], candidate = await db.observationCandidate.create({ data: {
-      observationId: target.observationId, professorId: professors[i + 1], status,
+      observationId: target.observationId, recommendationListId: targetList.listId, professorId: professors[i + 1], status,
       acceptedOptionId: status === 'ACCEPTED' ? option.timeOptionId : null,
     } });
     candidates.push(candidate);
@@ -99,16 +103,26 @@ try {
         invitedAt: new Date('2026-10-20T10:00:00Z'), expiresAt: new Date('2026-10-22T10:00:00Z') } });
     }
   }
-  const selected = await db.observationCandidate.create({ data: { observationId: appointment.observationId, professorId: professors[4], status: 'SELECTED' } });
+  const selected = await db.observationCandidate.create({ data: { observationId: appointment.observationId, recommendationListId: appointmentList.listId, professorId: professors[4], status: 'SELECTED' } });
   await db.invitationAttempt.create({ data: { candidateId: selected.candidateId, number: 1, status: 'ACCEPTED', invitedAt: new Date('2026-10-20T10:00:00Z'), expiresAt: new Date('2026-10-22T10:00:00Z') } });
-  const foreignCandidate = await db.observationCandidate.create({ data: { observationId: foreign.observationId, professorId: professors[1] } });
+  const foreignCandidate = await db.observationCandidate.create({ data: { observationId: foreign.observationId, recommendationListId: foreignList.listId, professorId: professors[1] } });
+  const historicalList = await db.recommendationList.create({ data: { observationId: target.observationId, origin: 'LEGACY_IMPORT' } });
+  const historicalCandidate = await db.observationCandidate.create({ data: { observationId: target.observationId, recommendationListId: historicalList.listId, professorId: professors[1] } });
   const fingerprint = async () => JSON.stringify(await Promise.all([
     db.observation.findMany({ orderBy: { observationId: 'asc' } }), db.observationCandidate.findMany({ orderBy: { candidateId: 'asc' } }),
     db.invitationAttempt.findMany({ orderBy: { attemptId: 'asc' } }), db.notification.count(), db.notificationEmail.count(), db.lateAcceptanceApproval.count(),
+    db.recommendationList.findMany({ orderBy: { listId: 'asc' } }),
   ]));
   const before = await fingerprint();
   const all = await list(target.observationId);
   assert.equal(all.items.length, 6); // Read all persisted states, never regenerate/reselect five.
+  assert.equal(all.currentDraftListId, targetList.listId); assert.equal(all.list.id, targetList.listId);
+  assert.ok(!all.items.some(item=>item.id===historicalCandidate.candidateId));
+  const historical = await list(target.observationId,'listId='+historicalList.listId);
+  assert.deepEqual(historical.items.map(item=>item.id),[historicalCandidate.candidateId]);
+  assert.equal(historical.list.generatedAt,null);
+  await assert.rejects(list(target.observationId,'listId='+foreignList.listId),error=>error.status===404);
+  await assert.rejects(list(target.observationId,'cursor='+historicalCandidate.candidateId),error=>error.status===400);
   assert.ok(all.items.every(item => item.observationId === target.observationId));
   assert.ok(!JSON.stringify(all).includes(foreignCandidate.candidateId)); assert.ok(!JSON.stringify(all).includes(foreignOption.timeOptionId));
   assert.equal(all.generationId, generationId); assert.equal(all.releasedAt, null); assert.equal(all.observationRevision, 8);
@@ -150,7 +164,8 @@ try {
     await assert.rejects(list(target.observationId, '', { id: userId, permissions: ['observations.read.own', 'recommendations.read.released.own'] }), error => error.status === 403);
   }
   assert.equal(await fingerprint(), before);
-  await db.observation.update({ where: { observationId: target.observationId }, data: { recommendationsReleasedAt: now } });
+  await db.recommendationList.update({ where: { listId: targetList.listId }, data: { publishedAt: now } });
+  await db.observation.update({ where: { observationId: target.observationId }, data: { recommendationsReleasedAt: now, currentReleasedListId: targetList.listId, currentDraftListId: null } });
   assert.equal((await list(target.observationId)).releasedAt, now.toISOString());
   await assert.rejects(list(target.observationId, '', { id: users[0], permissions: ['recommendations.read.released.own'] }), error => error.status === 403);
   await db.observationCandidate.update({ where: { candidateId: candidates[0].candidateId }, data: { acceptedOptionId: foreignOption.timeOptionId } });
