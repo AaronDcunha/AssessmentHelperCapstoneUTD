@@ -180,7 +180,7 @@ export const acApi = {
   getAttention: (cycleId: string, filters: { issue?: string; departmentId?: string } = {}) => requestList<AttentionItem>(`${cyclePath(cycleId)}/attention${queryString(filters)}`),
   getObservations: (cycleId: string, filters: { status?: string; assessmentStatus?: string } = {}) => requestList<ObservationItem>(`${cyclePath(cycleId)}/observations${queryString(filters)}`),
   getObserverSelectionSignups: (cycleId: string) => requestList<ObserverSelectionSignup>(`${cyclePath(cycleId)}/signups`),
-  generateRecommendations: (cycleId: string, body: { scope?: { departmentId?: string; professorIds?: string[] } } = {}) =>
+  generateRecommendations: (cycleId: string, body: { scope?: { departmentId?: string; professorIds?: string[]; observationIds?: string[] } } = {}) =>
     requestJson<RecommendationGenerationResponse>(`${cyclePath(cycleId)}/recommendations/generate`, { method: "POST", body: JSON.stringify(body) }),
   releaseRecommendations: (cycleId: string, body: { generationId: string; observationIds?: string[] }) =>
     requestJson<RecommendationReleaseResponse>(`${cyclePath(cycleId)}/recommendations/release`, { method: "POST", body: JSON.stringify(body) }),

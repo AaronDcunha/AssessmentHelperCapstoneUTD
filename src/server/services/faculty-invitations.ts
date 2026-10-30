@@ -28,7 +28,7 @@ export async function facultyTransaction<T>(action: (db: Tx) => Promise<T>) {
     throw error;
   }
 }
-const observationInclude = { signup: { include: { professor: true, section: { include: { classMeetings: true, course: true, semester: true } } } }, cycle: true, signedAssessment: true, timeOptions: true } as const;
+const observationInclude = { signup: { include: { professor: { include: { user: true } }, section: { include: { classMeetings: true, course: true, semester: true } } } }, cycle: true, signedAssessment: true, timeOptions: true } as const;
 export async function workflowObservation(db: Tx, id: string) {
   const record = await db.observation.findUnique({ where: { observationId: id }, include: observationInclude });
   if (!record) throw new FacultyActionError("Observation not found.", 404);
@@ -93,14 +93,31 @@ async function invite(db: Tx, candidateId: string, record: ObservationRecord, no
   await notify(db, candidate.professor.userId, "Observation invitation", "You have an observation invitation. Choose an available meeting before its response deadline.", { eventKey: `invitation:${candidateId}:${(latest?.number ?? 0) + 1}`, observationId: record.observationId });
 }
 
-export async function generateRecommendations(user: Identity, cycleId: string) {
+export async function generateRecommendations(user: Identity, cycleId: string, body: unknown = {}) {
   requireFacultyGrants(user, "recommendations.generate"); workflowId(cycleId);
+  const input = workflowInput(body, ["scope"]);
+  const scope = input.scope === undefined ? {} : workflowInput(input.scope, ["observationIds", "professorIds", "departmentId"]);
+  const idList = (value: unknown) => {
+    if (!Array.isArray(value) || value.length === 0 || value.length > 500) throw new FacultyActionError("Select between 1 and 500 signups.", 400);
+    return [...new Set(value.map(workflowId))];
+  };
+  const observationIds = scope.observationIds === undefined ? undefined : idList(scope.observationIds);
+  const professorIds = scope.professorIds === undefined ? undefined : idList(scope.professorIds);
+  const departmentId = scope.departmentId === undefined ? undefined : workflowId(scope.departmentId);
   return facultyTransaction(async db => {
     const cycle = await db.evaluationCycle.findUnique({ where: { cycleId } });
     const now = new Date();
     if (!cycle || cycle.signupDeadline >= now || cycle.observationDeadline <= now) throw new FacultyActionError("Generate recommendations after signup closes and before the observation deadline.");
     const generationId = randomUUID();
-    const records = await db.observation.findMany({ where: { cycleId, observerId: null, recommendationsReleasedAt: null, status: "PENDING" }, orderBy: { observationId: "asc" } });
+    const records = await db.observation.findMany({ where: {
+      cycleId, observerId: null, recommendationsReleasedAt: null, status: "PENDING",
+      ...(observationIds ? { observationId: { in: observationIds } } : {}),
+      ...(professorIds || departmentId ? { signup: {
+        ...(professorIds ? { professorId: { in: professorIds } } : {}),
+        ...(departmentId ? { professor: { departmentId } } : {}),
+      } } : {}),
+    }, orderBy: { observationId: "asc" } });
+    if (observationIds && records.length !== observationIds.length) throw new FacultyActionError("Some selected signups are no longer available for generation. Refresh and select them again.", 409);
     let generatedCount = 0;
     for (const item of records) {
       const record = await workflowObservation(db, item.observationId); open(record, now); await touchObservation(db, record);
@@ -120,7 +137,7 @@ export async function generateRecommendations(user: Identity, cycleId: string) {
       }
       generatedCount += count;
       await db.observation.update({ where: { observationId: record.observationId }, data: { recommendationGenerationId: generationId } });
-      if (count < 5) await notifyCommittee(db, "Observer list needs attention", `Observation ${record.observationId} has ${count} compatible candidates.`, { eventKey: `recommendation-shortfall:${generationId}:${record.observationId}`, observationId: record.observationId });
+      if (count < 5) await notifyCommittee(db, "Observer list needs attention", `${record.signup.professor.user.fullName} has ${count} compatible ${count === 1 ? "candidate" : "candidates"} for their observation.`, { eventKey: `recommendation-shortfall:${generationId}:${record.observationId}`, observationId: record.observationId });
     }
     return { generationId, generatedCount };
   });

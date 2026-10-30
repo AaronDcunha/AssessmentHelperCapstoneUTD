@@ -116,12 +116,14 @@ test("observer-selection mutations use the documented paths, methods and bodies"
   };
   try {
     await acApi.generateRecommendations("cycle 1");
+    await acApi.generateRecommendations("cycle 1", { scope: { observationIds: ["observation 1"] } });
     await acApi.releaseRecommendations("cycle 1", { generationId: "generation 1", observationIds: ["observation 1"] });
     await acApi.regenerateObservationRecommendations("observation 1", { expectedRevision: 3 });
   } finally { globalThis.fetch = originalFetch; }
 
   assert.deepEqual(calls, [
     { input: "/api/evaluation-cycles/cycle%201/recommendations/generate", method: "POST", body: {} },
+    { input: "/api/evaluation-cycles/cycle%201/recommendations/generate", method: "POST", body: { scope: { observationIds: ["observation 1"] } } },
     { input: "/api/evaluation-cycles/cycle%201/recommendations/release", method: "POST", body: { generationId: "generation 1", observationIds: ["observation 1"] } },
     { input: "/api/observations/observation%201/recommendations/regenerate", method: "POST", body: { expectedRevision: 3 } },
   ]);

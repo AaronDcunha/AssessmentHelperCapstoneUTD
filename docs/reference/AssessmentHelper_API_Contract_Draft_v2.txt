@@ -313,7 +313,10 @@ GET /api/evaluation-cycles/{cycleId}/signups -- scoped AC/Admin. (COMPLETED)
 4. MATCHING AND INVITATIONS
 ===========================
 POST /api/evaluation-cycles/{cycleId}/recommendations/generate -- scoped AC/Admin. (COMPLETED; current response is generationId/generatedCount)
-  B: {scope?:{departmentId?,professorIds?:string[]}}.
+  B: {scope?:{departmentId?,professorIds?:string[],observationIds?:string[]}}.
+  observationIds selects 1–500 exact signup observations in this cycle; unavailable,
+  paired, released or non-pending selections reject before writes. Generation remains
+  available only after signup closes and before the observation deadline.
   R: {generationId,cycleId,status,generatedCount,insufficientCount,unmatchedCount,
     generatedAt}; or 202 + operation tracking if asynchronous.
   After signup closes: up to five eligible, same-department/course-level candidates

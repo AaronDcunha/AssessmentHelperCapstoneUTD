@@ -60,7 +60,7 @@ export function CandidateReviewDialog({ open, signup, candidates, loading, error
             <TableCell variant="header" className="w-[300px]!">Course history</TableCell>
             <TableCell variant="header" className="w-[464px]!">Available proposed meetings</TableCell>
           </tr></thead>
-          <tbody>
+          <tbody className="[&_td>div]:min-h-0">
             {candidates?.items.map((candidate) => <tr key={candidate.id} className="border-t border-border">
               <TableCell className="h-11! w-[300px]! py-ah-8!">{candidate.professor.name || candidate.professor.displayName || candidate.professor.username || "—"}</TableCell>
               <TableCell className="h-11! w-[300px]! py-ah-8!">{courseHistoryLabel(candidate)}</TableCell>
