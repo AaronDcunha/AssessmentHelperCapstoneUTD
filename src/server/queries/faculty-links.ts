@@ -1,11 +1,11 @@
 import "server-only";
+import type { Prisma } from "../../generated/prisma/client";
 import type { AccountUser } from "../account-auth";
 import { getPrisma } from "../prisma";
 import { availableOption, observerAvailable, workflowObservation } from "../services/faculty-invitations";
 import { FacultyActionError } from "../services/faculty-errors";
 
-export async function getFacultyLinks(user: AccountUser, cycleId: string, now = new Date()) {
-  const db = getPrisma();
+export async function getFacultyLinks(user: AccountUser, cycleId: string, now = new Date(), db: Prisma.TransactionClient = getPrisma()) {
   const own = user.permissions.includes("recommendations.read.released.own") ? await db.observation.findMany({
     where: { cycleId, signup: { professor: { userId: user.id } }, observerId: null, completedAt: null, status: "PENDING" },
     include: { candidates: { include: { professor: { include: { user: true } }, acceptedOption: true }, orderBy: { candidateId: "asc" } }, timeOptions: true },
@@ -13,6 +13,7 @@ export async function getFacultyLinks(user: AccountUser, cycleId: string, now = 
   const recommendations = own.flatMap(record => !record.recommendationsReleasedAt ? [] : record.candidates.map(candidate => ({
     id: candidate.candidateId, observationId: record.observationId, name: candidate.professor.user.fullName, status: candidate.status,
     acceptedDate: candidate.acceptedOption?.preferredDate.toISOString().slice(0, 10) ?? null,
+    acceptedMeeting: candidate.acceptedOption?.startsAt && candidate.acceptedOption.endsAt && candidate.acceptedOption.timeZone ? { startsAt: candidate.acceptedOption.startsAt.toISOString(), endsAt: candidate.acceptedOption.endsAt.toISOString(), timeZone: candidate.acceptedOption.timeZone } : null,
     dates: record.timeOptions.map(option => option.preferredDate.toISOString().slice(0, 10)),
   })));
   const received = user.permissions.includes("observations.read.own") ? await db.observationCandidate.findMany({

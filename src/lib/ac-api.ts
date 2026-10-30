@@ -178,6 +178,8 @@ export const acApi = {
   sendReminders: (cycleId:string,body:{kind:string;recipientFilter:Record<string,unknown>;channels:string[];message:string},key:string) => requestJson<{recipientCount:number;notificationCount:number;emailQueuedCount:number;status:string}>(`/api/evaluation-cycles/${encodeURIComponent(cycleId)}/notifications`,{method:"POST",headers:{"Idempotency-Key":key},body:JSON.stringify(body)}),
   getEvaluationCycles: (filters: { semesterId?: string; status?: string } = {}) => requestList<Cycle>(`/api/evaluation-cycles${queryString(filters)}`),
   getEvaluationCycle: (cycleId: string) => requestJson<Cycle>(cyclePath(cycleId)),
+  createSemester: (body: { year: number; season: string; startsOn: string; endsOn: string; timeZone: string }) => requestJson<Semester>("/api/semesters", { method: "POST", body: JSON.stringify(body) }),
+  deleteSemester: (id: string, body: { expectedRevision: number; expectedCycleRevision: number | null }) => requestJson<{ deleted: boolean }>(`/api/semesters/${encodeURIComponent(id)}`, { method: "DELETE", body: JSON.stringify(body) }),
   getSemesters: () => requestList<Semester>("/api/semesters"),
   getReports: (cycleId: string, filters: { departmentId?: string; hiringLevelId?: string } = {}) => requestJson<ReportsResponse>(`${cyclePath(cycleId)}/reports${queryString(filters)}`),
   getFacultyStatus: (cycleId: string, filters: { hiringLevelId?: string; evaluationStatus?: string } = {}) => requestList<FacultyStatusItem>(`${cyclePath(cycleId)}/faculty-status${queryString(filters)}`),

@@ -153,6 +153,13 @@ try {
   const acceptance = await Promise.allSettled([invitations.acceptFacultyInvitation(faculty[1], payload1), invitations.acceptFacultyInvitation(faculty[1], payload1)]);
   assert.ok(acceptance.some(result => result.status === 'fulfilled'));
   await invitations.acceptFacultyInvitation(faculty[2], { candidateId: c2.candidateId, meetingOptionId: options[0].timeOptionId, attemptId: attempt2.attemptId });
+  const acceptedWorkspace = await reads.getFacultyWorkflow(faculty[0]);
+  const acceptedMeeting = acceptedWorkspace.links.recommendations.find(c => c.id === c1.candidateId).acceptedMeeting;
+  assert.deepEqual(acceptedMeeting, { startsAt: options[0].startsAt.toISOString(), endsAt: options[0].endsAt.toISOString(), timeZone: options[0].timeZone });
+  const acceptedHtml = renderToStaticMarkup(createElement(FacultyCandidates, { data: acceptedWorkspace, accepted: true }));
+  assert.ok(acceptedHtml.includes('America/Chicago'));
+  const meetingFormatter = new Intl.DateTimeFormat('en-US', { timeStyle: 'short', timeZone: acceptedMeeting.timeZone });
+  assert.ok(acceptedHtml.includes(meetingFormatter.format(new Date(acceptedMeeting.endsAt))));
   const pairing = await Promise.allSettled([c1, c2].map(candidate => invitations.selectFacultyObserver(faculty[0], { candidateId: candidate.candidateId })));
   assert.equal(pairing.filter(result => result.status === 'fulfilled').length, 1);
   const paired = await prisma.observation.findUnique({ where: { observationId: ownRecord.observationId } });
@@ -270,6 +277,15 @@ try {
   assert.ok(assessment.isLocked && assessment.observerSignedAt && assessment.observeeSignedAt);
   assert.equal((await prisma.observation.findUnique({ where: { observationId: paired.observationId } })).status, 'COMPLETED');
   checked('real draft persistence, assigned template edits, sparse scales, separate acknowledgements and concurrent finalization');
+  for (const participant of [observer, faculty[0]]) {
+    const finalizedReview = await forms.getFacultyAssessment(participant);
+    assert.equal(finalizedReview.locked, true); assert.equal(finalizedReview.canEdit, false); assert.equal(finalizedReview.canAcknowledge, false);
+    assert.deepEqual(finalizedReview.responses, responses);
+    const html = renderToStaticMarkup(createElement(load('src/components/observations/faculty-assessment-screen.tsx').FacultyAssessmentScreen, { initial: finalizedReview }));
+    assert.match(html, /type="submit"[^>]*>Next/); assert.ok(!/type="submit"[^>]*\sdisabled=/.test(html));
+  }
+  checked('both participants reopen finalized assessments with retained answers and enabled read-only navigation');
+
   await assert.rejects(participation.submitFacultyFeedback(faculty[0], { observationId: paired.observationId, satisfaction: 4, difficulties: '', suggestions: '' }));
   const deadlineRecord = await freshInvitation(1, 0);
   const deadlinePayload = { candidateId: deadlineRecord.candidate.candidateId, attemptId: deadlineRecord.attempt.attemptId, meetingOptionId: deadlineRecord.record.timeOptions[0].timeOptionId };
@@ -307,6 +323,42 @@ try {
   requestUser = faculty[1]; assert.equal((await route.POST(request('https://foreign.test'))).status, 403);
   requestUser = { ...faculty[1], permissions: [] }; const denied = await route.POST(request('http://localhost')); assert.equal(denied.status, 403); assert.match(denied.headers.get('cache-control'), /no-store/);
   checked('API authentication, direct permission denial, origin and no-store');
+
+  const semesters = load('src/server/services/semesters.ts');
+  const configReads = load('src/server/queries/configuration.ts');
+  const existing = await configReads.getCycle(prisma, committee, cycleId);
+  const { cycleDeadlines, deadlinePayload: settingsPayload } = load('src/lib/ac-configuration.ts');
+  const settings = { ...cycleDeadlines(existing), startsOn: existing.semester.startsOn, endsOn: existing.semester.endsOn };
+  for (let i = 0, baseline = existing; i < 2; i++) {
+    const saved = await configuration.updateSettings(prisma, committee, cycleId, { expectedCycleRevision: baseline.revision, expectedSemesterRevision: baseline.semester.revision, semester: { startsOn: settings.startsOn, endsOn: settings.endsOn }, deadlines: settingsPayload(settings, baseline.semester.timeZone, baseline) });
+    assert.equal(saved.cycle.revision, baseline.revision + 1); assert.equal(saved.semester.revision, baseline.semester.revision + 1);
+    baseline = await configReads.getCycle(prisma, committee, cycleId); assert.equal(baseline.signupDeadline, existing.signupDeadline);
+  }
+  checked('Semester Settings frontend payload saves, reloads and saves again with exact deadlines and revisions');
+  await assert.rejects(semesters.createSemester(prisma, faculty[0], { year: 2098, season: 'Spring', startsOn: '2098-01-01', endsOn: '2098-05-01', timeZone: 'America/Chicago' }));
+  const newSemester = await semesters.createSemester(prisma, committee, { year: 2098, season: 'Spring', startsOn: '2098-01-01', endsOn: '2098-05-01', timeZone: 'America/Chicago' });
+  assert.equal(newSemester.name, 'Spring 2098');
+  await assert.rejects(semesters.createSemester(prisma, committee, { year: 2098, season: 'Spring', startsOn: '2098-01-01', endsOn: '2098-05-01', timeZone: 'America/Chicago' }));
+  await semesters.deleteSemester(prisma, committee, newSemester.id, { expectedRevision: 0, expectedCycleRevision: null });
+  const currentSemester = await prisma.semester.findUnique({ where: { semesterId } });
+  const currentCycle = await prisma.evaluationCycle.findUnique({ where: { cycleId } });
+  await assert.rejects(semesters.deleteSemester(prisma, faculty[0], semesterId, { expectedRevision: currentSemester.revision, expectedCycleRevision: currentCycle.revision }));
+  await assert.rejects(semesters.deleteSemester(prisma, committee, semesterId, { expectedRevision: currentSemester.revision + 1, expectedCycleRevision: currentCycle.revision }));
+  assert.ok(await prisma.signedAssessment.findUnique({ where: { observationId: paired.observationId } }));
+  const failedDeleteDb = {};
+  failedDeleteDb.$transaction = (run, options) => prisma.$transaction(db => run(new Proxy(db, { get(target, key) { if (key === 'semester') return { ...target.semester, delete: async () => { throw new Error('injected delete failure'); } }; return target[key]; } })), options);
+  await assert.rejects(semesters.deleteSemester(failedDeleteDb, committee, semesterId, { expectedRevision: currentSemester.revision, expectedCycleRevision: currentCycle.revision }), /injected/);
+  assert.ok(await prisma.signedAssessment.findUnique({ where: { observationId: paired.observationId } }));
+  assert.deepEqual((await attachments.readFacultyAttachment(faculty[0], uploaded.attachmentId)).bytes, file.bytes);
+  await semesters.deleteSemester(prisma, committee, semesterId, { expectedRevision: currentSemester.revision, expectedCycleRevision: currentCycle.revision });
+  assert.equal(await prisma.semester.findUnique({where:{semesterId}}),null);
+  assert.equal(await prisma.evaluationCycle.findUnique({where:{cycleId}}),null);
+  for(const model of ['evaluationSignup','observation']) assert.equal(await prisma[model].count({where:{cycleId}}),0,model);
+  assert.equal(await prisma.courseSection.count({where:{semesterId}}),0);
+  assert.equal(await prisma.signedAssessment.findUnique({where:{observationId:paired.observationId}}),null);
+  assert.equal(await prisma.feedbackAttachment.findUnique({where:{attachmentId:uploaded.attachmentId}}),null);
+  assert.ok(await prisma.observationTemplate.count()); assert.ok(await prisma.professor.count() >= faculty.length);
+  checked('semester creation, authorization, stale-delete rejection, rollback with retained files and full populated dependency deletion');
   console.log(`Completed ${checks} populated PostgreSQL check groups in disposable database ${databaseName}. Application records unchanged.`);
 } finally {
   await prisma.$disconnect(); await pool.end();

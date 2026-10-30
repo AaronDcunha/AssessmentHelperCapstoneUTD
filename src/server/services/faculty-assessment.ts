@@ -1,7 +1,7 @@
 import "server-only";
-import { randomUUID } from "node:crypto";
 import type { AccountUser } from "../account-auth";
-import { getPool } from "../db";
+import { facultyTransaction, workflowObservation, touchObservation } from "./faculty-invitations";
+import { sendNotification } from "./notification-delivery";
 import { getFacultyAssessment, assessmentView, type AssessmentRow, type AssessmentAnswers, type Criterion, type CommentPrompt } from "../queries/faculty-assessment";
 import { FacultyActionError } from "./faculty-actions";
 
@@ -36,18 +36,11 @@ export async function saveFacultyAssessment(user: AccountUser, body: unknown) {
   const input = body as { action?: unknown; revision?: unknown; responses?: unknown; acknowledged?: unknown } | null;
   if (!input || !["save", "acknowledge"].includes(String(input.action)) || typeof input.revision !== "string"
     || Object.keys(input).some(key => !["action", "revision", "responses", "acknowledged"].includes(key))) throw new FacultyActionError("Invalid form request.", 400);
-  const client = await getPool().connect();
-  try {
-    await client.query("BEGIN");
-    let form = await getFacultyAssessment(user, { database: client });
+  return facultyTransaction(async client => {
+    const form = await getFacultyAssessment(user, { database: client });
     if (!form) throw new FacultyActionError("A scheduled observation, assigned observer and available template are required.");
-    // Every save/acknowledgement serializes through its parent observation, including first saves.
-    await client.query(`SELECT o.observation_id FROM public.observation o JOIN public.evaluation_signup es ON es.signup_id = o.signup_id
-      JOIN public.professor observee ON observee.professor_id = es.professor_id JOIN public.professor observer ON observer.professor_id = o.observer_id
-      WHERE o.observation_id = $1 AND (observee.user_id = $2 OR observer.user_id = $2) FOR UPDATE OF o`, [form.observationId, user.id]);
-    await client.query("SELECT template_id FROM public.observation_template WHERE template_id = $1 FOR SHARE", [form.templateId]);
-    await client.query("SELECT criterion_id FROM public.template_criterion WHERE template_id = $1 FOR SHARE", [form.templateId]);
-    form = await getFacultyAssessment(user, { database: client });
+    const record = await workflowObservation(client, form.observationId);
+    await touchObservation(client, record);
     if (!form || input.revision !== form.revision) throw new FacultyActionError("This form changed. Reload before saving or acknowledging.");
     if (form.locked || (input.action === "save" ? !form.canEdit : !form.canAcknowledge)) throw new FacultyActionError("This action is not available to you on this form.", 403);
     if (input.action === "acknowledge" && input.acknowledged !== true) throw new FacultyActionError("Confirm that the observation occurred before acknowledging.", 400);
@@ -58,20 +51,14 @@ export async function saveFacultyAssessment(user: AccountUser, body: unknown) {
     const observerSignedAt = input.action === "acknowledge" && form.participation === "observer" ? timestamp : form.observerSignedAt ? new Date(form.observerSignedAt) : null;
     const observeeSignedAt = input.action === "acknowledge" && form.participation === "observee" ? timestamp : form.observeeSignedAt ? new Date(form.observeeSignedAt) : null;
     const locked = !!observerSignedAt && !!observeeSignedAt;
-    await client.query(`INSERT INTO public.signed_assessment (assessment_id, observation_id, template_id, responses, observer_signed_at, observee_signed_at, is_locked, completed_at)
-      VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8)
-      ON CONFLICT (observation_id) DO UPDATE SET responses = EXCLUDED.responses, observer_signed_at = EXCLUDED.observer_signed_at,
-        observee_signed_at = EXCLUDED.observee_signed_at, is_locked = EXCLUDED.is_locked, completed_at = EXCLUDED.completed_at
-      WHERE public.signed_assessment.is_locked = false`, [randomUUID(), form.observationId, form.templateId, JSON.stringify(responses), observerSignedAt, observeeSignedAt, locked, locked ? timestamp : null]);
-    if (locked) await client.query("UPDATE public.observation SET status = 'COMPLETED', completed_at = $2 WHERE observation_id = $1", [form.observationId, timestamp]);
-    if (input.action === "acknowledge") await client.query(`INSERT INTO public.notification (notification_id, user_id, title, message, notification_type)
-      SELECT $1, p.user_id, $3, $4, 'ASSESSMENT_UPDATED' FROM public.observation o JOIN public.evaluation_signup es ON es.signup_id = o.signup_id
-      JOIN public.professor p ON p.professor_id = CASE WHEN $5 THEN o.observer_id ELSE es.professor_id END WHERE o.observation_id = $2`,
-    [randomUUID(), form.observationId, locked ? "Observation completed" : "Observation ready for acknowledgement",
-      locked ? "Both participants acknowledged the observation. The assessment is finalized and locked." : "The observer submitted the assessment. You may review it and acknowledge that the observation occurred.", form.participation === "observee"]);
-    await client.query("COMMIT");
+    const data = { responses, observerSignedAt, observeeSignedAt, isLocked: locked, completedAt: locked ? timestamp : null };
+    if (record.signedAssessment) {
+      const updated = await client.signedAssessment.updateMany({ where: { assessmentId: record.signedAssessment.assessmentId, isLocked: false }, data });
+      if (!updated.count) throw new FacultyActionError("The assessment is already locked.");
+    } else await client.signedAssessment.create({ data: { observationId: form.observationId, templateId: form.templateId, ...data } });
+    if (locked) await client.observation.update({ where: { observationId: form.observationId }, data: { status: "COMPLETED", completedAt: timestamp } });
+    if (input.action === "acknowledge") await sendNotification({ email: true, recipients: { userId: form.participation === "observee" ? (await client.professor.findUniqueOrThrow({ where: { professorId: record.observerId! } })).userId : record.signup.professor.userId }, title: locked ? "Observation completed" : "Observation ready for acknowledgement", message: locked ? "Both participants acknowledged the observation. The assessment is finalized and locked." : "The observer submitted the assessment. You may review it and acknowledge that the observation occurred.", type: "ASSESSMENT_UPDATED", observationId: form.observationId, eventKey: `assessment:${form.observationId}:${form.participation}` }, client);
     const row: AssessmentRow = { ...form, responses, scheduledAt: form.scheduledAt ? new Date(form.scheduledAt) : null, observerSignedAt, observeeSignedAt, locked };
     return { form: assessmentView(row, user), message: locked ? "Both acknowledgements are recorded. The form is finalized and locked." : input.action === "save" ? "Draft saved." : "Your acknowledgement is recorded. The other participant must acknowledge separately." };
-  } catch (error) { await client.query("ROLLBACK"); throw error; }
-  finally { client.release(); }
+  });
 }

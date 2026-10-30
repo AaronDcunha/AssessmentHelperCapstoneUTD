@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { SemesterManagement } from "@/components/ac/semester-management";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/form-fields";
 import { Section } from "@/components/ui/section";
@@ -88,9 +89,9 @@ function SelectedSettings({ cycleId }: { cycleId: string }) {
   if (result.error) return <div className="space-y-ah-16"><p role="alert" className="text-danger">{result.error}</p><Button variant="secondary" onClick={() => setRetry(value => value + 1)}>Retry settings</Button></div>;
   return result.data && <SettingsForm key={`${cycleId}-${retry}`} loaded={result.data} />;
 }
-export default function SemesterSettingsPage() {
+export default function SemesterSettingsPage({ canManage = false }: { canManage?: boolean }) {
   const { selectedCycle, selection, loading } = useAcCycle();
   // Keep an already loaded form mounted while context refreshes after saving.
   const id = selectedCycle?.id ?? (loading ? selection : "");
-  return <div className="space-y-ah-24"><CycleSelector />{id && id !== "all" && <SelectedSettings key={id} cycleId={id} />}</div>;
+  return <div className="space-y-ah-24">{canManage && <SemesterManagement />}<CycleSelector />{id && id !== "all" && <SelectedSettings key={id} cycleId={id} />}</div>;
 }

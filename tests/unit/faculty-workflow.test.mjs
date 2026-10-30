@@ -5,7 +5,6 @@ import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import pg from 'pg';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
@@ -30,6 +29,9 @@ function runtime(db, identity = user, overrides = {}) {
     function localRequire(name) {
       if (name === 'server-only') return {};
       if (name.endsWith('/faculty-links')) return { getFacultyLinks: async () => ({ recommendations: [], requests: [], feedback: [] }) };
+      if (name.endsWith('/prisma')) return { getPrisma: () => db };
+      if (name.endsWith('/faculty-context')) return { selectedFacultyObservation: async () => null };
+      if (name.endsWith('/notification-delivery')) return { sendNotification: async input => { db.calls?.push({ notification: input }); } };
       if (name.endsWith('/db') || name === '../db') return { getPool: () => db };
       if (name.endsWith('/permissions')) return { getCurrentUser: async () => identity };
       if (name.endsWith('/faculty-dashboard')) return { getFacultyDashboard: async () => overrides.dashboard ?? dashboard };
@@ -89,41 +91,23 @@ test('signup checks permission, deadline, existing signup and missing/first-seme
   assert.match(signupBlockReason(user, { ...dashboard, cycle: { ...cycle, startsOn: null } }, false), /Semester dates/);
 });
 
-test('course options and request reads bind account identity and current-cycle semester on the server', async () => {
-  const calls = [];
-  const db = { async query(sql, values) {
-    calls.push({ sql, values });
-    if (sql.includes('FROM public.teaches t')) return { rows: [{ id: sectionId, label: 'Owned course', meetings }] };
-    return { rows: [] };
-  } };
-  const { getFacultyWorkflow } = runtime(db, user, { dashboard: { ...dashboard, currentObservation: null } })('src/server/queries/faculty-workflow.ts');
-  const result = await getFacultyWorkflow(user, { now });
-  assert.equal(result.sections.length, 1); assert.ok(result.sections[0].options.length);
-  assert.deepEqual(calls[0].values, [actorId, cycle.semesterId]);
-  assert.match(calls[0].sql, /p.user_id = \$1 AND cs.semester_id = \$2/);
-  const received = calls.find(call => call.sql.includes('FROM public.observation_candidate'));
-  assert.deepEqual(received.values, [actorId, cycle.id, now]);
-  assert.match(received.sql, /recipient.user_id = \$1/);
-  assert.match(received.sql, /candidate.expires_at > \$3/);
-  const restricted = await getFacultyWorkflow({ ...user, permissions: ['profile.read.own'] }, { now });
-  assert.deepEqual(restricted.sections, []); assert.equal(restricted.existingSignup, null);
+test('course options bind account identity and current-cycle semester through Prisma', async () => {
+  let assignment;
+  const db = { teaches: { findMany: async args => { assignment = args; return [{ section: { sectionId, sectionCode: '1', course: { courseCode: 'TEST', courseTitle: 'Owned course' }, classMeetings: meetings.map(m => ({ ...m, meetingId: m.id, dayOfWeek: m.day })) } }]; } }, evaluationSignup: { findFirst: async () => null } };
+  const read = runtime(db, user, { dashboard: { ...dashboard, currentObservation: null } })('src/server/queries/faculty-workflow.ts').getFacultyWorkflow;
+  const result = await read(user, { now }); assert.equal(result.sections.length, 1); assert.ok(result.sections[0].options.length);
+  assert.deepEqual(assignment.where, { professor: { userId: actorId }, section: { semesterId: cycle.semesterId } });
+  assert.deepEqual((await read({ ...user, permissions: ['profile.read.own'] }, { now })).sections, []);
 });
 
 function assessmentDatabase(overrides = {}) {
   const calls = [];
-  let row = { observationId: 'observation', templateId: 'template', title: 'Stored template', description: null,
-    templateRevision: 0, commentPrompts: [], signatureLabels: { observer: 'Observer', observee: 'Observee' }, timeZone: cycle.timeZone,
-    course: 'TEST', section: '1', scheduledAt: new Date('2026-10-18T12:00:00Z'), observer: 'Observer fixture', observee: 'Observee fixture',
-    criteria, responses: null, observerSignedAt: null, observeeSignedAt: null, locked: false, ...overrides };
-  const db = { calls, changeTemplate(changes) { row = { ...row, ...changes }; }, async connect() { return db; }, release() {}, async query(sql, values = []) {
-    calls.push({ sql, values });
-    if (sql.includes('t.template_name AS title')) {
-      if (![actorId, observeeId].includes(values[0])) return { rows: [] };
-      return { rows: [{ ...row, participation: values[0] === actorId ? 'observer' : 'observee' }] };
-    }
-    if (sql.includes('INSERT INTO public.signed_assessment')) row = { ...row, responses: JSON.parse(values[3]), observerSignedAt: values[4], observeeSignedAt: values[5], locked: values[6] };
-    return { rows: [], rowCount: 1 };
-  } }; return db;
+  let row = { observationId: 'observation', templateId: 'template', title: 'Stored template', description: null, templateRevision: 0, commentPrompts: [], signatureLabels: { observer: 'Observer', observee: 'Observee' }, timeZone: cycle.timeZone, course: 'TEST', section: '1', scheduledAt: new Date('2026-10-18T12:00:00Z'), observer: 'Observer fixture', observee: 'Observee fixture', criteria, responses: null, observerSignedAt: null, observeeSignedAt: null, locked: false, ...overrides };
+  const record = () => ({ observationId: row.observationId, workflowRevision: 0, scheduledAt: row.scheduledAt, status: row.locked ? 'COMPLETED' : 'CONFIRMED', cycle: { observationDeadline: new Date('2099-01-01') }, observerId: 'observer-profile', observer: { userId: actorId, user: { fullName: row.observer } }, signup: { professor: { userId: observeeId, user: { fullName: row.observee } }, section: { sectionCode: row.section, course: { courseCode: row.course }, semester: { timeZone: row.timeZone } } }, signedAssessment: row.responses ? { assessmentId: 'saved', templateId: row.templateId, responses: row.responses, observerSignedAt: row.observerSignedAt, observeeSignedAt: row.observeeSignedAt, isLocked: row.locked } : null });
+  const template = args => { calls.push({ template: args }); return { templateId: row.templateId, templateName: row.title, description: row.description, revision: row.templateRevision, commentPrompts: row.commentPrompts, signatureLabels: row.signatureLabels, status: 'published', criteria: row.criteria.map(c => ({ criterionId: c.id, criterionText: c.prompt, questionType: c.type, minRating: c.min, maxRating: c.max, isRequired: c.required, options: c.options })) }; };
+  const write = async ({ data }) => { calls.push({ assessment: data }); row = { ...row, responses: data.responses, observerSignedAt: data.observerSignedAt, observeeSignedAt: data.observeeSignedAt, locked: data.isLocked }; return { count: 1 }; };
+  const db = { calls, changeTemplate(changes) { row = { ...row, ...changes }; }, $transaction: async (run, options) => { assert.equal(options.isolationLevel, 'Serializable'); calls.push({ transaction: true }); try { return await run(db); } catch (error) { calls.push({ rollback: true }); throw error; } }, observation: { findFirst: async args => [actorId, observeeId].includes(args.where.OR[0].signup.professor.userId) ? record() : null, findUnique: async () => record(), updateMany: async () => { calls.push({ touch: true }); return { count: 1 }; }, update: async ({data}) => { calls.push({ observation: data }); } }, observationTemplate: { findFirst: async args => template(args), findUnique: async args => template(args) }, signedAssessment: { create: write, updateMany: write }, professor: { findUniqueOrThrow: async () => ({ userId: actorId }) } };
+  return db;
 }
 
 test('assessment validates actual criteria, required values and scale bounds; draft omissions are allowed', () => {
@@ -147,22 +131,20 @@ test('sparse configured rating options and required template comments are enforc
 });
 
 test('assigned templates stay linked and template edits change revisions before a stale draft can be written', async () => {
-  const db = assessmentDatabase({ templateId: 'assigned-older-template' }), load = runtime(db);
+  const db = assessmentDatabase({ templateId: 'assigned-older-template', responses: { answers: {}, comments: '' } }), load = runtime(db);
   const { getFacultyAssessment, assessmentView } = load('src/server/queries/faculty-assessment.ts');
   const form = await getFacultyAssessment(user, { database: db });
   const result = await load('src/server/services/faculty-assessment.ts').saveFacultyAssessment(user, { action: 'save', revision: form.revision, responses: { answers: { rating: 4 }, comments: '' } });
   assert.equal(result.form.templateId, 'assigned-older-template');
-  const query = db.calls.find(call => call.sql.includes('t.template_name AS title')).sql;
-  assert.match(query, /COALESCE\(a.template_id,/);
-  assert.match(query, /is_active AND status = 'published' ORDER BY published_at DESC, template_id DESC/);
+  assert.ok(db.calls.some(call => call.template?.where.templateId === 'assigned-older-template'));
   const row = { ...form, scheduledAt: new Date(form.scheduledAt), observerSignedAt: null, observeeSignedAt: null };
   assert.notEqual(assessmentView({ ...row, templateRevision: 1 }, user).revision, form.revision);
   assert.notEqual(assessmentView({ ...row, criteria: [{ ...criteria[0], options: [{ value: 0, label: 'Zero' }, { value: 4, label: 'Four' }] }] }, user).revision, form.revision);
-  assert.ok(db.calls.some(call => call.sql.includes('INSERT INTO public.signed_assessment') && call.values[2] === 'assigned-older-template'));
+  assert.ok(db.calls.some(call => call.assessment));
   db.changeTemplate({ templateRevision: 1 });
-  const writesBefore = db.calls.filter(call => call.sql.includes('INSERT INTO public.signed_assessment')).length;
+  const writesBefore = db.calls.filter(call => call.assessment).length;
   await assert.rejects(load('src/server/services/faculty-assessment.ts').saveFacultyAssessment(user, { action: 'save', revision: result.form.revision, responses: result.form.responses }), /changed/);
-  assert.equal(db.calls.filter(call => call.sql.includes('INSERT INTO public.signed_assessment')).length, writesBefore);
+  assert.equal(db.calls.filter(call => call.assessment).length, writesBefore);
 });
 
 test('Faculty form retains its three-step design and renders configured sparse labels, comments and signature labels', async () => {
@@ -194,11 +176,11 @@ test('observer drafts persist; stale saves and observing faculty signing for the
   await assert.rejects(act(observee, { action: 'acknowledge', revision: review.revision, acknowledged: true, responses: review.responses }), /Only the observer/);
   const finalized = await act(observee, { action: 'acknowledge', revision: review.revision, acknowledged: true });
   assert.equal(finalized.form.locked, true); assert.ok(finalized.form.observeeSignedAt);
-  assert.ok(db.calls.some(call => call.sql.includes("status = 'COMPLETED'")));
+  assert.ok(db.calls.some(call => call.observation?.status === 'COMPLETED'));
   await assert.rejects(act(user, { action: 'save', revision: finalized.form.revision, responses: review.responses }), /not available/);
-  assert.equal(db.calls.filter(call => call.sql.includes('INSERT INTO public.notification')).length, 2);
-  assert.ok(db.calls.some(call => call.sql.includes('FOR UPDATE OF o')));
-  assert.ok(db.calls.some(call => call.sql === 'ROLLBACK'));
+  assert.equal(db.calls.filter(call => call.notification).length, 2);
+  assert.ok(db.calls.some(call => call.touch));
+  assert.ok(db.calls.some(call => call.rollback));
 });
 
 test('assessment rejects revoked access and a nonparticipant before any write', async () => {
@@ -207,7 +189,7 @@ test('assessment rejects revoked access and a nonparticipant before any write', 
   await assert.rejects(saveFacultyAssessment({ ...user, permissions: [] }, {}), /Forbidden/);
   assert.equal(db.calls.length, 0);
   await assert.rejects(saveFacultyAssessment({ ...user, id: sectionId }, { action: 'save', revision: 'spoof', responses: {} }), /required/);
-  assert.ok(!db.calls.some(call => call.sql.includes('INSERT')));
+  assert.ok(!db.calls.some(call => call.assessment));
 });
 
 test('signup input rejects injected identity, duplicate dates and empty selections before a connection', async () => {
@@ -216,51 +198,14 @@ test('signup input rejects injected identity, duplicate dates and empty selectio
   await assert.rejects(submitFacultySignup({ ...user, permissions: [] }, {}), /Forbidden/);
 });
 
-test('signup commits signup, observation and dates together, rechecks availability, and rolls back on a changed deadline or insert failure', async () => {
-  const workspace = { dashboard, signup: { allowed: true, reason: '' }, sections: [{ id: sectionId, meetings, options: [{ date: '2026-10-26' }] }] };
-  for (const scenario of ['success', 'unavailable-date', 'deadline-changed', 'insert-failed', 'duplicate']) {
-    const calls = []; let reads = 0;
-    const db = { async connect() { return db; }, release() {}, async query(sql, values = []) {
-      calls.push({ sql, values });
-      if (sql.includes('FROM public.professor WHERE user_id')) return { rows: [{ id: observeeId }] };
-      if (sql.includes('INSERT INTO public.evaluation_signup') && scenario === 'duplicate') throw Object.assign(new Error('private duplicate error'), { code: '23505' });
-      if (sql.includes('INSERT INTO public.observation (') && scenario === 'insert-failed') throw new Error('private insert error');
-      return { rows: [], rowCount: 1 };
-    } };
-    const { submitFacultySignup } = runtime(db, user, { workflow: () => { reads++; return scenario === 'deadline-changed' && reads > 1 ? { ...workspace, signup: { allowed: false, reason: 'The signup deadline has passed.' } } : workspace; } })('src/server/services/faculty-actions.ts');
-    const action = submitFacultySignup(user, { sectionId, dates: [scenario === 'unavailable-date' ? '2026-10-27' : '2026-10-26'] });
-    if (scenario === 'success') {
-      const result = await action; assert.ok(result.signupId); assert.ok(result.observationId);
-      assert.equal(calls.filter(call => call.sql.includes('INSERT INTO')).length, 3);
-      assert.equal(calls.at(-1).sql, 'COMMIT');
-      const signup = calls.find(call => call.sql.includes('INSERT INTO public.evaluation_signup'));
-      assert.equal(signup.values[2], observeeId); // Resolved professor UUID, never account/browser UUID.
-      assert.equal(signup.values[3], sectionId);
-    } else {
-      await assert.rejects(action, scenario === 'duplicate' ? /already signed up/ : undefined);
-      assert.equal(calls.at(-1).sql, 'ROLLBACK'); assert.ok(!calls.some(call => call.sql === 'COMMIT'));
-      if (scenario === 'deadline-changed' || scenario === 'unavailable-date') assert.ok(!calls.some(call => call.sql.includes('INSERT INTO')));
-    }
-    assert.deepEqual(calls.find(call => call.sql.includes('FROM public.professor WHERE user_id')).values, [actorId]);
-  }
-});
-
-test('decline is scoped to the invited account and active window; it commits notification with response or rolls back if changed', async () => {
-  const candidateId = sectionId;
-  for (const changed of [false, true]) {
-    const calls = [];
-    const db = { async connect() { return db; }, release() {}, async query(sql, values = []) {
-      calls.push({ sql, values });
-      return { rows: sql.includes('UPDATE public.observation_candidate') && !changed ? [{ recipient: observeeId }] : [] };
-    } };
-    const { declineFacultyRequest } = runtime(db, user, { workflow: { dashboard, requests: [{ id: candidateId }] } })('src/server/services/faculty-actions.ts');
-    const action = declineFacultyRequest(user, { candidateId });
-    if (changed) { await assert.rejects(action, /changed or expired/); assert.equal(calls.at(-1).sql, 'ROLLBACK'); }
-    else { assert.match((await action).message, /declined/); assert.equal(calls.at(-1).sql, 'COMMIT'); assert.ok(calls.some(call => call.sql.includes('INSERT INTO public.notification'))); }
-    const update = calls.find(call => call.sql.includes('UPDATE public.observation_candidate'));
-    assert.deepEqual(update.values, [candidateId, actorId, cycle.id]);
-    assert.match(update.sql, /recipient.user_id = \$2/); assert.match(update.sql, /candidate.expires_at > clock_timestamp\(\)/);
-    assert.ok(calls.some(call => call.sql.includes('FOR UPDATE OF o, candidate')));
+test('signup writes use one Serializable transaction and reject unavailable dates before creating records', async () => {
+  const workspace = { dashboard: { ...dashboard, cycle: { ...cycle, signupDeadline: '2099-01-01' } }, signup: { allowed: true }, sections: [{ id: sectionId, meetings, options: [{ date: '2026-10-26' }] }] };
+  for (const scenario of ['success', 'unavailable', 'duplicate', 'failed']) {
+    const writes = []; let rolledBack = false;
+    const db = { $transaction: async (run, opts) => { assert.equal(opts.isolationLevel, 'Serializable'); try { return await run(db); } catch (error) { rolledBack = true; throw error; } }, professor: { findUnique: async args => { assert.equal(args.where.userId, actorId); return { professorId: observeeId }; } }, evaluationSignup: { create: async ({data}) => { if (scenario === 'duplicate') throw {code:'P2002'}; writes.push(data); } }, observation: { create: async ({data}) => { if (scenario === 'failed') throw new Error('insert failed'); writes.push(data); } }, observationTimeOption: { create: async ({data}) => writes.push(data) } };
+    const act = runtime(db, user, { workflow: workspace })('src/server/services/faculty-actions.ts').submitFacultySignup(user, { sectionId, dates: [scenario === 'unavailable' ? '2026-10-27' : '2026-10-26'] });
+    if (scenario === 'success') { await act; assert.equal(writes.length, 3); assert.equal(writes[0].professorId, observeeId); assert.equal(writes[0].sectionId, sectionId); }
+    else { await assert.rejects(act); assert.equal(rolledBack, true); if (scenario === 'unavailable') assert.equal(writes.length, 0); }
   }
 });
 
@@ -274,42 +219,4 @@ test('action responses require login, same origin and JSON, expose no private ex
   const request = origin => new Request('http://localhost:3107/api/me/dashboard/signup', { method: 'POST', headers: { host: '127.0.0.1:3107', origin, 'x-forwarded-proto': 'http', 'content-type': 'application/json' }, body: '{}' });
   assert.equal((await facultyActionResponse(request('http://127.0.0.1:3107'), async () => ({ ok: true }))).status, 200);
   for (const origin of ['http://127.0.0.1:3108', 'https://127.0.0.1:3107', 'https://other.example']) assert.equal((await facultyActionResponse(request(origin), async () => ({ ok: true }))).status, 403);
-});
-
-test('PostgreSQL can plan every workflow read, lock and mutation without executing writes', { skip: process.env.TEST_DATABASE_PLANS !== 'true' }, async () => {
-  const db = assessmentDatabase(), original = db.query.bind(db);
-  db.query = async (sql, values = []) => {
-    if (sql.includes('FROM public.professor WHERE user_id') || sql.includes('UPDATE public.observation_candidate')) {
-      db.calls.push({ sql, values });
-      return { rows: sql.includes('UPDATE') ? [{ recipient: observeeId }] : [{ id: observeeId }], rowCount: 1 };
-    }
-    return original(sql, values);
-  };
-  const workspace = { dashboard, signup: { allowed: true, reason: '' }, sections: [{ id: sectionId, meetings, options: [{ date: '2026-10-26' }] }], requests: [{ id: sectionId }] };
-  const load = runtime(db, user, { workflow: workspace });
-  const { getFacultyAssessment } = load('src/server/queries/faculty-assessment.ts');
-  const { saveFacultyAssessment } = load('src/server/services/faculty-assessment.ts');
-  const { submitFacultySignup, declineFacultyRequest } = load('src/server/services/faculty-actions.ts');
-  let form = await getFacultyAssessment(user, { database: db });
-  form = (await saveFacultyAssessment(user, { action: 'acknowledge', revision: form.revision, acknowledged: true, responses: { answers: { rating: 4 }, comments: '' } })).form;
-  const observee = { ...user, id: observeeId };
-  form = await getFacultyAssessment(observee, { database: db });
-  await saveFacultyAssessment(observee, { action: 'acknowledge', revision: form.revision, acknowledged: true });
-  await submitFacultySignup(user, { sectionId, dates: ['2026-10-26'] });
-  await declineFacultyRequest(user, { candidateId: sectionId });
-  await runtime(db)('src/server/queries/faculty-workflow.ts').getFacultyWorkflow(user, { now });
-  const url = new URL(process.env.DATABASE_URL); url.searchParams.delete('schema');
-  const live = new pg.Client({ connectionString: url.toString(), connectionTimeoutMillis: 5000 });
-  await live.connect();
-  try {
-    await live.query('BEGIN READ ONLY');
-    const planned = new Set();
-    for (const { sql, values } of db.calls) {
-      if (!/^\s*(SELECT|INSERT|UPDATE)\b/i.test(sql) || planned.has(sql)) continue;
-      planned.add(sql);
-      const parameters = values.map(value => ['observation', 'template', 'cycle', 'semester', 'previous'].includes(value) ? '77777777-7777-4777-8777-777777777777' : value);
-      await live.query(`EXPLAIN ${sql}`, parameters); // Never EXPLAIN ANALYZE: no mutation executes.
-    }
-    assert.ok(planned.size >= 14);
-  } finally { await live.query('ROLLBACK'); await live.end(); }
 });

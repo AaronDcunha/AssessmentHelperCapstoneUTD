@@ -2,6 +2,7 @@
 // Creates/clears authentication cookies only; no business fixtures are written.
 import assert from 'node:assert/strict';
 import pg from 'pg';
+import { facultyEligibility } from '../../src/server/services/faculty-evaluation.ts';
 
 const base = process.env.TEST_BASE_URL ?? 'http://localhost:3000';
 const url = new URL(process.env.DATABASE_URL);
@@ -56,7 +57,15 @@ try {
         WHERE o.observation_id = $1 AND p.user_id = $2 AND a.is_locked
           AND a.observer_signed_at IS NOT NULL AND a.observee_signed_at IS NOT NULL`, [data.evaluation.lastCompletedEvaluation.observationId, user.id]);
       assert.equal(own.rows.length, 1);
-    } else assert.equal(data.evaluation.status, 'unknown');
+    } else {
+      const evidence = await db.query(`SELECT p.hire_date, h.evaluation_interval_years,
+        ARRAY(SELECT DISTINCT s.term_code FROM public.teaches t JOIN public.course_section cs ON cs.section_id=t.section_id
+          JOIN public.semester s ON s.semester_id=cs.semester_id WHERE t.professor_id=p.professor_id) AS terms
+        FROM public.professor p JOIN public.hiring_level h ON h.hiring_level_id=p.hiring_level_id WHERE p.user_id=$1`,[user.id]);
+      const row=evidence.rows[0];
+      const expected=facultyEligibility(data.cycle,null,row?.evaluation_interval_years??null,row?.hire_date?new Date(row.hire_date):null,row?.terms??[]);
+      assert.equal(data.evaluation.status,expected.status);
+    }
     if (data.currentObservation) {
       const own = await db.query(`SELECT 1 FROM public.observation o
         JOIN public.evaluation_signup es ON es.signup_id = o.signup_id

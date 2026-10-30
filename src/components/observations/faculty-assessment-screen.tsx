@@ -26,7 +26,9 @@ export function FacultyAssessmentScreen({ initial, unavailable = false }: { init
   return <div className="space-y-ah-24">
     <p id="form-step" tabIndex={-1} className="text-muted">Step {step} of 3 · {["Scale questions", "Long response questions", "Comments and signatures"][step - 1]}</p>
     <form noValidate className="space-y-ah-24" onSubmit={async event => {
-      event.preventDefault(); if (pending || current.locked) return;
+      event.preventDefault(); if (pending) return;
+      if (step < 3 && current.locked) { move(step + 1); return; }
+      if (current.locked) return;
       if (step < 3 && !current.canEdit) { move(step + 1); return; }
       const questions = step === 1 ? ratings : step === 2 ? text : [];
       if (current.canEdit && questions.some(question => question.required && (responses.answers[question.id] === undefined || String(responses.answers[question.id]).trim() === ""))) { setFeedback("Complete the required questions before continuing."); return; }
@@ -64,7 +66,7 @@ export function FacultyAssessmentScreen({ initial, unavailable = false }: { init
         {current.locked && <p role="status">This form is finalized and locked.</p>}
       </div>
       {feedback && <p role="status" className="rounded-ah-8 bg-neutral-bg p-ah-16 text-ink">{feedback}</p>}
-      <div className="flex flex-wrap gap-ah-16">{step > 1 && <Button variant="secondary" className="min-w-[200px]" disabled={pending} onClick={() => move(step - 1)}>Back</Button>}<Button type="submit" className="min-w-[240px]" disabled={pending || current.locked || (step === 3 && !current.canAcknowledge)} aria-busy={pending}>{pending ? "Saving…" : step === 3 ? "Submit Form" : "Next"}</Button><ButtonLink variant="secondary" href={facultyRoutes.details}>Cancel</ButtonLink></div>
+      <div className="flex flex-wrap gap-ah-16">{step > 1 && <Button variant="secondary" className="min-w-[200px]" disabled={pending} onClick={() => move(step - 1)}>Back</Button>}<Button type="submit" className="min-w-[240px]" disabled={pending || (step === 3 && (current.locked || !current.canAcknowledge))} aria-busy={pending}>{pending ? "Saving…" : step === 3 ? "Submit Form" : "Next"}</Button><ButtonLink variant="secondary" href={facultyRoutes.details}>Cancel</ButtonLink></div>
     </form>
   </div>;
 }

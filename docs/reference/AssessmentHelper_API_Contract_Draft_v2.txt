@@ -699,3 +699,10 @@ hiringLevelId, stage, overdue and deadline. Upcoming appointments, cancelled wor
 finalized assessments and reported non-occurrence are not overdue pending actions.
 Unmatched faculty stages disregard cancelled observations' generations/releases.
 These flags do not change the evaluation-overdue formula or signup cutoff.
+
+October 29, 2026 implemented semester lifecycle extension:
+POST /api/semesters {year,season,startsOn,endsOn,timeZone}; DELETE /api/semesters/{semesterId}
+{expectedRevision,expectedCycleRevision}, null cycle revision only when no cycle exists.
+Both require cycles.manage and existing same-origin JSON controls. Delete atomically
+removes the semester, its evaluation cycle and dependent course/workflow records.
+See FACULTY_INTEGRATION_FIXES.md for full behavior, retention and verification.
