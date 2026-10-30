@@ -1,4 +1,21 @@
 ASSESSMENT HELPER IMPLEMENTATION NOTES
+October 30, 2026 KPI presentation:
+Reports use equal-height responsive metric cards with explanations inside the card.
+Zero-population messages identify the missing metric-specific data in plain language.
+The dynamic eligibility-review count appears in Participation; the technical snapshot
+paragraph is replaced with a short live-update note. API calculation definitions and
+all formulas remain unchanged. Shared MetricCard descriptions are optional.
+
+October 30, 2026 KPI report review corrections:
+Executive reports now return/display overdue evaluation counts separately by hiring
+level, alongside Due and Needs review. Unfinished observations retain their pending
+stage and a separate overdue-action flag at the cycle observation deadline; future
+appointments and reported non-occurrence are not overdue pending actions. Reports
+include per-stage overdue counts and per-observation stage/deadline/flag data.
+Unmatched stages ignore cancelled generations/releases. Evaluation eligibility and
+signup cutoffs are unchanged. Regression coverage includes isolated PostgreSQL
+rank totals, deadline flags and cancelled-release cases. Faculty History is unchanged.
+
 October 29, 2026 cycle-list action presentation:
 Replaced the ellipsis dropdown with a direct Edit Cycle link in a dedicated Action
 column, using the shared secondary button. Editing no longer opens an overflowing

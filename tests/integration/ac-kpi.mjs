@@ -76,6 +76,11 @@ try {
   assert.equal(report.summary.incomplete,2);
   assert.equal(report.byHiringLevel[0].pendingStages['reported-not-occurred'],1);
   assert.equal(report.summary.needsReview,1);
+  assert.equal(report.byHiringLevel[0].overdue, report.summary.overdue);
+  assert.ok(report.outstandingObservations.every(o => !o.overdue), 'Pending work before deadline is not overdue');
+  const cancelledRelease = await db.observation.create({ data: { cycleId, signupId: signups[3].signupId, status: 'CANCELLED', recommendationGenerationId: randomUUID(), recommendationsReleasedAt: new Date() } });
+  assert.equal((await read('reports')).unmatchedFaculty.find(s => s.signupId === signups[3].signupId).stage, 'awaiting-generation');
+  await db.observation.delete({ where: { observationId: cancelledRelease.observationId } });
   await db.observation.create({ data:{ cycleId, signupId:signups[3].signupId, recommendationGenerationId:randomUUID() } });
   result = await read();
   assert.equal(value(result,'listSufficiencyRate').value,0.5,'Generated zero-match lists stay in denominator');
@@ -99,6 +104,18 @@ try {
   assert.equal(value(empty,'missingObservationCount').value,0);
   await assert.rejects(read('metrics','',{ ...actor, permissions:['reports.read'] }), e => e.status===403);
   await assert.rejects(read('metrics','departmentId=invalid'), e => e.status===422);
+  const oldSemester = await db.semester.create({ data: { termCode: '23f', termName: 'Fall 2023' } });
+  const oldCycle = await db.evaluationCycle.create({ data: { semesterId: oldSemester.semesterId, cycleName: 'Old', signupDeadline: new Date('2023-09-01'), observationDeadline: new Date('2023-12-01'), feedbackDeadline: new Date('2023-12-10') } });
+  const oldSection = await db.courseSection.create({ data: { courseId, semesterId: oldSemester.semesterId, sectionCode: '001' } });
+  const oldSignup = await db.evaluationSignup.create({ data: { cycleId: oldCycle.cycleId, professorId: professors[2], sectionId: oldSection.sectionId } });
+  await db.observation.create({ data: { cycleId: oldCycle.cycleId, signupId: oldSignup.signupId, status: 'COMPLETED', completedAt: new Date('2023-11-01'), signedAssessment: { create: { templateId, responses: {}, isLocked: true, observerSignedAt: new Date('2023-11-01'), observeeSignedAt: new Date('2023-11-01'), completedAt: new Date('2023-11-01') } } } });
+  await db.evaluationCycle.update({ where: { cycleId }, data: { observationDeadline: new Date(Date.now() - 86400000) } });
+  const lateReport = await read('reports');
+  assert.equal(lateReport.byHiringLevel.find(h => h.hiringLevelId === hiringLevelId).overdue, 1);
+  assert.equal(lateReport.byHiringLevel.reduce((sum, h) => sum + h.overdue, 0), lateReport.summary.overdue);
+  assert.equal(lateReport.outstandingObservations.find(o => o.observationId === observations[2].observationId).overdue, true);
+  assert.equal(lateReport.outstandingObservations.find(o => o.observationId === observations[1].observationId).overdue, false);
+  assert.equal(lateReport.byHiringLevel.find(h => h.hiringLevelId === hiringLevelId).overdueStages['awaiting-observer'], 2);
   console.log('Passed database KPI formulas, scope, zero denominators, matching reuse, distinct reports, cancellation, survey roles and signup-only reports.');
 } finally {
   await db.$disconnect(); await migrations.end();

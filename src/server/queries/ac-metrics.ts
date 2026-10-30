@@ -36,8 +36,27 @@ export function pendingStage(o: Observation, now: Date) {
   return "awaiting-finalization";
 }
 
+export function pendingActionOverdue(o: Observation, now: Date, observationDeadline: Date) {
+  if (cancelled.includes(o.status) || completedObservation(o)) return false;
+  const stage = pendingStage(o, now);
+  return observationDeadline <= now && stage !== "upcoming" && stage !== "reported-not-occurred";
+}
+
+export function unmatchedStage(observations: Observation[]) {
+  const applicable = observations.filter(o => !cancelled.includes(o.status));
+  return applicable.some(o => o.recommendationsReleasedAt) ? "awaiting-selection"
+    : applicable.some(o => o.recommendationGenerationId) ? "awaiting-release" : "awaiting-generation";
+}
+
 function metric(key: string, label: string, numerator: number, denominator: number | null, unit = "percent", unavailableReason?: string) {
-  const reason = unavailableReason ?? (denominator === 0 ? "No eligible denominator records are available." : undefined);
+  const emptyMessages: Record<string, string> = {
+    evaluationEligibilityAccuracy: "No observer recommendations to check yet.",
+    assessmentParticipationRate: "No faculty were identified as due for this cycle.",
+    observerUtilizationRate: "No faculty have signed up for this cycle yet.",
+    listSufficiencyRate: "No faculty have signed up for this cycle yet.",
+    surveyCompletionRate: "No faculty have signed up for this cycle yet.",
+  };
+  const reason = unavailableReason ?? (denominator === 0 ? emptyMessages[key] ?? "Not enough information to calculate this metric yet." : undefined);
   return { key, label, numerator, denominator, unit,
     value: reason ? null : denominator === null ? numerator : Math.round(numerator / denominator * (unit === "percent" ? 100 : 1) * 100) / 100,
     ...(reason ? { unavailableReason: reason } : {}) };

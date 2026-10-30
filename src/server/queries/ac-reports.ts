@@ -1,7 +1,7 @@
 import type { Prisma } from "../../generated/prisma/client";
 import { ConfigurationError, invalid, pagination, uuid, type ConfigurationUser } from "../configuration-validation";
 import { facultyEligibility } from "../services/faculty-evaluation";
-import { cycleSignups, cycleMetrics, completedObservation, pendingStage } from "./ac-metrics";
+import { cycleSignups, cycleMetrics, completedObservation, pendingStage, pendingActionOverdue, unmatchedStage } from "./ac-metrics";
 
 export type ReportView = "reports" | "attention" | "faculty-status" | "observations" | "metrics";
 export type ObservationView = "details" | "template" | "assessment";
@@ -170,22 +170,26 @@ export async function getCycleReport(db: Connection, user: ConfigurationUser, ur
   const levels = await db.hiringLevel.findMany({ where: id.hiringLevelId ? { hiringLevelId: id.hiringLevelId } : {}, orderBy: { levelName: "asc" } });
   const signups = await cycleSignups(db, cycleId, id);
   const unmatchedSignups = signups.filter(s => !s.observations.some(o => o.observerId && !cancelled.includes(o.status)));
-  const unfinished = signups.flatMap(s => s.observations.filter(o => !cancelled.includes(o.status) && !completedObservation(o)).map(o => ({ observation: o, signup: s, stage: pendingStage(o, now) })));
+  const unfinished = signups.flatMap(s => s.observations.filter(o => !cancelled.includes(o.status) && !completedObservation(o)).map(o => ({ observation: o, signup: s, stage: pendingStage(o, now), overdue: pendingActionOverdue(o, now, cycle.observationDeadline) })));
   const byHiringLevel = levels.map(h => ({ hiringLevelId: h.hiringLevelId, name: h.levelName,
       due: faculty.filter(p => p.hiringLevel.id === h.hiringLevelId && p.evaluationStatus === "due").length,
+      overdue: faculty.filter(p => p.hiringLevel.id === h.hiringLevelId && p.evaluationStatus === "overdue").length,
       needsReview: faculty.filter(p => p.hiringLevel.id === h.hiringLevelId && p.evaluationStatus === "needs-review").length,
       outstanding: unfinished.filter(x => x.signup.professor.hiringLevelId === h.hiringLevelId).length,
+      overdueStages: Object.fromEntries([...new Set(unfinished.map(x => x.stage))].map(stage => [stage, unfinished.filter(x => x.signup.professor.hiringLevelId === h.hiringLevelId && x.stage === stage && x.overdue).length])),
       pendingStages: Object.fromEntries([...new Set(unfinished.map(x => x.stage))].map(stage => [stage, unfinished.filter(x => x.signup.professor.hiringLevelId === h.hiringLevelId && x.stage === stage).length])) }));
   return { cycleId, asOf: now, definitionsVersion: "kpi-2026-10-26", summary: {
     facultyDue: faculty.filter(p => p.evaluationStatus === "due").length, overdue: faculty.filter(p => p.evaluationStatus === "overdue").length,
     needsReview: faculty.filter(p => p.evaluationStatus === "needs-review").length, unmatched: unmatchedSignups.length, incomplete: unfinished.length },
     unmatchedFaculty: unmatchedSignups.map(s => ({ signupId: s.signupId, professor: person(s.professor), signupDate: s.signupDate,
       course: s.section.course.courseCode, section: s.section.sectionCode,
-      stage: s.observations.some(o => o.recommendationsReleasedAt) ? "awaiting-selection" : s.observations.some(o => o.recommendationGenerationId) ? "awaiting-release" : "awaiting-generation" })),
+      stage: unmatchedStage(s.observations) })),
+    outstandingObservations: unfinished.map(x => ({ observationId: x.observation.observationId, signupId: x.signup.signupId,
+      hiringLevelId: x.signup.professor.hiringLevelId, stage: x.stage, overdue: x.overdue, deadline: cycle.observationDeadline })),
     byHiringLevel, availableViews: ["faculty-status", "attention", "observations"],
     definitions: { unmatched: "Cycle signups without a confirmed observer, including signups without an observation row.",
       eligibility: "Shared Faculty eligibility, current rank and available history; no historical rank/eligibility snapshot is stored.",
-      incomplete: "Non-cancelled, unfinished observations grouped by pending stage. Upcoming appointments and reported non-occurrence remain distinct." } };
+      incomplete: "Non-cancelled, unfinished observations grouped by pending stage. Pending actions become overdue at the observation deadline; upcoming appointments and reported non-occurrence are not marked as overdue actions." } };
 }
 
 // Convert a stored schedule's local wall time using its semester's IANA zone.

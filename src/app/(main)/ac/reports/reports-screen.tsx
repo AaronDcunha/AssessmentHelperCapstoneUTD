@@ -16,21 +16,22 @@ export default function ReportsPage() {
   return (
     <div className="space-y-ah-24">
       <CycleSelector />
-      <section aria-label="Key performance indicators" className="grid grid-cols-1 gap-ah-16 sm:grid-cols-2 xl:grid-cols-4">
-        {metrics.loading ? Array.from({ length: 7 }, (_, i) => <div key={i} className="h-[148px] animate-pulse rounded-ah-8 bg-neutral-bg" aria-label="Loading metric" />)
-          : metrics.data.metrics.map(metric => <div key={metric.key}>
-            <MetricCard label={metric.label} value={metric.value === null ? "N/A" : `${metric.value}${metric.unit === "percent" ? "%" : ""}`} className="w-full" />
-            {metric.unavailableReason && <p className="mt-ah-8 text-caption text-muted">{metric.unavailableReason}</p>}
-          </div>)}
+      <section aria-label="Key performance indicators" className="grid auto-rows-fr grid-cols-1 gap-ah-16 sm:grid-cols-2 xl:grid-cols-4">
+        {metrics.loading ? Array.from({ length: 7 }, (_, i) => <div key={i} className="min-h-[220px] animate-pulse rounded-ah-8 bg-neutral-bg" aria-label="Loading metric" />)
+          : metrics.data.metrics.map(metric => {
+            const needsReview = metric.key === "assessmentParticipationRate" ? metrics.data.counts?.baselineNeedsReview ?? 0 : 0;
+            const description = [metric.unavailableReason, needsReview ? `Participation excludes ${needsReview} faculty whose evaluation requirements need review.` : null].filter(Boolean).join(" ");
+            return <MetricCard key={metric.key} label={metric.label} value={metric.value === null ? "N/A" : `${metric.value}${metric.unit === "percent" ? "%" : ""}`}
+              description={description || undefined} className="h-full min-h-[220px] w-full min-w-0" />;
+          })}
       </section>
       {metrics.error && <p role="alert" className="text-body text-danger">{metrics.error}</p>}
-      {metrics.data.reportingMode && <p className="text-caption text-muted">Live calculations using current records and rank. Historical eligibility and schedule snapshots are not stored.
-        {!!metrics.data.counts?.baselineNeedsReview && ` ${metrics.data.counts.baselineNeedsReview} faculty need eligibility review and are excluded from the due denominator.`}</p>}
+      {metrics.data.reportingMode && <p className="text-caption text-muted">Figures update as evaluation records change.</p>}
       <Section title="Executive summary" contentClassName="space-y-ah-12 text-body text-ink">
         {report.data.byHiringLevel.length > 0 ? report.data.byHiringLevel.map((item) => (
           <div key={item.hiringLevelId}>
-            <p>{item.name}: {item.due ?? "—"} due, {item.outstanding} outstanding{!!item.needsReview && `, ${item.needsReview} need eligibility review`}</p>
-            {item.pendingStages && <p className="text-caption text-muted">{Object.entries(item.pendingStages).filter(([, count]) => count > 0).map(([stage, count]) => `${count} ${stage.replaceAll("-", " ")}`).join(" · ")}</p>}
+            <p>{item.name}: {item.due ?? "—"} due, {item.overdue ?? "—"} overdue evaluations, {item.outstanding} outstanding observations, {item.needsReview ?? 0} need eligibility review</p>
+            {item.pendingStages && <p className="text-caption text-muted">{Object.entries(item.pendingStages).filter(([, count]) => count > 0).map(([stage, count]) => `${count} ${stage.replaceAll("-", " ")}${item.overdueStages?.[stage] ? ` (${item.overdueStages[stage]} past the observation deadline)` : ""}`).join(" · ")}</p>}
           </div>
         )) : <p className="text-muted">{report.error ? "Report summary is currently unavailable." : "No report summary is available."}</p>}
       </Section>

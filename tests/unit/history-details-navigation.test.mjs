@@ -70,7 +70,7 @@ test('current details reuse the shared record view and retain active workflow ac
 test('shared details hide current workflow actions while loading or denied, and show them after a successful read',()=>{
  let state={loading:true,error:null,data:{observation:{id},progress:[],proposedMeetings:[]}};
  const exports=component('../../src/components/observations/observation-details.tsx',name=>{
-  if(name==='react')return {useCallback:fn=>fn};
+  if(name==='react')return {useCallback:fn=>fn,useState:initial=>[typeof initial==='function'?initial():initial,()=>{}]};
   if(name.endsWith('use-api-resource'))return {useApiResource:()=>state};
   if(name==='@/lib/ac-api')return {acApi:{},userDisplayName:()=>''};
   return new Proxy({},{get:(_,key)=>String(key)});

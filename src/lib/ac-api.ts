@@ -12,7 +12,8 @@ export type Cycle = {
 export type ReportsResponse = {
   cycleId: string; asOf?: string; definitionsVersion?: string;
   summary: { facultyDue: number | null; overdue: number | null; unmatched: number; incomplete: number; needsReview?: number };
-  byHiringLevel: Array<{ hiringLevelId: string; name: string; due: number | null; outstanding: number; needsReview?: number; pendingStages?: Record<string, number> }>;
+  byHiringLevel: Array<{ hiringLevelId: string; name: string; due: number | null; overdue?: number; outstanding: number; needsReview?: number; pendingStages?: Record<string, number>; overdueStages?: Record<string, number> }>;
+  outstandingObservations?: Array<{ observationId: string; signupId: string; hiringLevelId: string; stage: string; overdue: boolean; deadline: string }>;
   unmatchedFaculty?: Array<{ signupId: string; professor: UserSummary; signupDate: string; course: string; section: string; stage: string }>;
   availableViews?: string[];
 };
