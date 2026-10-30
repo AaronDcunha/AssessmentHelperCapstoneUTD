@@ -2,6 +2,7 @@
 export const acPermissions = {
   "ac.dashboard": ["cycles.read", "reports.read", "observations.read"],
   "ac.cycles": ["cycles.read"],
+  "ac.observerSelection": ["cycles.read", "signups.read", "observations.read"],
   "ac.cycleCreate": ["cycles.manage"],
   "ac.cycleEdit": ["cycles.manage"],
   "ac.faculty": ["cycles.read", "reports.read"],

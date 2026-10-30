@@ -62,6 +62,7 @@ export const navigationDefinitions = [
   { id: "ac", label: "Assessment Committee", icon: "people", items: [
     { id: "ac.dashboard", label: "Dashboard", icon: "grid" },
     { id: "ac.cycles", label: "Evaluation Cycles", icon: "calendar" },
+    { id: "ac.observerSelection", label: "Observer Selection", icon: "people" },
     { id: "ac.faculty", label: "Faculty Due / Overdue", icon: "people" },
     { id: "ac.progress", label: "Observation Progress", icon: "clipboard" },
     { id: "ac.template", label: "Observation Template", icon: "document" },
