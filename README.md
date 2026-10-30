@@ -64,9 +64,22 @@ Keep PostgreSQL running for these commands. Each developer has their own local d
 | Apply migrations only | `npx prisma migrate deploy` | Updates tables without running the seed |
 | Rerun the seed only | `npm run db:seed` | Upserts demo data; does not clear workflow records |
 | Preview seed data | `npm run db:seed:preview` | No database reads/writes; generates the local demo-login reference |
+| Preview ten demo signups | `npm run db:seed:signups:preview` | Reads the database and lists the proposed signup fixtures; writes nothing |
+| Add ten demo signups | `npm run db:seed:signups` | Adds signups, unassigned observations, and three proposed meetings per new signup |
 | Browse records | `npx prisma studio` | Opens the database editor |
 
 The basic seed preserves existing cycle/template/question edits. It does not recreate manually added signups, matching, or completed assessments. Reseeding is not a reset and may update other seeded records.
+
+For team workflow testing, run the basic seed first, then `npm run db:seed:signups`.
+The shared script is `prisma/seed-signups.mjs`. It uses the same ten demo professors,
+their real assigned sections, and valid future class dates in the current configured
+semester. Existing signups and any later workflow progress are preserved on reruns.
+It creates no matching, releases, invitations, assessments, or notifications.
+This optional local-only demo seed can bypass a closed signup deadline without
+changing normal signup rules. It requires configured semester dates and enough future
+meetings before the observation deadline; otherwise the entire batch rolls back.
+To explicitly target a cycle, use `npm run db:seed:signups -- --cycle-id=UUID`.
+After a database reset, rerun this command if you want the ten signups restored.
 
 ### Reset the database and restore demo data
 

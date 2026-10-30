@@ -940,3 +940,11 @@ requires the full workflow and OBSERVEE feedback only. Reports include signup-on
 unmatched faculty and unfinished observation stage counts. All values are labelled
 live recalculations, including after the feedback deadline; no snapshot/schema,
 form-save, matching-generation, or notification mutation was introduced.
+October 30, 2026 shared demo signup seed:
+The ten signup fixtures are now reproducible through prisma/seed-signups.mjs and
+npm run db:seed:signups (preview: db:seed:signups:preview), separate from the basic
+seed. Fixed demo professor identities and stable fixture IDs, actual teaching and
+shared eligibility/calendar rules, atomic writes and existing-signup preservation
+make reruns safe without resetting later progress. Local-only test fixtures can
+bypass the signup cutoff; they never create post-signup workflow records. Original
+local fixtures are preserved even though they were created with random record IDs.
