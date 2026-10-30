@@ -77,3 +77,5 @@ Shared notification helper: see [NOTIFICATION_HELPER.md](NOTIFICATION_HELPER.md)
 Dependency/security updates: see [DEPENDENCY_UPDATES.md](DEPENDENCY_UPDATES.md) for
 patched versions, the Node runtime target, known deferred majors, commit contents
 and teammate installation steps.
+
+Faculty integration follow-up and semester New/Delete contract: see [FACULTY_INTEGRATION_FIXES.md](FACULTY_INTEGRATION_FIXES.md).

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/form-fields";
@@ -48,6 +48,12 @@ export function EvaluationScreen({ data }: { data: FacultyWorkflow | null }) {
 }
 
 export function SignupScreen({ data }: { data: FacultyWorkflow | null }) {
+  return <SignupForm key={data?.dashboard.cycle?.id ?? "unavailable"} data={data} />;
+}
+
+function SignupForm({ data }: { data: FacultyWorkflow | null }) {
+  const active = useRef(true);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const router = useRouter();
   const [feedback, setFeedback] = useState("");
   const [sectionId, setSectionId] = useState(data?.existingSignup?.sectionId ?? "");
@@ -55,6 +61,7 @@ export function SignupScreen({ data }: { data: FacultyWorkflow | null }) {
   const [pending, setPending] = useState(false);
   const [saved, setSaved] = useState(false);
   const section = data?.sections.find(section => section.id === sectionId);
+  if (!data) return <div role="alert" className="space-y-ah-16"><p>Unable to load your courses and signup information.</p><Button variant="secondary" onClick={() => router.refresh()}>Retry</Button></div>;
   if (data?.existingSignup) return <div className="space-y-ah-24"><p role="status">You have already signed up for this semester’s evaluation.</p><ButtonLink href={routes.details}>View Observation Details</ButtonLink></div>;
   return <form className="space-y-ah-32" onSubmit={async (event) => {
     event.preventDefault();
@@ -64,6 +71,7 @@ export function SignupScreen({ data }: { data: FacultyWorkflow | null }) {
     setPending(true); setFeedback("");
     try {
       const response = await postFacultyAction<{ message: string }>("signup", { sectionId, dates });
+      if (!active.current) return;
       setSaved(true); setFeedback(response.message); router.replace(routes.details); router.refresh();
     } catch (error) { setFeedback(error instanceof Error ? error.message : "Signup was not submitted. Please try again."); }
     finally { setPending(false); }
@@ -210,7 +218,7 @@ export function ObservationDetailsScreen({ data, canReadAssessment = false }: { 
   return <div className="space-y-ah-24">
     <FacultyCycleSelector dashboard={data?.dashboard} /><FacultyObservationSelector dashboard={data?.dashboard} />
     {record ? <ObservationDetails key={record.id} observationId={record.id} canReadAssessment={canReadAssessment} backHref={routes.observations} backLabel="Back to Observations">
-    <Block title="Actions"><div className="grid max-w-[992px] gap-ah-16 md:grid-cols-3">
+    <Block title="Actions"><div className="flex max-w-[992px] flex-col gap-ah-16">
       <ButtonLink variant="secondary" href={routes.form}>View Observation Form</ButtonLink>
       <FacultyIssueControl observationId={record.id} kind="NOT_OCCURRED" />
       <FacultyFeedbackControl data={data} />
@@ -236,7 +244,7 @@ export function AppointmentScreen({ data }: { data: FacultyWorkflow | null }) {
         Location: meetings.length === 1 ? meetings[0].location : undefined }} />
     </div></Block>
     <Block title="Appointment status"><div className={panel}><RecordFields fields={[["Appointment status", "Observation done"]]} values={{ "Appointment status": record?.status, "Observation done": record ? "Not finalized" : undefined }} /></div></Block>
-    <Block title="Actions"><div className="grid max-w-[992px] gap-ah-16 md:grid-cols-3">
+    <Block title="Actions"><div className="flex max-w-[992px] flex-col gap-ah-16">
       <ButtonLink variant="secondary" href={routes.details}>View Observation</ButtonLink>
       {record?.scheduledAt && record.observer ? <ButtonLink variant="secondary" href={routes.form}>Open Observation Form</ButtonLink> : <Button disabled aria-describedby="observation-actions-unavailable">Open Observation Form</Button>}
       {record ? <FacultyIssueControl observationId={record.id} kind="NOT_OCCURRED" /> : <IncompleteReportButton primary />}

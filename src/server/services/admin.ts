@@ -37,6 +37,8 @@ export async function mutateAdmin(prisma: PrismaClient,user: AdminUser,operation
       await db.professor.deleteMany({where:{userId:id}});
       await db.loginCredential.deleteMany({where:{userId:id}});
       await db.notification.deleteMany({where:{userId:id}});
+      // Permissions are inherited through these user-role links. Remove only
+      // this user?s assignments; role grants are shared by other accounts.
       await db.userRole.deleteMany({where:{userId:id}});
       await db.appUser.delete({where:{userId:id}});
       await protect();

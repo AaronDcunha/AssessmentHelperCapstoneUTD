@@ -682,3 +682,10 @@ email, independently of alerts.manage. Admin and custom committee roles with
 observations.read plus notifications.send remain included. Duplicate role membership
 does not duplicate delivery. Messages include sender and full text; observation
 access remains independently enforced. Multiple messages/retry keys remain supported.
+
+October 29, 2026 implemented semester lifecycle extension:
+POST /api/semesters {year,season,startsOn,endsOn,timeZone}; DELETE /api/semesters/{semesterId}
+{expectedRevision,expectedCycleRevision}, null cycle revision only when no cycle exists.
+Both require cycles.manage and existing same-origin JSON controls. Delete atomically
+removes the semester, its evaluation cycle and dependent course/workflow records.
+See FACULTY_INTEGRATION_FIXES.md for full behavior, retention and verification.

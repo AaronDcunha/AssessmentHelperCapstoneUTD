@@ -1,8 +1,9 @@
 TASK: Faculty Workflow and Semester Settings Fixes
 Created: October 26, 2026
-Status: Pending
-Owner: Unassigned
-Scheduling: Follow-up work; implementation timing to be decided.
+Status: Implemented October 29, 2026; verification in FACULTY_INTEGRATION_FIXES.md
+Owner: Integration follow-up
+See FACULTY_INTEGRATION_FIXES.md for delivered behavior, semester lifecycle additions,
+checks and remaining browser-verification scope.
 
 Purpose
 Complete the fixes identified while reviewing Sai/faculty-dashboard-backend.
