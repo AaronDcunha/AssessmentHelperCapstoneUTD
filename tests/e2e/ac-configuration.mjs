@@ -127,8 +127,7 @@ try {
   await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false });
   await send('Fetch.enable', { patterns: [{ urlPattern: `${base}/api/*` }] });
   await navigate('/ac/cycles'); await textIncludes('Spring 2027');
-  await evaluate(`document.querySelector('button[aria-label="Actions for Fall 2026"]').click()`);
-  await wait(`document.activeElement?.textContent==='Edit Cycle'`);
+  await wait(`document.querySelector('a[aria-label="Edit Fall 2026"]')?.textContent==='Edit Cycle'`);
   await shot('cycles-desktop');
   await navigate('/ac/cycles/new'); await wait(`document.querySelector('[name="semesterId"]')?.options.length===4`);
   await value('[name="semesterId"]', uuid(3));

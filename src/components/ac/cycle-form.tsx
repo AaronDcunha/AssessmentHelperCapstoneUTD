@@ -14,13 +14,22 @@ const EMPTY_DEADLINES: Deadlines = { signupDeadline: "", observationDeadline: ""
 type Loaded = { semesters: Semester[]; cycle: Cycle | null };
 const EMPTY: Loaded = { semesters: [], cycle: null };
 
+function semesterOrder(semester: Semester) {
+  const year = semester.year ?? Number(semester.name.match(/\b\d{4}\b/)?.[0] ?? 0);
+  const season = semester.season ?? semester.name.match(/Spring|Summer|Fall/i)?.[0];
+  const term = { spring: 1, summer: 2, fall: 3 }[season?.toLowerCase() ?? ""] ?? 0;
+  return year * 10 + term;
+}
+
 export function CycleForm({ mode, cycleId }: { mode: "create" | "edit"; cycleId?: string }) {
   const [retry, setRetry] = useState(0);
   const loader = useCallback(async (): Promise<Loaded> => {
     void retry; // Explicit reload creates a new resource request.
     try {
       if (mode === "edit" && cycleId) { const cycle = await acApi.getEvaluationCycle(cycleId); cycleDeadlines(cycle); return { semesters: [], cycle }; }
-      return { semesters: await acApi.getSemesters(), cycle: null };
+      const semesters = await acApi.getSemesters();
+      semesters.sort((a, b) => semesterOrder(b) - semesterOrder(a) || a.name.localeCompare(b.name));
+      return { semesters, cycle: null };
     } catch (error) { throw new Error(configurationError(error)); }
   }, [mode, cycleId, retry]);
   const result = useApiResource(loader, EMPTY);

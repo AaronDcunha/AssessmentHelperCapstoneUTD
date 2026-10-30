@@ -1,4 +1,9 @@
 ASSESSMENT HELPER IMPLEMENTATION NOTES
+October 29, 2026 cycle-list action presentation:
+Replaced the ellipsis dropdown with a direct Edit Cycle link in a dedicated Action
+column, using the shared secondary button. Editing no longer opens an overflowing
+menu beneath the row. Existing management/allowed-action checks are preserved.
+
 October 29, 2026 Task #6 semester dropdown follow-up:
 Cycle creation now blocks selection/submission while existing-cycle availability
 is loading or unavailable, with a retry that preserves deadlines. Occupied terms

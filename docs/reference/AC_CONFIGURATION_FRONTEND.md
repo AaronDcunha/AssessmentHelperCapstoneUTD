@@ -139,3 +139,8 @@ full assistive-technology audit remain later integration checks. The initial dev
 browser run encountered a hot-reload loop; production-build checks passed instead.
 Local production startup used process-only `AUTH_TRUST_HOST=true` for localhost,
 without changing authentication code or environment files.
+# Semester dropdown ordering
+
+Cycle creation lists semesters newest first, with Fall, Summer, then Spring within
+each year. Ordering is applied after all semester API pages are loaded; existing-cycle
+labels and disabled options retain their chronological position.
