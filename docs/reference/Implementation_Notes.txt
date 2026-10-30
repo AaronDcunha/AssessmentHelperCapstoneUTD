@@ -1,4 +1,19 @@
 ASSESSMENT HELPER IMPLEMENTATION NOTES
+October 29, 2026 cycle-list action presentation:
+Replaced the ellipsis dropdown with a direct Edit Cycle link in a dedicated Action
+column, using the shared secondary button. Editing no longer opens an overflowing
+menu beneath the row. Existing management/allowed-action checks are preserved.
+
+October 29, 2026 Task #6 semester dropdown follow-up:
+Cycle creation now blocks selection/submission while existing-cycle availability
+is loading or unavailable, with a retry that preserves deadlines. Occupied terms
+remain labeled/disabled; all-occupied and selected-conflict states are explicit.
+Creation conflicts refresh the paginated cycle list without discarding semester
+selection or deadlines. Shared semester pagination, UUID payloads, permissions,
+backend validation and schema are unchanged. Focused unit/browser regressions,
+lint, TypeScript and production build passed; browser business writes were all
+intercepted. See AC_CONFIGURATION_FRONTEND.md. Task #5 alerts are untouched.
+
 October 29, 2026 issue #74 live database repair:
 The live cycle-alert read returned 503 UNAVAILABLE because the local database had
 only four of nine checked-in migrations applied. Exact query reproduction exposed
