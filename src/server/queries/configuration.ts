@@ -34,7 +34,7 @@ export async function getRelevantFacultyCycles(db: Connection, user: Configurati
     include: { semester: true }, orderBy: { cycleId: "asc" },
   });
 }
-function semesterResponse(s: Semester) {
+export function semesterResponse(s: Semester) {
   const term = /^(\d{2})([suf])$/.exec(s.termCode);
   return { id: s.semesterId, name: s.termName, year: term ? 2000 + Number(term[1]) : null,
     season: term ? ({ s: "Spring", u: "Summer", f: "Fall" }[term[2]]) : null,

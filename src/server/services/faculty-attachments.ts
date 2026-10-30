@@ -47,3 +47,7 @@ export async function readFacultyAttachment(user: AccountUser, attachmentId: str
   // User uploads are runtime private data, never deployment/build assets.
   return { bytes: await readFile(/* turbopackIgnore: true */ storagePath(attachment.storageKey)), name: attachment.originalName, contentType: attachment.contentType };
 }
+
+export async function removeFacultyAttachmentFile(key: string) {
+  try { await unlink(storagePath(key)); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+}

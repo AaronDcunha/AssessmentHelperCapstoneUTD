@@ -2,7 +2,7 @@ import { ConfigurationError, hasAnyPermission, object, sameOrigin, type Configur
 import { cycleReadPermissions, templateReadPermissions } from "./queries/configuration";
 
 export type Operation = "cycles.list" | "cycles.get" | "cycles.create" | "cycles.update" | "cycles.settings" |
-  "semesters.list" | "templates.list" | "templates.get" | "templates.current" | "templates.create" | "templates.update" | "templates.publish";
+  "semesters.list" | "semesters.create" | "semesters.delete" | "templates.list" | "templates.get" | "templates.current" | "templates.create" | "templates.update" | "templates.publish";
 export function configurationHandler(operation:Operation, dependencies:{getUser:()=>Promise<ConfigurationUser|null>; execute:(operation:Operation,user:ConfigurationUser,url:URL,params:Record<string,string>,body:unknown)=>Promise<unknown>}) {
   return async (request:Request,context:{params:Promise<Record<string,string>>}) => {
     try {

@@ -1,3 +1,21 @@
+October 29, 2026 Faculty integration follow-up:
+Semester Settings conversion/revisions verified with repeated real saves in a disposable
+DB. Finalized assessments remain readable with all three steps navigable; deadlines
+and acknowledgements still gate writes. Signup state is keyed by cycle, with late
+responses ignored after unmount. Reports/surveys use available action width. Accepted
+candidates include stored start/end instants and zone. Signup failures show retry.
+Faculty runtime business SQL now uses Prisma relation/model APIs; reads inside writes
+share the Serializable transaction, assessment mutations touch workflowRevision, and
+unique signup keys protect duplicates. Existing migrations are unchanged.
+Added cycles.manage-protected POST /api/semesters and DELETE /api/semesters/{id}.
+Deletion requires semester/cycle revisions and removes the semester, cycle and dependent
+course/workflow records atomically; supporting files are removed after commit. UI
+requires an explicit permanent-deletion confirmation. Templates/users stay shared.
+Admin user deletion already removes userRole links (all effective user permissions);
+shared rolePermission records remain. Added database regression assertions.
+Faculty History page and its shared detail implementation are unchanged. No application
+data was reset, seeded or deleted. See FACULTY_INTEGRATION_FIXES.md for verification.
+
 ASSESSMENT HELPER IMPLEMENTATION NOTES
 October 29, 2026 cycle-list action presentation:
 Replaced the ellipsis dropdown with a direct Edit Cycle link in a dedicated Action

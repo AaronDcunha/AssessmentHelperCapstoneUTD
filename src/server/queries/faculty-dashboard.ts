@@ -1,17 +1,15 @@
 import "server-only";
-import type { QueryResultRow } from "pg";
+import type { Prisma } from "../../generated/prisma/client";
 import type { AccountUser } from "../account-auth";
-import { getPool } from "../db";
 import { getPrisma } from "../prisma";
 import { getRelevantFacultyCycles } from "./configuration";
 import { facultyEligibility, type EvaluationStatus } from "../services/faculty-evaluation";
 import { selectedFacultyCycle, selectedFacultyObservation } from "../faculty-context";
 
-type Database = { query<Row extends QueryResultRow>(sql: string, values: unknown[]): Promise<{ rows: Row[] }> };
+type Database = Prisma.TransactionClient;
 type CycleRow = { id: string; name: string; semesterId: string; semester: string; termCode: string; startsOn: string | null; endsOn: string | null; timeZone: string; signupDeadline: Date; observationDeadline: Date; feedbackDeadline: Date };
 type EvaluationRow = { hiringLevel: string; intervalYears: number; hireDate: Date | null; teachingTerms: string[]; observationId: string | null; completedAt: Date | null; semesterId: string | null; semester: string | null; termCode: string | null };
 type ObservationRow = { id: string; status: string; participation: "observee" | "observer"; course: string; section: string; scheduledAt: Date | null };
-type ActivityRow = { id: string; title: string; message: string; createdAt: Date };
 
 export type FacultyDashboard = {
   asOf: string;
@@ -47,14 +45,13 @@ export async function getFacultyDashboard(user: AccountUser, options: { now?: Da
   };
   // Reserved development users have no database UUID/profile. Never map one to a seeded account.
   if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(user.id)) return result;
-  const db = options.database ?? getPool();
-  const profile = await db.query<{ professorId: string }>(`
-    SELECT professor_id AS "professorId" FROM public.professor WHERE user_id = $1`, [user.id]);
-  const professorId = profile.rows[0]?.professorId;
+  const db = options.database ?? getPrisma();
+  const profile = await db.professor.findUnique({ where: { userId: user.id } });
+  const professorId = profile?.professorId;
   result.hasFacultyProfile = !!professorId;
 
   if (professorId) {
-    const cycles = await getRelevantFacultyCycles(getPrisma(), user, now);
+    const cycles = await getRelevantFacultyCycles(db, user, now);
     result.availableCycles = cycles.map(cycle => ({ id: cycle.cycleId, name: cycle.semester.termName }));
     const chosen = options.cycleId === undefined ? await selectedFacultyCycle() : options.cycleId;
     const selected = chosen ? cycles.find(cycle => cycle.cycleId === chosen) ?? null : cycles.length === 1 ? cycles[0] : null;
@@ -69,32 +66,18 @@ export async function getFacultyDashboard(user: AccountUser, options: { now?: Da
     if (!cycle && (cycles.length > 1 || chosen || selected)) result.pendingObserverRequestCount = null;
     if (cycle) result.cycle = { ...cycle, signupDeadline: cycle.signupDeadline.toISOString(), observationDeadline: cycle.observationDeadline.toISOString(), feedbackDeadline: cycle.feedbackDeadline.toISOString() };
     if (cycle && user.permissions.includes("signups.read.own")) {
-      result.hasCurrentSignup = !!await getPrisma().evaluationSignup.findFirst({
+      result.hasCurrentSignup = !!await db.evaluationSignup.findFirst({
         where: { cycleId: cycle.id, professor: { userId: user.id } }, select: { signupId: true },
       });
     }
 
     if (access.evaluation) {
-      const evaluation = await db.query<EvaluationRow>(`
-        SELECT h.level_name AS "hiringLevel", h.evaluation_interval_years AS "intervalYears", p.hire_date AS "hireDate",
-          ARRAY(SELECT DISTINCT ts.term_code FROM public.teaches t JOIN public.course_section cs ON cs.section_id = t.section_id
-            JOIN public.semester ts ON ts.semester_id = cs.semester_id WHERE t.professor_id = p.professor_id) AS "teachingTerms",
-          last_evaluation.*
-        FROM public.professor p JOIN public.hiring_level h ON h.hiring_level_id = p.hiring_level_id
-        LEFT JOIN LATERAL (
-          SELECT o.observation_id AS "observationId",
-            COALESCE(a.completed_at, o.completed_at, GREATEST(a.observer_signed_at, a.observee_signed_at)) AS "completedAt",
-            s.semester_id AS "semesterId", s.term_name AS semester, s.term_code AS "termCode"
-          FROM public.evaluation_signup es JOIN public.observation o ON o.signup_id = es.signup_id
-          JOIN public.signed_assessment a ON a.observation_id = o.observation_id
-          JOIN public.evaluation_cycle c ON c.cycle_id = o.cycle_id
-          JOIN public.semester s ON s.semester_id = c.semester_id
-          WHERE es.professor_id = p.professor_id AND a.is_locked = true
-            AND a.observer_signed_at IS NOT NULL AND a.observee_signed_at IS NOT NULL
-          ORDER BY "completedAt" DESC, o.observation_id ASC LIMIT 1
-        ) last_evaluation ON true
-        WHERE p.professor_id = $1 AND p.user_id = $2`, [professorId, user.id]);
-      const row = evaluation.rows[0];
+      const profile = await db.professor.findUnique({ where: { professorId, userId: user.id }, include: { hiringLevel: true, teaches: { include: { section: { include: { semester: true } } } } } });
+      const completed = await db.observation.findMany({ where: { signup: { professorId }, signedAssessment: { is: { isLocked: true, observerSignedAt: { not: null }, observeeSignedAt: { not: null } } } }, include: { signedAssessment: true, cycle: { include: { semester: true } } } });
+      const completion = (record: typeof completed[number]) => record.signedAssessment!.completedAt ?? record.completedAt ?? new Date(Math.max(record.signedAssessment!.observerSignedAt!.getTime(), record.signedAssessment!.observeeSignedAt!.getTime()));
+      completed.sort((a,b) => completion(b).getTime() - completion(a).getTime() || a.observationId.localeCompare(b.observationId));
+      const last = completed[0];
+      const row: EvaluationRow | null = profile ? { hiringLevel: profile.hiringLevel.levelName, intervalYears: profile.hiringLevel.evaluationIntervalYears, hireDate: profile.hireDate, teachingTerms: [...new Set(profile.teaches.map(item => item.section.semester.termCode))], observationId: last?.observationId ?? null, completedAt: last ? completion(last) : null, semesterId: last?.cycle.semesterId ?? null, semester: last?.cycle.semester.termName ?? null, termCode: last?.cycle.semester.termCode ?? null } : null;
       if (row) {
         result.evaluation = { ...facultyEligibility(cycle, row.termCode, row.intervalYears, row.hireDate, row.teachingTerms ?? []), hiringLevel: row.hiringLevel,
           lastCompletedEvaluation: row.observationId && row.completedAt && row.semesterId && row.semester
@@ -104,31 +87,11 @@ export async function getFacultyDashboard(user: AccountUser, options: { now?: Da
     }
 
     if (cycle && access.observations) {
-      const observations = await db.query<ObservationRow>(`
-          SELECT o.observation_id AS id, o.status,
-            CASE WHEN es.professor_id = $1 THEN 'observee' ELSE 'observer' END AS participation,
-            co.course_code AS course, cs.section_code AS section, o.scheduled_at AS "scheduledAt"
-          FROM public.observation o JOIN public.evaluation_signup es ON es.signup_id = o.signup_id
-          JOIN public.course_section cs ON cs.section_id = es.section_id
-          JOIN public.course co ON co.course_id = cs.course_id
-          WHERE o.cycle_id = $2 AND (es.professor_id = $1 OR o.observer_id = $1)
-            AND upper(o.status) NOT IN ('COMPLETED', 'CANCELLED', 'CANCELED', 'NOT_OCCURRED') AND o.completed_at IS NULL
-            AND NOT EXISTS (SELECT 1 FROM public.signed_assessment a WHERE a.observation_id = o.observation_id
-              AND a.is_locked = true AND a.observer_signed_at IS NOT NULL AND a.observee_signed_at IS NOT NULL)
-          ORDER BY CASE WHEN es.professor_id = $1 THEN 0 ELSE 1 END,
-            o.scheduled_at ASC NULLS LAST, es.signup_date DESC, o.observation_id ASC`, [professorId, cycle.id]);
-      const pending = await db.query<{ count: number }>(`
-          SELECT count(*)::int AS count FROM public.observation_candidate candidate
-          JOIN public.observation o ON o.observation_id = candidate.observation_id
-          JOIN public.evaluation_signup es ON es.signup_id = o.signup_id
-          JOIN public.evaluation_cycle c ON c.cycle_id = o.cycle_id
-          WHERE candidate.professor_id = $1 AND o.cycle_id = $2 AND es.professor_id <> $1
-            AND upper(candidate.status) = 'PENDING' AND candidate.invited_at <= $3
-            AND candidate.responded_at IS NULL AND candidate.expires_at > $3
-            AND c.observation_deadline > $3 AND o.observer_id IS NULL AND o.completed_at IS NULL
-            AND upper(o.status) NOT IN ('COMPLETED', 'CANCELLED', 'CANCELED', 'NOT_OCCURRED')
-            AND NOT EXISTS (SELECT 1 FROM public.signed_assessment a WHERE a.observation_id = o.observation_id
-              AND a.is_locked = true AND a.observer_signed_at IS NOT NULL AND a.observee_signed_at IS NOT NULL)`, [professorId, cycle.id, now]);
+      const records = await db.observation.findMany({ where: { cycleId: cycle.id, OR: [{ signup: { professorId } }, { observerId: professorId }], status: { notIn: ["CANCELLED", "CANCELED", "NOT_OCCURRED"] } }, include: { signup: { include: { section: { include: { course: true } } } } }, orderBy: [{ scheduledAt: { sort: "asc", nulls: "last" } }, { signup: { signupDate: "desc" } }, { observationId: "asc" }] });
+      records.sort((a,b) => Number(b.signup.professorId === professorId) - Number(a.signup.professorId === professorId));
+      const observations = { rows: records.map(record => ({ id: record.observationId, status: record.status, participation: record.signup.professorId === professorId ? "observee" as const : "observer" as const, course: record.signup.section.course.courseCode, section: record.signup.section.sectionCode, scheduledAt: record.scheduledAt })) };
+      const pendingCount = await db.observationCandidate.count({ where: { professorId, status: "PENDING", invitedAt: { lte: now }, respondedAt: null, expiresAt: { gt: now }, observation: { cycleId: cycle.id, signup: { professorId: { not: professorId } }, observerId: null, completedAt: null, cycle: { observationDeadline: { gt: now } }, status: { notIn: ["COMPLETED", "CANCELLED", "CANCELED", "NOT_OCCURRED"] }, NOT: { signedAssessment: { is: { isLocked: true, observerSignedAt: { not: null }, observeeSignedAt: { not: null } } } } } } });
+      const pending = { rows: [{ count: pendingCount }] };
       result.availableObservations = observations.rows.map(record => ({ id: record.id, label: `${record.course}.${record.section} · ${record.participation}` }));
       const selectedId = options.observationId === undefined ? await selectedFacultyObservation() : options.observationId;
       const observation = observations.rows.find(record => record.id === selectedId) ?? observations.rows[0];
@@ -138,10 +101,8 @@ export async function getFacultyDashboard(user: AccountUser, options: { now?: Da
   }
 
   if (access.activity) {
-    const activity = await db.query<ActivityRow>(`
-      SELECT notification_id AS id, title, message, created_at AS "createdAt"
-      FROM public.notification WHERE user_id = $1 AND in_app_enabled = true
-      ORDER BY created_at DESC, notification_id ASC LIMIT 5`, [user.id]);
+    const notifications = await db.notification.findMany({ where: { userId: user.id, inAppEnabled: true }, orderBy: [{ createdAt: "desc" }, { notificationId: "asc" }], take: 5 });
+    const activity = { rows: notifications.map(row => ({ id: row.notificationId, title: row.title, message: row.message, createdAt: row.createdAt })) };
     result.recentActivity = activity.rows.map((row) => ({ ...row, createdAt: row.createdAt.toISOString() }));
   }
   return result;

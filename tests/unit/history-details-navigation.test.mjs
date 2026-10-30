@@ -70,7 +70,7 @@ test('current details reuse the shared record view and retain active workflow ac
 test('shared details hide current workflow actions while loading or denied, and show them after a successful read',()=>{
  let state={loading:true,error:null,data:{observation:{id},progress:[],proposedMeetings:[]}};
  const exports=component('../../src/components/observations/observation-details.tsx',name=>{
-  if(name==='react')return {useCallback:fn=>fn};
+  if(name==='react')return {useCallback:fn=>fn,useState:initial=>[initial,()=>{}]};
   if(name.endsWith('use-api-resource'))return {useApiResource:()=>state};
   if(name==='@/lib/ac-api')return {acApi:{},userDisplayName:()=>''};
   return new Proxy({},{get:(_,key)=>String(key)});
@@ -98,15 +98,15 @@ test('signup route redirects existing cycle signups and leaves new/unknown signu
 test('existing signup never renders a second submission form, and successful signup navigates to details',async()=>{
  let existing=true,index=0;const calls=[];
  const exports=component('../../src/components/observations/faculty-screens.tsx',name=>{
-  if(name==='react')return {useState:initial=>{const defaults=['','section-1',['2026-11-02'],false,false];return [existing?initial:defaults[index++],()=>{}];}};
+  if(name==='react')return {useRef:initial=>({current:initial}),useEffect:()=>{},useState:initial=>{const defaults=['','section-1',['2026-11-02'],false,false];return [existing?initial:defaults[index++],()=>{}];}};
   if(name==='next/navigation')return {useRouter:()=>({replace:path=>calls.push(['replace',path]),refresh:()=>calls.push(['refresh'])})};
   if(name==='./faculty-routes')return {facultyRoutes:{details:'/observations/details'}};
   if(name==='./faculty-api')return {postFacultyAction:async(path,body)=>{calls.push(['post',path,body]);return {message:'Saved'};}};
   return new Proxy({},{get:(_,key)=>String(key)});
  });
  const data={existingSignup:{id:'saved',sectionId:'section-1'},sections:[{id:'section-1',options:[]}],signup:{allowed:true},dashboard:{}};
- const tree=exports.SignupScreen({data});assert.equal(treeNodes(tree).some(n=>n.type==='form'),false);assert.ok(treeNodes(tree).some(n=>n.props.href==='/observations/details'));assert.equal(calls.length,0);
- existing=false;const form=exports.SignupScreen({data:{...data,existingSignup:null}});await form.props.onSubmit({preventDefault(){}});
+ const shellExisting=exports.SignupScreen({data});const tree=shellExisting.type(shellExisting.props);assert.equal(treeNodes(tree).some(n=>n.type==='form'),false);assert.ok(treeNodes(tree).some(n=>n.props.href==='/observations/details'));assert.equal(calls.length,0);
+ existing=false;const shell=exports.SignupScreen({data:{...data,existingSignup:null}});const form=shell.type(shell.props);await form.props.onSubmit({preventDefault(){}});
  assert.deepEqual(calls,[['post','signup',{sectionId:'section-1',dates:['2026-11-02']}],['replace','/observations/details'],['refresh']]);
 });
 

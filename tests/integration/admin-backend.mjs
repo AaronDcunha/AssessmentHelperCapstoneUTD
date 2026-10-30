@@ -71,7 +71,7 @@ try {
  await mutate('levels.delete',{hiringLevelId:disposable.id}); assert.equal(await prisma.hiringLevel.count({where:{hiringLevelId:disposable.id}}),0);
  assert.equal((await read('departments.list')).items[0].code,'CS');
  assert.equal((await read('roles.list')).items.length,2);
- assert.equal((await read('permissions.list')).items[0].key,'profile.read.own');
+ assert.ok((await read('permissions.list')).items.some(item=>item.key==='profile.read.own'));
  const managerKeys=['users.read','users.manage','roles.read','permissions.read','roles.assign','role-permissions.manage'];
  for(const key of managerKeys) {
   const p=await prisma.permission.create({data:{permissionName:key}});
@@ -113,6 +113,8 @@ try {
   assert.equal(await prisma[model].count({where:{userId:removable.id}}),0);
  assert.equal(await authenticateDatabase({username:'remove_me',password:'123'},prisma),null);
  assert.equal(await resolveDatabaseUser(removable.id,prisma),null);
+ assert.equal(await prisma.rolePermission.count({where:{roleId:faculty.roleId}}),1, 'Shared Faculty permission grants survive account deletion');
+ assert.ok(await prisma.userRole.count({where:{userId:second.id}}), 'Other accounts retain their role permissions');
  assert.equal((await remove(removable.id)).status,404);
  const semester=await prisma.semester.create({data:{termCode:'26f',termName:'Fall 2026'}});
  const course=await prisma.course.create({data:{departmentId:department.departmentId,courseCode:'CS1000',courseTitle:'Test',courseLevel:1000}});

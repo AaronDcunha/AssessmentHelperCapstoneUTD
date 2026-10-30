@@ -8,6 +8,6 @@ export default async function Page() {
   let unavailable = false;
   try { initial = await getFacultyAssessment(user); }
   catch { unavailable = true; }
-  return <FacultyAssessmentScreen initial={initial} unavailable={unavailable} />;
+  return <FacultyAssessmentScreen key={`${initial?.observationId ?? "none"}-${initial?.revision ?? unavailable}`} initial={initial} unavailable={unavailable} />;
 }
 
