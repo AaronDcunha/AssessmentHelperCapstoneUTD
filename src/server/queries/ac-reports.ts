@@ -1,9 +1,11 @@
 import type { Prisma } from "../../generated/prisma/client";
 import { ConfigurationError, invalid, pagination, uuid, type ConfigurationUser } from "../configuration-validation";
+import { facultyEligibility } from "../services/faculty-evaluation";
+import { cycleSignups, cycleMetrics, completedObservation, pendingStage, pendingActionOverdue, unmatchedStage } from "./ac-metrics";
 
 export type ReportView = "reports" | "attention" | "faculty-status" | "observations" | "metrics";
 export type ObservationView = "details" | "template" | "assessment";
-export type Connection = Pick<Prisma.TransactionClient, "evaluationCycle" | "observation" | "professor" | "hiringLevel">;
+export type Connection = Pick<Prisma.TransactionClient, "evaluationCycle" | "observation" | "professor" | "hiringLevel" | "evaluationSignup">;
 export const eligibilityReason = "Needs review: the first required evaluation date or necessary semester/history data is not established.";
 const cancelled = ["CANCELLED", "CANCELED"];
 const personSelect = { userId: true, fullName: true };
@@ -82,12 +84,12 @@ function termOrder(code: string) {
   return match ? Number(match[1]) * 10 + { s: 1, u: 2, f: 3 }[match[2] as "s" | "u" | "f"] : null;
 }
 
-export async function facultyStatuses(db: Connection, url: URL, cycle: Prisma.EvaluationCycleGetPayload<{ include: { semester: true } }>) {
+export async function facultyStatuses(db: Pick<Connection, "professor">, url: URL, cycle: Prisma.EvaluationCycleGetPayload<{ include: { semester: true } }>, beforeCycle = false) {
   const id = ids(url), q = search(url), signedUp = filter(url, "signedUp");
   if (signedUp !== null && !["true", "false"].includes(signedUp)) invalid("signedUp must be true or false.");
-  const include = { user: { select: personSelect }, hiringLevel: true,
+  const include = { user: { select: personSelect }, hiringLevel: true, teaches: { include: { section: { include: { semester: true } } } },
     evaluationSignups: { include: { cycle: { include: { semester: true } }, observations: {
-      where: { status: { notIn: cancelled } }, select: { observationId: true, completedAt: true },
+      where: { status: { notIn: cancelled } }, select: { observationId: true, completedAt: true, signedAssessment: true },
       orderBy: [{ completedAt: "desc" as const }, { observationId: "asc" as const }] } } } };
   const rows: Prisma.ProfessorGetPayload<{ include: typeof include }>[] = [];
   let cursor: string | undefined;
@@ -109,25 +111,17 @@ export async function facultyStatuses(db: Connection, url: URL, cycle: Prisma.Ev
     const signup = p.evaluationSignups.find(s => s.cycleId === cycle.cycleId);
     const history = p.evaluationSignups.flatMap(s => {
       const order = termOrder(s.cycle.semester.termCode);
-      return target !== null && order !== null && order <= target ? s.observations.filter(o => o.completedAt).map(o => ({
-        order, semester: { id: s.cycle.semesterId, name: s.cycle.semester.termName }, completedAt: o.completedAt!,
+      return target !== null && order !== null && (beforeCycle ? order < target : order <= target) ? s.observations.filter(completedObservation).map(o => ({
+        order, termCode: s.cycle.semester.termCode, semester: { id: s.cycle.semesterId, name: s.cycle.semester.termName },
+        completedAt: o.signedAssessment!.completedAt ?? o.completedAt ?? o.signedAssessment!.observeeSignedAt!,
       })) : [];
     }).sort((a, b) => b.order - a.order || b.completedAt.getTime() - a.completedAt.getTime());
     const last = history[0], previous = history.find(h => h.order !== target);
-    const interval = p.hiringLevel.evaluationIntervalYears;
-    let evaluationStatus = "needs-review";
-    const { startsOn, endsOn } = cycle.semester;
-    if (p.hireDate && endsOn && p.hireDate > endsOn) evaluationStatus = "not_due";
-    else if (p.hireDate && startsOn && endsOn && p.hireDate >= startsOn && p.hireDate <= endsOn) evaluationStatus = "not_due";
-    else if (last && target !== null && interval > 0) {
-      const dueYear = Math.floor(last.order / 10) + interval, year = Math.floor(target / 10);
-      // Annual evaluations may occur in either Spring or Fall of the due year.
-      if (year < dueYear) evaluationStatus = "not_due";
-      else if (year > dueYear) evaluationStatus = "overdue";
-      else if (interval === 1) evaluationStatus = "due";
-      else if (target % 10 === 2 || last.order % 10 === 2) evaluationStatus = "needs-review";
-      else evaluationStatus = target % 10 < last.order % 10 ? "not_due" : target % 10 === last.order % 10 ? "due" : "overdue";
-    }
+    const eligibility = facultyEligibility({ termCode: cycle.semester.termCode,
+      startsOn: cycle.semester.startsOn?.toISOString().slice(0, 10) ?? null,
+      endsOn: cycle.semester.endsOn?.toISOString().slice(0, 10) ?? null }, last?.termCode ?? null,
+      p.hiringLevel.evaluationIntervalYears, p.hireDate, p.teaches.map(t => t.section.semester.termCode));
+    const evaluationStatus = { due: "due", overdue: "overdue", notDue: "not_due", ineligible: "not_due", unknown: "needs-review" }[eligibility.status];
     return { id: p.professorId, professor: person(p), hiringLevel: { id: p.hiringLevelId, name: p.hiringLevel.levelName },
       lastEvaluation: previous ? { semester: previous.semester, completedAt: previous.completedAt } : null,
       evaluationStatus, signupId: signup?.signupId ?? null, observationId: signup?.observations[0]?.observationId ?? null,
@@ -154,15 +148,8 @@ export async function getCycleReport(db: Connection, user: ConfigurationUser, ur
     return page(rows.filter(p => (!cursor || p.id > cursor) && (!status || p.evaluationStatus === (status === "unavailable" ? "needs-review" : status))), limit);
   }
   if (view === "metrics") {
-    const demo = process.env.NODE_ENV === "development";
-    return { cycleId, available: demo, source: demo ? "demo" : "unavailable",
-      availableAt: demo ? null : cycle.feedbackDeadline, generatedAt: now, formulaVersion: demo ? "demo" : null,
-      metrics: [["evaluationEligibilityAccuracy", "Evaluation eligibility accuracy", "percent"], ["overdueEvaluationCount", "Overdue evaluations", "count"],
-        ["assessmentParticipationRate", "Participation rate", "percent"], ["observerUtilizationRate", "Observer utilization", "percent"],
-        ["listSufficiencyRate", "List sufficiency", "percent"], ["missingObservationCount", "Missing observations", "count"],
-        ["surveyCompletionRate", "Survey completion", "percent"]].map(([key, label, unit], index) => ({ key, label, unit,
-          value: demo ? [100, 4, 75, 60, 80, 2, 70][index] : null,
-          ...(demo ? { source: "demo" } : { unavailableReason: "KPI formulas and denominators require agreement; final KPIs follow the feedback deadline." }) })) };
+    const [signups, faculty, baseline] = await Promise.all([cycleSignups(db, cycleId, id), facultyStatuses(db, url, cycle), facultyStatuses(db, url, cycle, true)]);
+    return cycleMetrics(db, cycle, signups, faculty, baseline, now);
   }
   if (view === "attention") {
     const issue = filter(url, "issue");
@@ -181,20 +168,28 @@ export async function getCycleReport(db: Connection, user: ConfigurationUser, ur
   }
   const faculty = await facultyStatuses(db, url, cycle);
   const levels = await db.hiringLevel.findMany({ where: id.hiringLevelId ? { hiringLevelId: id.hiringLevelId } : {}, orderBy: { levelName: "asc" } });
-  const [unmatchedCount, incomplete, byHiringLevel] = await Promise.all([
-    db.observation.count({ where: { AND: [where, unmatched] } }), db.observation.count({ where: { AND: [where, outstanding(now)] } }),
-    Promise.all(levels.map(async h => ({ hiringLevelId: h.hiringLevelId, name: h.levelName,
+  const signups = await cycleSignups(db, cycleId, id);
+  const unmatchedSignups = signups.filter(s => !s.observations.some(o => o.observerId && !cancelled.includes(o.status)));
+  const unfinished = signups.flatMap(s => s.observations.filter(o => !cancelled.includes(o.status) && !completedObservation(o)).map(o => ({ observation: o, signup: s, stage: pendingStage(o, now), overdue: pendingActionOverdue(o, now, cycle.observationDeadline) })));
+  const byHiringLevel = levels.map(h => ({ hiringLevelId: h.hiringLevelId, name: h.levelName,
       due: faculty.filter(p => p.hiringLevel.id === h.hiringLevelId && p.evaluationStatus === "due").length,
+      overdue: faculty.filter(p => p.hiringLevel.id === h.hiringLevelId && p.evaluationStatus === "overdue").length,
       needsReview: faculty.filter(p => p.hiringLevel.id === h.hiringLevelId && p.evaluationStatus === "needs-review").length,
-      outstanding: await db.observation.count({ where: { AND: [where, outstanding(now), { signup: { professor: { hiringLevelId: h.hiringLevelId } } }] } }) }))),
-  ]);
-  return { cycleId, asOf: now, definitionsVersion: "operational-v2", summary: {
+      outstanding: unfinished.filter(x => x.signup.professor.hiringLevelId === h.hiringLevelId).length,
+      overdueStages: Object.fromEntries([...new Set(unfinished.map(x => x.stage))].map(stage => [stage, unfinished.filter(x => x.signup.professor.hiringLevelId === h.hiringLevelId && x.stage === stage && x.overdue).length])),
+      pendingStages: Object.fromEntries([...new Set(unfinished.map(x => x.stage))].map(stage => [stage, unfinished.filter(x => x.signup.professor.hiringLevelId === h.hiringLevelId && x.stage === stage).length])) }));
+  return { cycleId, asOf: now, definitionsVersion: "kpi-2026-10-26", summary: {
     facultyDue: faculty.filter(p => p.evaluationStatus === "due").length, overdue: faculty.filter(p => p.evaluationStatus === "overdue").length,
-    needsReview: faculty.filter(p => p.evaluationStatus === "needs-review").length, unmatched: unmatchedCount, incomplete },
+    needsReview: faculty.filter(p => p.evaluationStatus === "needs-review").length, unmatched: unmatchedSignups.length, incomplete: unfinished.length },
+    unmatchedFaculty: unmatchedSignups.map(s => ({ signupId: s.signupId, professor: person(s.professor), signupDate: s.signupDate,
+      course: s.section.course.courseCode, section: s.section.sectionCode,
+      stage: unmatchedStage(s.observations) })),
+    outstandingObservations: unfinished.map(x => ({ observationId: x.observation.observationId, signupId: x.signup.signupId,
+      hiringLevelId: x.signup.professor.hiringLevelId, stage: x.stage, overdue: x.overdue, deadline: cycle.observationDeadline })),
     byHiringLevel, availableViews: ["faculty-status", "attention", "observations"],
-    definitions: { unmatched: "Unfinished, non-cancelled observations without a selected observer.",
-      eligibility: "Current hiring-level interval and completed evaluation terms; annual due year allows Spring or Fall. Unresolved first-due and summer boundaries need review.",
-      incomplete: "Scheduled/past, non-cancelled observations with an observer and no locked assessment; this does not establish non-occurrence." } };
+    definitions: { unmatched: "Cycle signups without a confirmed observer, including signups without an observation row.",
+      eligibility: "Shared Faculty eligibility, current rank and available history; no historical rank/eligibility snapshot is stored.",
+      incomplete: "Non-cancelled, unfinished observations grouped by pending stage. Pending actions become overdue at the observation deadline; upcoming appointments and reported non-occurrence are not marked as overdue actions." } };
 }
 
 // Convert a stored schedule's local wall time using its semester's IANA zone.

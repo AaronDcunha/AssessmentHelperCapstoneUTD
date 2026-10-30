@@ -500,8 +500,17 @@ GET /api/evaluation-cycles/{cycleId}/metrics -- scoped AC/Admin.
   Q: departmentId? if supported. R: {cycleId,available,availableAt,generatedAt,
     formulaVersion,metrics:[{key,label,value:number|null,unit,numerator?,denominator?,
     unavailableReason?}]}.
-  Operational counts are live; final KPIs follow feedback deadline. Return unavailable
-  rather than invented values. All KPI formulas/denominators remain to be agreed.
+  October 29 #76: implemented using Aaron's October 26 issue #76 calculation guide.
+  Q also accepts hiringLevelId. source:database, reportingMode:live-recalculation,
+  formulaVersion:kpi-2026-10-26. All seven metrics return numerator/denominator;
+  percentage zero denominators return null/N/A. List sufficiency uses unit:matches,
+  not percent, and is unavailable for incomplete/ambiguous generation. Matching
+  accuracy reuses Faculty matching against current data, not historical snapshots.
+  Participation Due is reconstructed from pre-cycle history/current rank. counts
+  includes baselineNeedsReview and generated/notGenerated/ambiguous list counts.
+  Reports add byHiringLevel.pendingStages and unmatchedFaculty signup records,
+  including signups without observations. Values stay live after feedbackDeadline;
+  no historical eligibility/rank/schedule snapshot or immutable final report exists.
 POST /api/evaluation-cycles/{cycleId}/notifications (COMPLETED); scoped AC/Admin reminders.
   B: {kind,recipientFilter:{evaluationStatus?,observationStatus?,departmentId?,
     hiringLevelId?,professorIds?},channels?:('inApp'|'email')[],message?}.
@@ -682,6 +691,14 @@ email, independently of alerts.manage. Admin and custom committee roles with
 observations.read plus notifications.send remain included. Duplicate role membership
 does not duplicate delivery. Messages include sender and full text; observation
 access remains independently enforced. Multiple messages/retry keys remain supported.
+October 30 KPI report response addendum:
+GET /api/evaluation-cycles/{cycleId}/reports returns byHiringLevel[].overdue
+(evaluation eligibility count) and overdueStages (pending-stage counts past the
+observation deadline). outstandingObservations contains observationId, signupId,
+hiringLevelId, stage, overdue and deadline. Upcoming appointments, cancelled work,
+finalized assessments and reported non-occurrence are not overdue pending actions.
+Unmatched faculty stages disregard cancelled observations' generations/releases.
+These flags do not change the evaluation-overdue formula or signup cutoff.
 
 October 29, 2026 implemented semester lifecycle extension:
 POST /api/semesters {year,season,startsOn,endsOn,timeZone}; DELETE /api/semesters/{semesterId}

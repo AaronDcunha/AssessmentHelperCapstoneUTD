@@ -17,6 +17,23 @@ Faculty History page and its shared detail implementation are unchanged. No appl
 data was reset, seeded or deleted. See FACULTY_INTEGRATION_FIXES.md for verification.
 
 ASSESSMENT HELPER IMPLEMENTATION NOTES
+October 30, 2026 KPI presentation:
+Reports use equal-height responsive metric cards with explanations inside the card.
+Zero-population messages identify the missing metric-specific data in plain language.
+The dynamic eligibility-review count appears in Participation; the technical snapshot
+paragraph is replaced with a short live-update note. API calculation definitions and
+all formulas remain unchanged. Shared MetricCard descriptions are optional.
+
+October 30, 2026 KPI report review corrections:
+Executive reports now return/display overdue evaluation counts separately by hiring
+level, alongside Due and Needs review. Unfinished observations retain their pending
+stage and a separate overdue-action flag at the cycle observation deadline; future
+appointments and reported non-occurrence are not overdue pending actions. Reports
+include per-stage overdue counts and per-observation stage/deadline/flag data.
+Unmatched stages ignore cancelled generations/releases. Evaluation eligibility and
+signup cutoffs are unchanged. Regression coverage includes isolated PostgreSQL
+rank totals, deadline flags and cancelled-release cases. Faculty History is unchanged.
+
 October 29, 2026 cycle-list action presentation:
 Replaced the ellipsis dropdown with a direct Edit Cycle link in a dedicated Action
 column, using the shared secondary button. Editing no longer opens an overflowing
@@ -907,3 +924,19 @@ conflicts. Mailpit is pinned to 1.32.0; Node target 24.22.1 is recorded in versi
 files/engines. No new database migration or reset. The old Admin/AC optional route
 context typings were corrected; full production build now passes. See
 DEPENDENCY_UPDATES.md for compatibility, verification and teammate update steps.
+October 29, 2026 KPI metrics (#76; Aaron's October 26 calculation guide in issue #76):
+The seven metrics now use Prisma records with cycle/department/hiring-level scope,
+numerators/denominators and N/A for zero denominators. Matching accuracy reuses
+Faculty availableOption/observerAvailable on retained pairs and current schedules;
+it is not a historical accuracy snapshot. Participation reconstructs Due from
+pre-cycle completed evaluations with current rank/shared Faculty eligibility, so
+current-cycle completion does not remove professors from its denominator. Missing
+evidence remains separately visible. The shared annual rule now follows the process
+document's calendar year (Spring or Fall); multi-year intervals keep semester order.
+List sufficiency is average matches, includes generated empty lists, and remains
+unavailable while generation is incomplete or multiple applicable lists are ambiguous.
+Reported missing appointments are distinct from unfinished forms; survey completion
+requires the full workflow and OBSERVEE feedback only. Reports include signup-only
+unmatched faculty and unfinished observation stage counts. All values are labelled
+live recalculations, including after the feedback deadline; no snapshot/schema,
+form-save, matching-generation, or notification mutation was introduced.

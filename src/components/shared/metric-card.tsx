@@ -8,6 +8,7 @@ export type MetricCardProps = Omit<ComponentProps<"dl">, "children"> & {
   error?: string | null;
   missingLabel?: string;
   loadingLabel?: string;
+  description?: ReactNode;
 };
 
 /** Display-only metric. An error takes precedence over loading and stale values. */
@@ -19,6 +20,7 @@ export function MetricCard({
   error,
   missingLabel = "No data",
   loadingLabel = "Loading…",
+  description,
   className,
   ...props
 }: MetricCardProps) {
@@ -39,8 +41,9 @@ export function MetricCard({
       {...props}
     >
       <dt className="w-full break-words text-body text-muted">{label}</dt>
-      <dd className={`flex min-h-[67px] w-full items-center ${contentClasses}`} aria-live="polite" aria-atomic="true">
+      <dd className={`flex min-h-[67px] w-full ${description ? "flex-1 flex-col items-start justify-center gap-ah-12" : "items-center"} ${contentClasses}`} aria-live="polite" aria-atomic="true">
         <span className="min-w-0 break-words">{content}</span>
+        {description && <p className="w-full break-words text-caption text-muted">{description}</p>}
       </dd>
     </dl>
   );

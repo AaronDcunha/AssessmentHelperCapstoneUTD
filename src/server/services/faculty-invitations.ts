@@ -29,7 +29,7 @@ export async function facultyTransaction<T>(action: (db: Tx) => Promise<T>) {
   }
 }
 const observationInclude = { signup: { include: { professor: { include: { user: true } }, section: { include: { classMeetings: true, course: true, semester: true } } } }, cycle: true, signedAssessment: true, timeOptions: true } as const;
-export async function workflowObservation(db: Tx, id: string) {
+export async function workflowObservation(db: Pick<Tx, "observation">, id: string) {
   const record = await db.observation.findUnique({ where: { observationId: id }, include: observationInclude });
   if (!record) throw new FacultyActionError("Observation not found.", 404);
   return record;
@@ -54,7 +54,7 @@ export function availableOption(record: ObservationRecord, id: string, now: Date
   return { ...current, timeOptionId: id, date };
 }
 
-export async function observerAvailable(db: Tx, record: ObservationRecord, professorId: string, option: ReturnType<typeof availableOption>) {
+export async function observerAvailable(db: Pick<Tx, "professor" | "evaluationSignup" | "observation">, record: ObservationRecord, professorId: string, option: ReturnType<typeof availableOption>) {
   if (professorId === record.signup.professorId) return false;
   const profile = await db.professor.findUnique({ where: { professorId }, include: { user: true, teaches: { include: { section: { include: { classMeetings: true, course: true, semester: true } } } } } });
   if (!profile?.user.isActive || profile.departmentId !== record.signup.professor.departmentId) return false;

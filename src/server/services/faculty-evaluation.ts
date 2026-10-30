@@ -34,6 +34,13 @@ export function facultyEvaluationStatus(currentTerm: string | null, completedTer
     return { status: "unknown", reason: "The hiring level has no valid evaluation interval." };
   }
   if (previous > current) return { status: "unknown", reason: "The completed evaluation semester is later than the current cycle." };
+  // The process document allows annual evaluations in either Spring or Fall.
+  if (intervalYears === 1) {
+    const year = Math.floor(current / 3), dueYear = Math.floor(previous / 3) + 1;
+    return year < dueYear ? { status: "notDue", reason: "Your annual evaluation is not due this calendar year." }
+      : year === dueYear ? { status: "due", reason: "Your annual evaluation is due this calendar year." }
+        : { status: "overdue", reason: "Your annual evaluation was due in an earlier calendar year." };
+  }
   const due = previous + intervalYears * 3;
   if (current > due) return { status: "overdue", reason: "The evaluation interval ended in an earlier semester." };
   if (current === due) return { status: "due", reason: "Your evaluation interval ends this semester." };

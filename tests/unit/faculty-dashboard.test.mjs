@@ -86,7 +86,7 @@ function runtime(db, user = actor, authFailure = false) {
 
 test('evaluation intervals use semester order, including assistant annual and associate/full biennial boundaries', () => {
   for (const [current, previous, interval, expected] of [
-    ['26f', '25f', 1, 'due'], ['26s', '25f', 1, 'notDue'], ['27s', '25f', 1, 'overdue'],
+    ['26f', '25f', 1, 'due'], ['26s', '25f', 1, 'due'], ['26f', '25s', 1, 'due'], ['27s', '25f', 1, 'overdue'],
     ['26f', '24f', 2, 'due'], ['26s', '24f', 2, 'notDue'], ['27s', '24f', 2, 'overdue'],
   ]) assert.equal(facultyEvaluationStatus(current, previous, interval).status, expected);
 });
