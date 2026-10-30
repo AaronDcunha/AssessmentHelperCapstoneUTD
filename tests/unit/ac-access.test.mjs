@@ -39,6 +39,7 @@ function load(filename) {
 const pages = [
   ["", "ac.dashboard"], ["cycles", "ac.cycles"], ["cycles/new", "ac.cycleCreate"],
   ["cycles/[cycleId]/edit", "ac.cycleEdit"], ["faculty", "ac.faculty"],
+  ["observer-selection", "ac.observerSelection"],
   ["observations", "ac.progress"], ["observations/[observationId]", "ac.detail"],
   ["template", "ac.template"], ["reports", "ac.reports"], ["semester", "ac.semester"],
 ].map(([path, key]) => [load(`src/app/(main)/ac/${path ? path + "/" : ""}page.tsx`).default, key]);
@@ -80,7 +81,7 @@ test("sidebar and server access agree, without requiring AC role names or test p
     const shell = await layout({ children: null });
     const links = shell.props.authorizedSections.flatMap(section => section.items).filter(item => item.id.startsWith("ac."));
     const ids = new Set(links.map(item => item.id));
-    for (const key of ["ac.dashboard", "ac.cycles", "ac.faculty", "ac.progress", "ac.template", "ac.reports", "ac.semester"]) {
+    for (const key of ["ac.dashboard", "ac.cycles", "ac.observerSelection", "ac.faculty", "ac.progress", "ac.template", "ac.reports", "ac.semester"]) {
       assert.equal(ids.has(key), canAccessAcPage(grants, key), key);
     }
   }

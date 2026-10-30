@@ -14,6 +14,64 @@ backend validation and schema are unchanged. Focused unit/browser regressions,
 lint, TypeScript and production build passed; browser business writes were all
 intercepted. See AC_CONFIGURATION_FRONTEND.md. Task #5 alerts are untouched.
 
+October 29, 2026 issue #74 live database repair:
+The live cycle-alert read returned 503 UNAVAILABLE because the local database had
+only four of nine checked-in migrations applied. Exact query reproduction exposed
+Prisma P2022/PostgreSQL 42703: faculty_issue.occurrence_key did not exist. The
+existing workflow wrapper sanitizes database errors without logging the exception.
+Reviewed and deployed the five existing pending migrations with prisma migrate
+deploy; no migration definitions, backend/frontend code, credentials or environment
+files were changed for this repair. No reset/reseed, volume deletion or business
+records were created/deleted. The same real GET now returns 200 with a genuine
+empty list. Anonymous/Faculty reads remain 401/403; AC/Admin return 200. All nine
+migrations are applied. See AC_DASHBOARD_ALERTS.md for exact response and metadata
+effects of the existing migrations, including the inert legacy alerts.manage grant.
+
+October 29, 2026 AC Dashboard Alerts (issue #74):
+Dashboard Needs attention joins existing paginated attention and Faculty-message
+reads for the selected cycle. Stable alert IDs deduplicate overlapping sources;
+distinct messages and non-alert issues remain. Independent errors/retries preserve
+successful rows, and cycle changes hide old data/ignore late responses. Review
+opens the existing observation detail with exact alertId and validated pairing.
+Read-only review satisfies the conditional lifecycle requirement: current messages
+have no acknowledgement/resolution workflow and no PATCH action was added.
+Saved text/context, detail retry and safe long-message rendering are supported.
+See AC_DASHBOARD_ALERTS.md for files, permissions, checks and local URLs. No backend,
+schema, database-data, email or Task #6 changes are included in this branch.
+
+October 29, 2026 current-semester Observer Selection:
+User confirmed Observer Selection is always for the current semester. Removed its
+cycle picker; use the unique semester whose configured inclusive start/end dates
+contain today in its time zone, independent of other AC pages' selections. Missing
+or overlapping current cycles show configuration guidance. Other AC pages retain
+their selectors. Shortfall notifications now name the observee instead of printing
+the observation UUID; internal linkage and deduplication keys remain unchanged.
+
+October 29, 2026 selected-signup generation and deadline correction:
+Observer Selection now derives signup status from the configured cycle deadline,
+displays it in the semester time zone, and allows AC/Admin generation-grant users
+to select individual untouched signups or select all. Generate targets selected
+observation IDs through scope.observationIds; the server validates and filters
+the selection transactionally, retaining the existing after-signup-close rule.
+Release batches selected lists by their own generation IDs. No migration or seed
+changes. This extends the earlier review corrections' frontend-only scope.
+
+October 29, 2026 Observer Selection review corrections:
+Empty candidate responses no longer imply generation; generation/release metadata
+or stored candidates distinguish generated lists from untouched signups. Switching
+cycles resets workflow state and dialogs, and release is blocked during refresh.
+Simplified the missing-generation guidance and aligned action placement, Generate
+button emphasis and compact candidate rows with Figma. No API/schema changes.
+
+October 29, 2026 AC Observer Selection frontend:
+Added the protected `/ac/observer-selection` workflow, candidate and release dialogs,
+real signup/candidate reads, and calls to the recommendation generate/release APIs
+already present on main. The still-unimplemented per-observation regenerate endpoint
+fails visibly without substituting demo data. Temporary browser-only preview records
+used during UI review were removed before handoff; no database record was seeded or
+changed. Dialogs render outside the application flex layout and lock root scrolling
+so Safari does not move the sidebar account footer.
+
 October 27, 2026 full branch verification:
 Commit 70941d6 deliberately removed demo/test shortcuts from the product sidebar.
 Updated two stale navigation tests to assert business permissions, absence of demo

@@ -89,7 +89,7 @@ test("The shared shell marks /admin active, retains Faculty links, omits demo sh
   assert.ok(!shell.props.authorizedSections.flatMap(section => section.items).some(item => adminTestPages.some(testPage => testPage.href === item.href)));
   const { acPermissions, canAccessAcPage } = load("src/lib/ac-permissions.ts");
   const acSection = shell.props.authorizedSections.find(section => section.id === "ac");
-  const acIds = ["ac.dashboard", "ac.cycles", "ac.faculty", "ac.progress", "ac.template", "ac.reports", "ac.semester"];
+  const acIds = ["ac.dashboard", "ac.cycles", "ac.observerSelection", "ac.faculty", "ac.progress", "ac.template", "ac.reports", "ac.semester"];
   assert.deepEqual(acSection.items.map(item => item.id),
     acIds.filter(id => id in acPermissions && canAccessAcPage(currentUser.permissions, id)));
   assert.equal(shell.props.pageHeaders["/ac"].title, "AC Dashboard");

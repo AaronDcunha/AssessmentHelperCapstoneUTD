@@ -64,7 +64,7 @@ test("monitoring screens wait for a real cycle, follow selection changes and sup
   const calls = [];
   globalThis.fetch = async input => {
     calls.push(String(input));
-    return Response.json(String(input).includes("/observations") || String(input).includes("/attention")
+    return Response.json(String(input).includes("/observations") || String(input).includes("/attention") || String(input).includes("/alerts")
       ? { items: [], pageInfo: { nextCursor: null, hasMore: false } } : {});
   };
   const screens = [load("src/app/(main)/ac/dashboard-screen.tsx").default, load("src/app/(main)/ac/reports/reports-screen.tsx").default,
