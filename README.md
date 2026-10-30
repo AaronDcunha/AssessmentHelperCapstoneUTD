@@ -28,7 +28,7 @@ docker compose up -d --wait
 npm run db:setup
 ```
 
-`db:setup` applies migrations, checks the schema, and seeds demo accounts/courses. It does **not** reset existing data or start Docker. Sample logins are written to `prisma/demo-accounts.txt`. Keep environment files and that login file private; they are ignored by Git.
+`db:setup` applies migrations, checks the schema, and seeds demo accounts/courses plus ten signup fixtures. It does **not** reset existing data or start Docker. Sample logins are written to `prisma/demo-accounts.txt`. Keep environment files and that login file private; they are ignored by Git.
 
 ## Start and stop locally
 
@@ -62,24 +62,26 @@ Keep PostgreSQL running for these commands. Each developer has their own local d
 | --- | --- | --- |
 | Apply updates and seed additions | `npm run db:setup` | Applies checked-in migrations and reruns the seed without resetting the database |
 | Apply migrations only | `npx prisma migrate deploy` | Updates tables without running the seed |
-| Rerun the seed only | `npm run db:seed` | Upserts demo data; does not clear workflow records |
-| Preview seed data | `npm run db:seed:preview` | No database reads/writes; generates the local demo-login reference |
+| Rerun the seed only | `npm run db:seed` | Seeds basic demo data, then ten signup fixtures; preserves existing signups/progress |
+| Preview basic seed data | `npm run db:seed:preview` | No database reads/writes; generates the local demo-login reference; signup preview is separate |
 | Preview ten demo signups | `npm run db:seed:signups:preview` | Reads the database and lists the proposed signup fixtures; writes nothing |
 | Add ten demo signups | `npm run db:seed:signups` | Adds signups, unassigned observations, and three proposed meetings per new signup |
 | Browse records | `npx prisma studio` | Opens the database editor |
 
 The basic seed preserves existing cycle/template/question edits. It does not recreate manually added signups, matching, or completed assessments. Reseeding is not a reset and may update other seeded records.
 
-For team workflow testing, run the basic seed first, then `npm run db:seed:signups`.
+For team workflow testing, `npm run db:seed` runs both seeds in order automatically.
+`npm run db:setup` uses the same sequence after migrations. If the signup step fails,
+the basic seed remains saved; fix the reported configuration issue and rerun.
 The shared script is `prisma/seed-signups.mjs`. It uses the same ten demo professors,
 their real assigned sections, and valid future class dates in the current configured
 semester. Existing signups and any later workflow progress are preserved on reruns.
 It creates no matching, releases, invitations, assessments, or notifications.
-This optional local-only demo seed can bypass a closed signup deadline without
+This local-only demo seed can bypass a closed signup deadline without
 changing normal signup rules. It requires configured semester dates and enough future
 meetings before the observation deadline; otherwise the entire batch rolls back.
 To explicitly target a cycle, use `npm run db:seed:signups -- --cycle-id=UUID`.
-After a database reset, rerun this command if you want the ten signups restored.
+After a database reset, `npm run db:seed` restores the basic data and ten signups together.
 
 ### Reset the database and restore demo data
 
@@ -90,7 +92,7 @@ npx prisma migrate reset
 npm run db:seed
 ```
 
-Confirm the reset when prompted. The first command recreates the schema from migrations; the second restores the basic demo data and login reference. Then restart the app and workers.
+Confirm the reset when prompted. The first command recreates the schema from migrations; the second restores the basic demo data, login reference, and ten signup fixtures. Then restart the app and workers.
 
 This does not clear Mailpit's captured messages or private attachment files. Avoid `docker compose down --volumes` unless you also intend to erase the Docker database and Mailpit volumes. Changing `POSTGRES_PASSWORD` in `.env` does not change the password inside an existing database volume.
 

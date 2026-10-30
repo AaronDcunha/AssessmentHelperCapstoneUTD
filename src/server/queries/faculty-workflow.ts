@@ -49,7 +49,7 @@ export async function getFacultyWorkflow(user: AccountUser, options: { now?: Dat
   result.links = await getFacultyLinks(user, cycle.id, now, db);
   if (user.permissions.includes("course-sections.read.own")) {
     const assignments = await db.teaches.findMany({ where: { professor: { userId: user.id }, section: { semesterId: cycle.semesterId } }, include: { section: { include: { course: true, classMeetings: { orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }, { meetingId: "asc" }] } } } }, orderBy: [{ section: { course: { courseCode: "asc" } } }, { section: { sectionCode: "asc" } }, { sectionId: "asc" }] });
-    result.sections = assignments.map(({ section }) => { const meetings = section.classMeetings.map(meeting => ({ id: meeting.meetingId, day: meeting.dayOfWeek, startTime: meeting.startTime, endTime: meeting.endTime, location: meeting.location })); return { id: section.sectionId, label: `${section.course.courseCode}.${section.sectionCode} ? ${section.course.courseTitle}`, meetings, options: proposedMeetingOptions(meetings, now, new Date(cycle.observationDeadline), cycle) }; });
+    result.sections = assignments.map(({ section }) => { const meetings = section.classMeetings.map(meeting => ({ id: meeting.meetingId, day: meeting.dayOfWeek, startTime: meeting.startTime, endTime: meeting.endTime, location: meeting.location })); return { id: section.sectionId, label: `${section.course.courseCode}.${section.sectionCode} — ${section.course.courseTitle}`, meetings, options: proposedMeetingOptions(meetings, now, new Date(cycle.observationDeadline), cycle) }; });
   }
   if (user.permissions.includes("signups.read.own")) {
     const signup = await db.evaluationSignup.findFirst({ where: { professor: { userId: user.id }, cycleId: cycle.id } });
