@@ -500,8 +500,17 @@ GET /api/evaluation-cycles/{cycleId}/metrics -- scoped AC/Admin.
   Q: departmentId? if supported. R: {cycleId,available,availableAt,generatedAt,
     formulaVersion,metrics:[{key,label,value:number|null,unit,numerator?,denominator?,
     unavailableReason?}]}.
-  Operational counts are live; final KPIs follow feedback deadline. Return unavailable
-  rather than invented values. All KPI formulas/denominators remain to be agreed.
+  October 29 #76: implemented using Aaron's October 26 issue #76 calculation guide.
+  Q also accepts hiringLevelId. source:database, reportingMode:live-recalculation,
+  formulaVersion:kpi-2026-10-26. All seven metrics return numerator/denominator;
+  percentage zero denominators return null/N/A. List sufficiency uses unit:matches,
+  not percent, and is unavailable for incomplete/ambiguous generation. Matching
+  accuracy reuses Faculty matching against current data, not historical snapshots.
+  Participation Due is reconstructed from pre-cycle history/current rank. counts
+  includes baselineNeedsReview and generated/notGenerated/ambiguous list counts.
+  Reports add byHiringLevel.pendingStages and unmatchedFaculty signup records,
+  including signups without observations. Values stay live after feedbackDeadline;
+  no historical eligibility/rank/schedule snapshot or immutable final report exists.
 POST /api/evaluation-cycles/{cycleId}/notifications (COMPLETED); scoped AC/Admin reminders.
   B: {kind,recipientFilter:{evaluationStatus?,observationStatus?,departmentId?,
     hiringLevelId?,professorIds?},channels?:('inApp'|'email')[],message?}.

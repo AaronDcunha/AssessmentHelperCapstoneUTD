@@ -12,7 +12,8 @@ export type Cycle = {
 export type ReportsResponse = {
   cycleId: string; asOf?: string; definitionsVersion?: string;
   summary: { facultyDue: number | null; overdue: number | null; unmatched: number; incomplete: number; needsReview?: number };
-  byHiringLevel: Array<{ hiringLevelId: string; name: string; due: number | null; outstanding: number; needsReview?: number }>;
+  byHiringLevel: Array<{ hiringLevelId: string; name: string; due: number | null; outstanding: number; needsReview?: number; pendingStages?: Record<string, number> }>;
+  unmatchedFaculty?: Array<{ signupId: string; professor: UserSummary; signupDate: string; course: string; section: string; stage: string }>;
   availableViews?: string[];
 };
 export type FacultyStatusItem = {
@@ -93,7 +94,9 @@ export type ObservationAssessmentResponse = {
 export type MetricsResponse = {
   cycleId: string; available: boolean; availableAt?: string | null; generatedAt?: string | null;
   formulaVersion?: string | null;
-  metrics: Array<{ key: string; label: string; value: number | null; unit?: string; unavailableReason?: string }>;
+  reportingMode?: string;
+  counts?: { baselineNeedsReview: number };
+  metrics: Array<{ key: string; label: string; value: number | null; unit?: string; numerator?: number; denominator?: number | null; unavailableReason?: string }>;
 };
 export type CycleWrite = { semesterId: string; signupDeadline: string; observationDeadline: string; feedbackDeadline: string };
 export type HiringLevel = { id: string; name: string; evaluationIntervalYears?: number; active?: boolean };
@@ -188,7 +191,7 @@ export const acApi = {
     requestJson<RecommendationRegenerationResponse>(`/api/observations/${encodeURIComponent(observationId)}/recommendations/regenerate`, { method: "POST", body: JSON.stringify(body) }),
   getObservationCandidates: (observationId: string) =>
     requestJson<ObservationCandidatesResponse>(`/api/observations/${encodeURIComponent(observationId)}/candidates`),
-  getMetrics: (cycleId: string, filters: { departmentId?: string } = {}) => requestJson<MetricsResponse>(`${cyclePath(cycleId)}/metrics${queryString(filters)}`),
+  getMetrics: (cycleId: string, filters: { departmentId?: string; hiringLevelId?: string } = {}) => requestJson<MetricsResponse>(`${cyclePath(cycleId)}/metrics${queryString(filters)}`),
   getObservation: (observationId: string) => requestJson<ObservationDetail>(`/api/observations/${encodeURIComponent(observationId)}`),
   getObservationTemplate: (observationId: string) => requestJson<AssignedObservationTemplate>(`/api/observations/${encodeURIComponent(observationId)}/template`),
   getObservationAssessment: (observationId: string) => requestJson<ObservationAssessmentResponse>(`/api/observations/${encodeURIComponent(observationId)}/assessment`),
