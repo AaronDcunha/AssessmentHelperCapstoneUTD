@@ -54,4 +54,3 @@ test("candidate availability and match states reflect returned records", () => {
   assert.deepEqual(matchState(true, 2), { label: "2 matches", tone: "warning" });
   assert.deepEqual(matchState(true, 5), { label: "5 matches", tone: "neutral" });
 });
-

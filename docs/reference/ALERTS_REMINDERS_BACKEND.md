@@ -81,6 +81,12 @@ No reminder is sent automatically by a read or page render.
 
 ## Frontend integration
 
+- AC Dashboard Needs attention now joins the existing attention and cycle-message
+  reads. Exact alert-ID deduplication retains independent messages and non-alert
+  issues. Review reuses the saved-message detail panel with retries and pairing
+  validation. This is read-only and adds no backend/lifecycle API. See
+  [issue #74 handoff](AC_DASHBOARD_ALERTS.md).
+
 - Existing Faculty Alert AC uses the canonical observation alerts POST. The old
   dashboard issue action delegates ALERT to the same creation service; it does not
   create a competing alert record or duplicate notifications.
@@ -88,9 +94,9 @@ No reminder is sent automatically by a read or page render.
   observation details destination with its selected alertId. The shared context
   panel validates the observation/alert pairing and displays reason, details,
   candidate context and full read-only message.
-- Existing observation details can display its pending alert for an authorized
-  observee/AC viewer. Resolution notes and terminal state remain accessible through
-  the cycle alert list's explicit alert link.
+- Existing observation details can display an explicitly selected saved message
+  for an authorized observee/AC viewer. Historical lifecycle fields do not appear
+  in message responses or review controls.
 - AC Faculty Due/Overdue and Observation Progress have permission-gated reminder
   controls using the current filters and explicit message submission. A single
   cycle is required; the All semesters view cannot trigger a multi-cycle send.

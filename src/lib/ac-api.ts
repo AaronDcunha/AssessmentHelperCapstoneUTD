@@ -23,7 +23,7 @@ export type FacultyStatusItem = {
 export type AttentionItem = {
   id: string; faculty: UserSummary;
   issue: "overdue" | "unmatched" | "incomplete" | "alert" | "expiredApproval";
-  observationStatus: string | null; observationId?: string | null;
+  observationStatus: string | null; observationId?: string | null; alertId?: string | null;
 };
 export type ObservationMeeting = {
   id: string; sectionId: string; date: string; startsAt: string; endsAt: string;

@@ -1,4 +1,29 @@
 ASSESSMENT HELPER IMPLEMENTATION NOTES
+October 29, 2026 issue #74 live database repair:
+The live cycle-alert read returned 503 UNAVAILABLE because the local database had
+only four of nine checked-in migrations applied. Exact query reproduction exposed
+Prisma P2022/PostgreSQL 42703: faculty_issue.occurrence_key did not exist. The
+existing workflow wrapper sanitizes database errors without logging the exception.
+Reviewed and deployed the five existing pending migrations with prisma migrate
+deploy; no migration definitions, backend/frontend code, credentials or environment
+files were changed for this repair. No reset/reseed, volume deletion or business
+records were created/deleted. The same real GET now returns 200 with a genuine
+empty list. Anonymous/Faculty reads remain 401/403; AC/Admin return 200. All nine
+migrations are applied. See AC_DASHBOARD_ALERTS.md for exact response and metadata
+effects of the existing migrations, including the inert legacy alerts.manage grant.
+
+October 29, 2026 AC Dashboard Alerts (issue #74):
+Dashboard Needs attention joins existing paginated attention and Faculty-message
+reads for the selected cycle. Stable alert IDs deduplicate overlapping sources;
+distinct messages and non-alert issues remain. Independent errors/retries preserve
+successful rows, and cycle changes hide old data/ignore late responses. Review
+opens the existing observation detail with exact alertId and validated pairing.
+Read-only review satisfies the conditional lifecycle requirement: current messages
+have no acknowledgement/resolution workflow and no PATCH action was added.
+Saved text/context, detail retry and safe long-message rendering are supported.
+See AC_DASHBOARD_ALERTS.md for files, permissions, checks and local URLs. No backend,
+schema, database-data, email or Task #6 changes are included in this branch.
+
 October 29, 2026 current-semester Observer Selection:
 User confirmed Observer Selection is always for the current semester. Removed its
 cycle picker; use the unique semester whose configured inclusive start/end dates

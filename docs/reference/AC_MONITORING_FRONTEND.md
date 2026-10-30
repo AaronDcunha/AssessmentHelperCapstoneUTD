@@ -1,5 +1,13 @@
 # AC monitoring frontend integration
 
+October 29, 2026 issue #74: Dashboard Needs attention now combines the existing
+attention and paginated cycle-alert APIs with independent failure/retry states,
+stable message-ID deduplication and exact saved-message Review links. Current
+attention queries provide non-message issues; alert data comes from the separate
+existing message endpoint. Reviews reuse read-only observation details and preserve
+all page/API guards. See [issue #74 handoff](AC_DASHBOARD_ALERTS.md) for the completed
+checklist, files, permission mapping, controlled verification and local URLs.
+
 October 23, 2026: fixes the list-envelope, real-cycle selection, and business-permission review findings on `feature/ac-monitoring-reports-final`.
 
 ## Lists and cycle selection

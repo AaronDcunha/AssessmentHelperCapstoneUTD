@@ -61,8 +61,11 @@ Notifications backend: see NOTIFICATIONS_BACKEND.md for the four implemented
 personal inbox/read-state APIs, migration and shared creation service. New notification runtime code uses Prisma Client.
 
 Alerts/reminders: see ALERTS_REMINDERS_BACKEND.md for the implemented observation
-alert create, cycle alert list, individual alert read/update, and AC cycle reminder
+alert create, cycle alert list, individual read-only alert review, and AC cycle reminder
 endpoint, their frontend wiring and permissions.
+
+AC Dashboard Alerts: see [issue #74 handoff](AC_DASHBOARD_ALERTS.md) for selected-cycle
+Needs attention integration, read-only message review, verification and local URLs.
 
 Email delivery: see EMAIL_DELIVERY.md for the transactional outbox, separate SMTP
 worker, Mailpit setup, channel selection, retry handling and tests.
