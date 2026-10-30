@@ -4,6 +4,7 @@ import { FacultyActionError } from "./services/faculty-errors";
 /** Pointer equality and a real publication are required, never a legacy timestamp
  * alone. The composite FKs guarantee that list and observation ownership agree. */
 export const currentReleasedCandidates = {
+  cancelledAt: null,
   recommendationList: { publishedAt: { not: null }, releasedFor: { isNot: null } },
 } satisfies Prisma.ObservationCandidateWhereInput;
 
@@ -15,9 +16,9 @@ export const currentReleasedCandidateSql = `candidate.recommendation_list_id = o
 
 export function requireCurrentReleasedCandidate(
   record: { currentReleasedListId: string | null; currentReleasedList: { publishedAt: Date | null } | null },
-  candidate: { recommendationListId: string },
+  candidate: { recommendationListId: string; cancelledAt?: Date | null },
 ) {
-  if (!record.currentReleasedListId || !record.currentReleasedList?.publishedAt
+  if (candidate.cancelledAt || !record.currentReleasedListId || !record.currentReleasedList?.publishedAt
     || candidate.recommendationListId !== record.currentReleasedListId) {
     throw new FacultyActionError("This candidate is not in the current released recommendation list.");
   }

@@ -1,4 +1,30 @@
-October 30, 2026 Issue #67 integration with main 2edbfb4:
+October 30, 2026 Issue #67 replacement lifecycle (supersedes earlier disabled-workflow notes):
+POST recommendations/regenerate now creates an independent draft with a required
+requestKey and expectedRevision. It leaves the current published list, invitations,
+assignment and assessment untouched. Replacement publication uses one atomic
+requestKey/targets transaction, including mixed generations and publish-all with
+an exact reviewed target manifest. Targets carry observation/list UUIDs, workflow
+revision and optional expected released-list UUID. Stale targets roll back all
+writes and queued notifications. Same actor/key/payload retries replay the recorded
+result; changed key reuse is rejected. Uncertain concurrency returns 503: retry
+the SAME request key and payload, not a newly constructed operation.
+Publication cancels superseded memberships/outstanding invitations, retains actual
+attempt responses, accepted meeting UUIDs and approval records, and switches the
+released pointer. An existing selected assignment is archived and selection is
+reopened only if no assessment row/work exists. Signed, partially signed, completed,
+closed and deadline-expired observations are protected. Prior cancellation times
+are retained. Legacy selection actors/times and per-attempt accepted meetings stay
+null when unknown; no historical facts are backfilled. The additive migration is
+20261030000000_recommendation_publication; deploy schema/app/workers together.
+The AC frontend enables Generate, Regenerate, Publish One/Selected/All and retains
+the exact pending operation for retry. Server allowedActions gate unsafe actions.
+Matching remains current-cycle-semester/same department/course level, availability,
+exclude self/max five; display history includes five recent distinct course/terms.
+Shared transactional notifications use list-specific keys. Manual addition stays
+out of scope. No application database migration or seeding is run by this work.
+See AC_OBSERVER_SELECTION_BACKEND.md for deployment and verification commands.
+
+October 30, 2026 Issue #67 integration with main 2edbfb4 (historical baseline):
 Task 1 uses the canonical authorized GET Signups/Candidates queries; duplicate
 observer-selection server readers were removed. Selected generation scope is
 combined with list preservation and initial-only guards. Faculty Prisma reads,

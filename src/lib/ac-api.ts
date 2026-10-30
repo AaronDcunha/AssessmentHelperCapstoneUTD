@@ -46,11 +46,16 @@ export type ObservationCandidate = {
   status?: string;
   availableMeetingOptionIds: string[]; responseStatus?: string | null; outcome?: string | null;
   acceptedMeetingOptionId?: string | null;
+  cancelledAt?: string | null;
+  activeAttempt?: { id: string; candidateId: string; sequence: number; sentAt: string; expiresAt: string;
+    responseStatus: string; respondedAt: string | null; cancelledAt: string | null;
+    acceptedMeetingOptionId: string | null; supersededByListId: string | null } | null;
   courseHistory?: Array<{course:{id:string;code:string;title:string;departmentId:string;level:number};semester:{id:string;name:string}}> | null;
 };
 export type ObservationCandidatesResponse = {
   observationId: string; generationId?: string | null; releasedAt: string | null;
   observationRevision?: number;
+  allowedActions?: { regenerate: boolean; publish: boolean };
   currentDraftListId?: string | null; currentReleasedListId?: string | null;
   list?: {id:string;generationId:string|null;generatedAt:string|null;publishedAt:string|null;origin:string} | null;
   proposedMeetings: ObservationMeeting[]; items: ObservationCandidate[];
@@ -62,9 +67,12 @@ export type RecommendationGenerationResponse = {
 };
 export type RecommendationReleaseResponse = {
   releaseId?: string; releasedObservationIds: string[]; releasedAt?: string; notificationCount?: number;
+  released?: Array<{ observationId: string; listId: string; previousReleasedListId: string | null; revision: number; endedAssignmentId: string | null }>;
 };
+export type RecommendationPublicationTarget = { observationId: string; listId: string; expectedRevision: number; expectedReleasedListId: string | null };
 export type RecommendationRegenerationResponse = {
   generationId: string; observationId: string; candidateCount: number; unmatched: boolean; revision: number;
+  listId: string; currentReleasedListId: string | null;
 };
 export type ObservationItem = {
   id: string; observee?: UserSummary | null; observer?: UserSummary | null;
@@ -145,7 +153,7 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
     const body = await response.json().catch(() => null);
     const code = typeof body?.error?.code === "string" ? body.error.code : undefined;
     // Only show expected, structured contract messages; never echo server exceptions.
-    const detail = response.status < 500 && typeof body?.error?.message === "string" ? body.error.message : undefined;
+    const detail = response.status < 500 ? (typeof body?.error?.message === "string" ? body.error.message : typeof body?.error === "string" ? body.error : undefined) : undefined;
     throw new ApiRequestError(detail || `Request failed with status ${response.status}.`, response.status, code);
   }
   return response.json() as Promise<T>;
@@ -210,11 +218,11 @@ export const acApi = {
   getAttention: (cycleId: string, filters: { issue?: string; departmentId?: string } = {}) => requestList<AttentionItem>(`${cyclePath(cycleId)}/attention${queryString(filters)}`),
   getObservations: (cycleId: string, filters: { status?: string; assessmentStatus?: string } = {}) => requestList<ObservationItem>(`${cyclePath(cycleId)}/observations${queryString(filters)}`),
   getObserverSelectionSignups: (cycleId: string) => requestList<ObserverSelectionSignup>(`${cyclePath(cycleId)}/signups`),
-  generateRecommendations: (cycleId: string, body: { scope?: { departmentId?: string; professorIds?: string[]; observationIds?: string[] } } = {}) =>
+  generateRecommendations: (cycleId: string, body: { requestKey?: string; scope?: { departmentId?: string; professorIds?: string[]; observationIds?: string[] } } = {}) =>
     requestJson<RecommendationGenerationResponse>(`${cyclePath(cycleId)}/recommendations/generate`, { method: "POST", body: JSON.stringify(body) }),
-  releaseRecommendations: (cycleId: string, body: { generationId: string; observationIds?: string[] }) =>
+  releaseRecommendations: (cycleId: string, body: { generationId: string; observationIds?: string[] } | { requestKey: string; targets: RecommendationPublicationTarget[]; all?: boolean }) =>
     requestJson<RecommendationReleaseResponse>(`${cyclePath(cycleId)}/recommendations/release`, { method: "POST", body: JSON.stringify(body) }),
-  regenerateObservationRecommendations: (observationId: string, body: { reason?: string; expectedRevision: number }) =>
+  regenerateObservationRecommendations: (observationId: string, body: { reason?: string; expectedRevision: number; requestKey: string }) =>
     requestJson<RecommendationRegenerationResponse>(`/api/observations/${encodeURIComponent(observationId)}/recommendations/regenerate`, { method: "POST", body: JSON.stringify(body) }),
   getObservationCandidates: (observationId: string, filters: { listId?: string; responseStatus?: string } = {}) =>
     requestCandidates(observationId, filters),

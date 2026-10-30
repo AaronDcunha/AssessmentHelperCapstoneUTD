@@ -130,7 +130,7 @@ try {
   assert.equal(free.professor.id, users[1]); assert.notEqual(free.professor.id, professors[1]);
   assert.deepEqual(free.availableMeetingOptionIds, [option.timeOptionId, legacy.timeOptionId]);
   assert.equal(free.responseStatus, 'ACCEPTED'); assert.equal(free.activeAttempt.sequence, 2);
-  assert.equal(free.acceptedMeetingOptionId, option.timeOptionId); assert.equal('acceptedMeetingOptionId' in free.activeAttempt, false);
+  assert.equal(free.acceptedMeetingOptionId, option.timeOptionId); assert.equal(free.activeAttempt.acceptedMeetingOptionId, null);
   assert.deepEqual(free.courseHistory.map(item => [item.course.id, item.semester.id]), [
     [courses[1], semesters[0]], [courses[0], semesters[0]], // Same-term course-code tie break.
     [courses[0], semesters[4]], [courses[0], semesters[2]], [courses[0], semesters[1]],

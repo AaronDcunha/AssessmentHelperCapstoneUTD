@@ -334,7 +334,61 @@ GET /api/evaluation-cycles/{cycleId}/signups (COMPLETED -- Issue #67 read only).
 
 4. MATCHING AND INVITATIONS
 ===========================
-October 28 Issue #67 FOUNDATION OVERRIDE (implemented; proposals below otherwise remain):
+October 30 Issue #67 LIFECYCLE OVERRIDE (implemented; supersedes the foundation notes):
+Active, effective grants: recommendations.generate / recommendations.regenerate /
+recommendations.release for their respective mutations. No Faculty participation or
+role label grants these actions. Private/no-store responses; expected validation 400,
+authentication 401, forbidden 403, missing observation/cycle 404, stale/unsafe state
+409, uncertain concurrent operation 503. Retry an uncertain mutation with the SAME
+requestKey and exact body. Same actor/key/payload replays the original JSON result;
+key reuse with a different operation/payload is 409. Mutations and shared-service
+notifications commit atomically; workflows use Serializable and workflowRevision.
+
+POST /api/evaluation-cycles/{cycleId}/recommendations/generate
+  B: {requestKey?:UUID,scope?:{departmentId?,professorIds?:UUID[],observationIds?:UUID[]}}.
+  R: {generationId,generatedCount}. Optional requestKey preserves legacy clients;
+  the AC frontend always supplies one. observationIds selects 1-500 exact eligible
+  observations; invalid selection rejects before writes. Initial-only generation
+  excludes released/paired/assessment-started/closed observations, requires signup
+  closed and observation deadline open. New draft/member UUIDs preserve older lists.
+  Deterministically choose any up to five compatible active signed-up professors,
+  excluding self, same professor department and course level, with current-cycle-
+  semester teaching. Current availability is rechecked at invitation/accept/select.
+  Under-five/zero-match lists notify AC with stable recommendation-shortfall:listId
+  keys. No matching, capacity or older-term eligibility policy is added.
+
+POST /api/observations/{observationId}/recommendations/regenerate
+  B: {requestKey:UUID,expectedRevision:nonnegative integer,reason?:string<=2000}.
+  R: {generationId,observationId,listId,candidateCount,unmatched,revision,
+    currentReleasedListId:UUID|null}.
+  Creates only a draft, including after publication/invitations/final selection.
+  Existing release, responses, attempts, pairing and scheduling remain untouched.
+  Requires signup closed, deadline open, PENDING/CONFIRMED and no assessment row.
+
+POST /api/evaluation-cycles/{cycleId}/recommendations/release
+  B: {requestKey:UUID,targets:[{observationId:UUID,listId:UUID,expectedRevision:int,
+    expectedReleasedListId?:UUID|null}],all?:boolean}.
+  R: {releaseId,releasedAt,releasedObservationIds:UUID[],notificationCount,
+    released:[{observationId,listId,previousReleasedListId:UUID|null,revision,
+      endedAssignmentId:UUID|null}]}.
+  One target = individual publication. Multiple targets = ONE atomic selected
+  batch, including different generation IDs. all:true requires exactly every
+  eligible current unpublished draft in the cycle as a reviewed manifest; missing,
+  new or changed targets reject the entire transaction. Empty all is a no-op.
+  Every target must still be its current draft with exact revision, no publication
+  or invitation history, an open deadline and no assessment. Any target failure
+  rolls back lists, cancellation, pairing archival, receipts and notifications.
+  Publication cancels superseded candidate membership/outstanding invitation windows;
+  terminal responses/accepted options/approval records and original IDs remain.
+  The released pointer switches only on commit. Existing selected observer/schedule
+  is archived and cleared to PENDING only before ANY assessment row/work exists.
+  Signed, partially signed, locked, completed or closed records are never overwritten.
+  Notifications use recommendations-released:observationId:listId,
+  recommendations-superseded:oldListId:newListId and assignment-ended:historyId.
+  Legacy {generationId,observationIds?} remains accepted for initial-only publication
+  and returns {releasedObservationIds}; it cannot publish a replacement.
+
+October 28 FOUNDATION HISTORY (the lifecycle override above takes priority):
 Generation POST accepts optional selected-observation/department/professor scope and returns {generationId,generatedCount}.
 It generates only initial unreleased/unpaired observations before the observation
 deadline and after signup closes; signed/assessment-started observations are excluded.
@@ -376,19 +430,22 @@ GET /api/observations/{observationId}/candidates (PHASE 1 COMPLETED -- AC read o
   stored status, not an older attempt or the candidate's combined status. Null
   means no attempt; ELIGIBLE is returned as candidate status, not a response.
   R: {observationId,observationRevision,generationId:string|null,releasedAt:string|null,
+    allowedActions:{regenerate:boolean,publish:boolean},
     currentDraftListId:string|null,currentReleasedListId:string|null,
     list:{id,generationId:string|null,generatedAt:string|null,publishedAt:string|null,origin}|null,
     proposedMeetings:[{id,sectionId,date,startsAt:string|null,endsAt:string|null,
       timeZone:string|null,location:string|null}],items:[{id,observationId,
       professor:{id,name},status,responseStatus:string|null,outcome:string|null,
-      invitedAt,expiresAt,respondedAt,acceptedMeetingOptionId:string|null,
+      invitedAt,expiresAt,respondedAt,cancelledAt:string|null,acceptedMeetingOptionId:string|null,
       availableMeetingOptionIds:string[],activeAttempt:{id,candidateId,sequence,
-        sentAt,expiresAt,responseStatus,respondedAt}|null,
+        sentAt,expiresAt,responseStatus,respondedAt,cancelledAt:string|null,
+        acceptedMeetingOptionId:string|null,supersededByListId:string|null}|null,
       courseHistory:[{course:{id,code,title,departmentId,level},semester:{id,name}}]}],pageInfo}.
   status is the raw candidate status; outcome copies SELECTED/CANCELLED or is null.
   activeAttempt is the latest real attempt, including closed/expired ones. No
-  earlier response or per-attempt accepted option is reconstructed; that option
-  is only stored on the candidate. Reads do not expire pending records or change
+  earlier response or unknown legacy per-attempt accepted option is reconstructed.
+  New acceptances record the option on their actual attempt; legacy values stay
+  null. Cancellation is separate from a terminal response. Reads do not change
   status. Filtering uses latest recorded responses before candidate-UUID pagination;
   cursor must belong to this observation and response filter, otherwise 400.
   courseHistory includes older semesters of same-level teaching (Aaron's updated
@@ -415,9 +472,8 @@ GET /api/observations/{observationId}/candidates (PHASE 1 COMPLETED -- AC read o
   malformed UUID/limit 422; query/cursor errors 400; missing grant 403; no active
   identity 401; dependency failure sanitized 503. Inconsistent section/cycle or
   accepted option ownership returns 409. See AC_OBSERVER_SELECTION_BACKEND.md.
-  Deferred: new own-observee endpoint access, replacement generation/publication,
-  assignment archival and the final response/outcome enums. Membership and pointer
-  foundations/current-release Faculty guards are implemented.
+  No new own-observee access is granted to this AC endpoint; Faculty continues using
+  its current-release readers. Replacement lifecycle is described by the override.
 POST /api/observations/{observationId}/invitations -- own observee.
   B: {candidateIds:string[],expectedRevision}.
   R: {observationId,attempts:Attempt[],revision}.

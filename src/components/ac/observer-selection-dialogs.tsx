@@ -85,7 +85,7 @@ export function CandidateReviewDialog({ open, signup, candidates, loading, error
   </DialogFrame>;
 }
 
-export type ReleaseListSummary = { observationId: string; observee: string; candidateCount: number };
+export type ReleaseListSummary = { observationId: string; observee: string; candidateCount: number; replacesReleasedList?: boolean };
 
 export function ReleaseConfirmationDialog({ open, selected, unselected, pending, error, onClose, onConfirm }: {
   open: boolean; selected: readonly ReleaseListSummary[]; unselected: readonly string[]; pending: boolean; error: string | null;
@@ -96,7 +96,8 @@ export function ReleaseConfirmationDialog({ open, selected, unselected, pending,
   return <DialogFrame open={open} onClose={onClose} labelledBy={`${id}-title`} describedBy={`${id}-description`}
     className="w-[600px] p-ah-32">
     <div className="space-y-ah-24">
-      <h2 id={`${id}-title`} className="text-section text-ink">Release observer lists?</h2>
+      <h2 id={`${id}-title`} className="text-section text-ink">Publish observer lists?</h2>
+      {selected.some(item => item.replacesReleasedList) && <p className="text-body text-warning">Replacement publication cancels previous invitations and ends any selected observer appointment. History is preserved.</p>}
       <p id={`${id}-description`} className="text-body text-ink">{selected.length} {selected.length === 1 ? "observee" : "observees"} will receive their candidate {selected.length === 1 ? "list" : "lists"} and an in-app notification.</p>
       <ul className="space-y-ah-12 bg-canvas p-ah-16 text-label text-ink">
         {selected.map((item) => <li key={item.observationId} className={item.candidateCount < 5 ? "text-warning" : undefined}>{item.observee} · {item.candidateCount} {item.candidateCount === 1 ? "observer" : "observers"}</li>)}
@@ -106,7 +107,7 @@ export function ReleaseConfirmationDialog({ open, selected, unselected, pending,
       {error && <p role="alert" className="text-body text-danger">{error}</p>}
       <div className="grid gap-ah-16 sm:grid-cols-[220px_1fr]">
         <Button variant="secondary" onClick={onClose} disabled={pending}>Keep Reviewing</Button>
-        <Button onClick={onConfirm} disabled={pending || selected.length === 0}>{pending ? "Releasing…" : "Release & Notify"}</Button>
+        <Button onClick={onConfirm} disabled={pending || selected.length === 0}>{pending ? "Publishing…" : "Publish & Notify"}</Button>
       </div>
     </div>
   </DialogFrame>;

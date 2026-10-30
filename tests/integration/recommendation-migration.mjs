@@ -44,7 +44,7 @@ try {
   for (const [i, observationIndex, status] of [[0, 0, 'SELECTED'], [1, 2, 'EXPIRED'], [2, 5, 'SELECTED']]) {
     await pool.query(`INSERT INTO observation_candidate(candidate_id, observation_id, professor_id, status, invited_at, expires_at, responded_at)
       VALUES($1,$2,$3,$4,'2026-10-11T12:00:00','2026-10-13T12:00:00',$5)`, [candidates[i], observations[observationIndex], professors[1], status, i === 1 ? null : new Date('2026-10-12T12:00:00Z')]);
-    await db.invitationAttempt.create({ data: { attemptId: candidates[i], candidateId: candidates[i], number: 1, status: i === 1 ? 'EXPIRED' : 'ACCEPTED',
+    await db.invitationAttempt.create({ select: { attemptId: true }, data: { attemptId: candidates[i], candidateId: candidates[i], number: 1, status: i === 1 ? 'EXPIRED' : 'ACCEPTED',
       invitedAt: new Date('2026-10-11T12:00:00Z'), expiresAt: new Date('2026-10-13T12:00:00Z'), respondedAt: i === 1 ? null : new Date('2026-10-12T12:00:00Z') } });
   }
   await db.lateAcceptanceApproval.create({ data: { attemptId: candidates[1], reason: 'Retain this pending request' } });
@@ -53,16 +53,20 @@ try {
     responses: { answers: {}, comments: 'Preserve exactly' }, observerSignedAt: releasedAt, observeeSignedAt: i === 5 ? releasedAt : null, isLocked: i === 5 } });
   const snapshot = async () => {
     const rows = await pool.query(`SELECT jsonb_build_object(
-      'observations',(SELECT jsonb_agg(to_jsonb(o) - 'current_draft_list_id' - 'current_released_list_id' ORDER BY observation_id) FROM observation o),
-      'candidates',(SELECT jsonb_agg(to_jsonb(c) - 'recommendation_list_id' ORDER BY candidate_id) FROM observation_candidate c),
-      'attempts',(SELECT jsonb_agg(to_jsonb(a) ORDER BY attempt_id) FROM invitation_attempt a),
+      'observations',(SELECT jsonb_agg(to_jsonb(o) - 'current_draft_list_id' - 'current_released_list_id' - 'observer_selected_at' - 'observer_selected_by_id' ORDER BY observation_id) FROM observation o),
+      'candidates',(SELECT jsonb_agg(to_jsonb(c) - 'recommendation_list_id' - 'cancelled_at' ORDER BY candidate_id) FROM observation_candidate c),
+      'attempts',(SELECT jsonb_agg(to_jsonb(a) - 'cancelled_at' - 'superseded_by_list_id' - 'accepted_option_id' ORDER BY attempt_id) FROM invitation_attempt a),
       'approvals',(SELECT jsonb_agg(to_jsonb(a) ORDER BY approval_id) FROM late_acceptance_approval a),
       'assessments',(SELECT jsonb_agg(to_jsonb(a) ORDER BY assessment_id) FROM signed_assessment a)) AS data`);
     return rows.rows[0].data;
   };
   const before = await snapshot();
   await pool.query(await sql(migrationName));
+  for (const name of migrations.filter(name => name > migrationName)) await pool.query(await sql(name));
   assert.deepEqual(await snapshot(), before);
+  assert.equal(await db.observationAssignmentHistory.count(), 0);
+  assert.equal(await db.recommendationOperation.count(), 0);
+  assert.ok((await db.invitationAttempt.findMany()).every(attempt => attempt.acceptedOptionId === null && attempt.cancelledAt === null));
   const constraints = await pool.query(`SELECT conname, confupdtype, confdeltype FROM pg_constraint
     WHERE connamespace = $1::regnamespace AND conname = ANY($2::text[])`, [schema, [
     'recommendation_list_observation_id_fkey', 'observation_candidate_recommendation_list_id_observation_i_fkey',

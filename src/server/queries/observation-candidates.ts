@@ -24,6 +24,7 @@ function filters(url: URL) {
 const attemptSelect = {
   attemptId: true, candidateId: true, number: true, invitedAt: true,
   expiresAt: true, respondedAt: true, status: true,
+  cancelledAt: true, acceptedOptionId: true, supersededByListId: true,
 } satisfies Prisma.InvitationAttemptSelect;
 
 // Use the stored academic term, not its display name or UUID. This follows the
@@ -75,7 +76,7 @@ export async function getObservationCandidates(
     where: { observationId: id, recommendationListId: list!.listId, candidateId: { in: ids } }, orderBy: { candidateId: "asc" },
     select: {
       candidateId: true, observationId: true, professorId: true, status: true,
-      invitedAt: true, expiresAt: true, respondedAt: true, acceptedOptionId: true,
+      invitedAt: true, expiresAt: true, respondedAt: true, acceptedOptionId: true, cancelledAt: true,
       attempts: { orderBy: { number: "desc" }, take: 1, select: attemptSelect },
       professor: { select: {
         user: { select: { userId: true, fullName: true } },
@@ -120,13 +121,16 @@ export async function getObservationCandidates(
       outcome: candidate.status === "SELECTED" || candidate.status === "CANCELLED" ? candidate.status : null,
       invitedAt: candidate.invitedAt?.toISOString() ?? null, expiresAt: candidate.expiresAt?.toISOString() ?? null,
       respondedAt: candidate.respondedAt?.toISOString() ?? null, acceptedMeetingOptionId: candidate.acceptedOptionId,
+      cancelledAt: candidate.cancelledAt?.toISOString() ?? null,
       availableMeetingOptionIds: compatible,
       // This is the real latest attempt, even if answered/expired/cancelled.
-      // Accepted option is not stored per attempt; do not synthesize that field.
+      // Legacy attempts have no recorded option; never infer one from current membership.
       activeAttempt: attempt ? {
         id: attempt.attemptId, candidateId: attempt.candidateId, sequence: attempt.number,
         sentAt: attempt.invitedAt.toISOString(), expiresAt: attempt.expiresAt.toISOString(),
         responseStatus: attempt.status, respondedAt: attempt.respondedAt?.toISOString() ?? null,
+        cancelledAt: attempt.cancelledAt?.toISOString() ?? null, acceptedMeetingOptionId: attempt.acceptedOptionId ?? null,
+        supersededByListId: attempt.supersededByListId ?? null,
       } : null,
       courseHistory: [...courses.values()].sort((a, b) =>
         (b.termOrder ?? -1) - (a.termOrder ?? -1)
@@ -137,6 +141,13 @@ export async function getObservationCandidates(
   }
   return {
     observationId: id, observationRevision: record.workflowRevision,
+    allowedActions: {
+      regenerate: user.permissions.includes("recommendations.regenerate") && !record.signedAssessment && !record.completedAt
+        && ["PENDING", "CONFIRMED"].includes(record.status.toUpperCase()) && record.cycle.signupDeadline < now && record.cycle.observationDeadline > now,
+      publish: user.permissions.includes("recommendations.release") && !!list && list.listId === record.currentDraftListId && !list.publishedAt
+        && !record.signedAssessment && !record.completedAt && ["PENDING", "CONFIRMED"].includes(record.status.toUpperCase())
+        && record.cycle.signupDeadline < now && record.cycle.observationDeadline > now,
+    },
     currentDraftListId: record.currentDraftListId, currentReleasedListId: record.currentReleasedListId,
     list: list ? { id: list.listId, generationId: list.generationId, generatedAt: list.generatedAt?.toISOString() ?? null,
       publishedAt: list.publishedAt?.toISOString() ?? null, origin: list.origin } : null,

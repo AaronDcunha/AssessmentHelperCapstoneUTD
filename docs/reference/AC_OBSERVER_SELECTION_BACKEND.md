@@ -1,9 +1,95 @@
 # AC observer selection backend: Issue #67
 
-Implemented reads: `GET /api/evaluation-cycles/{cycleId}/signups` and Phase 1
-`GET /api/observations/{observationId}/candidates`, plus the versioned-list foundation
-described below. Initial generation/release use their existing APIs. Replacement
-generation/publication and new Faculty candidate-list access remain separate work.
+Implemented: GET Signups, GET Candidates, initial generation, draft regeneration,
+and individual/selected/all publication, including safe replacement after selection.
+Existing Faculty reads/actions remain independently authorized and current-release
+scoped; the AC Candidates route does not introduce new Faculty access.
+
+## Completed replacement lifecycle (October 30, 2026)
+
+This section supersedes the historical disabled-workflow notes below. Generate uses
+the existing optional scope (including selected observation IDs); initial generation
+skips previously published/paired/assessment-started observations. Regenerate uses
+the separate observation route, exact `recommendations.regenerate` grant, required
+UUID `requestKey` and `expectedRevision`. It creates a new list and independent
+candidate UUIDs without cancelling the current release or changing any assignment.
+Matching is unchanged: current-cycle-semester teaching, same department/course
+level, signed-up active faculty, compatible meetings, exclude self, up to five.
+Under-five and zero-match lists produce AC notifications keyed by list UUID.
+
+Publish uses `recommendations.release` and `{requestKey,targets,all?}`. Each target
+is `{observationId,listId,expectedRevision,expectedReleasedListId?}`. The frontend
+sends the released-list UUID or null. One target publishes one observation; many
+targets publish one atomic batch across arbitrary draft generations. `all:true`
+also verifies targets exactly match every eligible current unpublished draft in
+the cycle; additions/changes require refresh rather than publishing unseen data.
+An empty all manifest is a harmless no-op. Publication requires signup closed,
+observation deadline open, PENDING/CONFIRMED state and no assessment row whatsoever.
+Imported drafts with invitation/response/cancellation history cannot be published.
+The legacy `{generationId,observationIds?}` payload remains initial-only.
+
+Every new mutation uses a Serializable transaction and observation revision fence.
+`RecommendationOperation` stores the actor, scope, kind, canonical request hash and
+JSON result under a UUID request key. Identical retries return the original result,
+without more lists/notifications/history. Different payload/actor reuse returns
+409. A serialization/unique race without a committed receipt returns 503; retry
+the identical key/payload. The UI retains that operation until a definite outcome.
+
+Replacement publication switches the pointer, clears the draft, cancels old
+memberships and outstanding attempts, archives any selected observer assignment,
+clears its live pairing/schedule, and queues notifications in the SAME transaction.
+Recorded acceptances/declines, response dates, accepted option UUIDs, approval
+decisions, previous cancellation times and original candidate IDs are preserved.
+Pending attempts become CANCELLED without a fabricated respondedAt. Cancellation
+metadata is separate from terminal response status. Old IDs cannot send, respond,
+request/approve late acceptance or select; workers/readers retain their pointer
+guards. Previously queued mail may still arrive, but its superseded IDs cannot act.
+
+`ObservationAssignmentHistory` snapshots the real pairing, schedule, known selected
+candidate/meeting, actor/time and replacement event. New selections record actor/
+time; unknown legacy values stay null. `InvitationAttempt.acceptedOptionId` records
+future acceptances per attempt; legacy nulls are never inferred from current state.
+Any assessment row, partial signature, lock, completion, closure or passed deadline
+blocks regeneration/publication. Starting assessment work concurrently shares the
+existing observation revision fence, so neither transition can overwrite the other.
+
+Migration `20261030000000_recommendation_publication` is additive: two audit/receipt
+tables and nullable selection/cancellation/attempt-option columns. It rewrites no
+existing data and invents no earlier assignments or generations. Existing explicit
+permanent semester deletion removes its dependent audit/receipt rows transactionally;
+ordinary recommendation operations never delete history. Deploy migration, app and
+workers together with the Faculty scheduler paused; no reset/reseed is required.
+Run `npx.cmd prisma migrate deploy` against the intended development deployment only
+after reviewing its pending migrations, then `npm.cmd run db:generate` and restart
+app/workers. This implementation does not migrate the configured application DB.
+
+AC Candidates still defaults to draft then current release, supports explicit
+observation-owned listId, pinned pagination/response filters and five recent
+distinct relevant course/semester pairs including older terms. Nullable metadata
+stays null. `allowedActions:{regenerate,publish}` gates the frontend; attempt DTOs
+now include nullable cancelledAt, acceptedMeetingOptionId and supersededByListId.
+Signups is unchanged. Frontend actions: Generate Selected, Regenerate in review,
+Publish One, Publish Selected and Publish All Eligible, with replacement warnings.
+
+Verification: `node --test tests/unit/*.test.mjs`; Prisma validate/generate, Next
+typegen, TypeScript and ESLint. PostgreSQL tests must use an external env file whose
+DATABASE_URL points to disposable local PostgreSQL, e.g.
+`node --env-file=C:\\path\\isolated.env tests/integration/recommendation-lifecycle.mjs`.
+That suite creates/drops its own uniquely named DB and covers draft A/B isolation,
+post-selection regeneration, preserved responses/approvals/assignment, single and
+mixed-generation atomic publication, rollback, stale manifests/revisions, concurrent
+same-key retries and assessment protection. recommendation-migration.mjs verifies
+legacy preservation through both migrations. Existing Faculty, Candidates, Signups,
+Alerts, Personal Observations, KPI and Admin suites remain regression checks.
+
+Demo after coordinated development migration: `npm.cmd run dev`, then
+`http://localhost:3000/ac/observer-selection` as an authorized AC account. Select
+signups after signup closes, Generate, review and Publish One/All; as the observee,
+use `http://localhost:3000/observations/recommendations` to invite/select and
+`http://localhost:3000/observations/requests` as the invited observer to accept. Regenerate
+in AC review: the old Faculty list/pairing stays active until explicit publication.
+Email delivery is optional for this demo: `npm.cmd run jobs:email` drains the queue;
+in-app notifications are committed immediately. No dev/email worker is auto-started.
 
 ## October 30 integration with main 2edbfb4
 

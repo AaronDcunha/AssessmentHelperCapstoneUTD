@@ -30,6 +30,8 @@ export async function deleteSemester(prisma: PrismaClient, user: ConfigurationUs
     await db.facultyIssue.deleteMany({ where: { observationId: { in: ids } } });
     await db.signedAssessment.deleteMany({ where: { observationId: { in: ids } } });
     await db.lateAcceptanceApproval.deleteMany({ where: { attempt: { candidate: { observationId: { in: ids } } } } });
+    await db.observationAssignmentHistory.deleteMany({ where: { observationId: { in: ids } } });
+    await db.recommendationOperation.deleteMany({ where: { scopeId: { in: [...ids, ...cycles] } } });
     await db.invitationAttempt.deleteMany({ where: { candidate: { observationId: { in: ids } } } });
     await db.observationCandidate.deleteMany({ where: { observationId: { in: ids } } });
     // Explicit, authorized permanent semester deletion is the sole destructive

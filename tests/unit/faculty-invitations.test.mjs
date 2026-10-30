@@ -60,7 +60,7 @@ function fixture() {
 
 test('Faculty mutation grants are required before opening a transaction', async () => {
   const actions = runtime({});
-  for (const name of ['generateRecommendations', 'releaseRecommendations', 'sendFacultyInvitations', 'acceptFacultyInvitation', 'declineFacultyInvitation', 'selectFacultyObserver', 'requestLateAcceptance', 'reviewLateAcceptance']) {
+  for (const name of ['generateRecommendations', 'regenerateRecommendations', 'releaseRecommendations', 'sendFacultyInvitations', 'acceptFacultyInvitation', 'declineFacultyInvitation', 'selectFacultyObserver', 'requestLateAcceptance', 'reviewLateAcceptance']) {
     await assert.rejects(actions[name]({ id: user.id, permissions: [] }, {}), error => error.status === 403, name);
   }
 });
@@ -205,4 +205,39 @@ test('selection cannot attach a new observer to an existing unsigned or partiall
     await assert.rejects(runtime(f.db).selectFacultyObserver({ ...user, permissions: [...user.permissions, 'observer.select.own'] }, { candidateId: f.candidate.candidateId }), error => error.status === 409);
     assert.equal(f.writes.some(write => ['candidate', 'observation', 'notification'].includes(write.name)), false);
   }
+});
+
+
+test('regeneration after selection only writes a draft and retries replay the committed receipt', async () => {
+  const f = fixture(), receipts = new Map(), messages = [];
+  f.record.cycle.signupDeadline = new Date('2000-01-01');
+  f.record.cycleId = id(7); f.record.observerId = id(40); f.record.status = 'CONFIRMED';
+  f.record.signup.professor.user = { fullName:'Observee' };
+  f.db.recommendationOperation = { findUnique:async({where})=>receipts.get(where.requestKey)??null, create:async({data})=>{receipts.set(data.requestKey,data);return data;} };
+  f.db.recommendationList.create = async () => ({listId:id(80)});
+  f.db.evaluationSignup = {findMany:async()=>[]};
+  const actor={...user,permissions:['recommendations.regenerate']},body={requestKey:id(81),expectedRevision:0};
+  const actions=runtime(f.db,messages);
+  const first=await actions.regenerateRecommendations(actor,id(2),body), count=f.writes.length;
+  assert.equal(first.listId,id(80));assert.equal(first.revision,1);
+  assert.deepEqual(await actions.regenerateRecommendations(actor,id(2),body),first);
+  assert.equal(f.writes.length,count);assert.equal(messages.length,1);
+  assert.equal(f.record.observerId,id(40));
+  assert.deepEqual(Object.keys(f.writes.find(w=>w.name==='observation').input.data).sort(),['currentDraftListId','recommendationGenerationId']);
+  assert.equal(f.writes.some(w=>['candidate','attempt'].includes(w.name)),false);
+  await assert.rejects(actions.regenerateRecommendations(actor,id(2),{...body,reason:'Different'}),error=>error.status===409);
+});
+
+test('regeneration validation, stale revisions and assessment/closed-state guards reject before mutations', async () => {
+  for(const state of ['stale','assessment','partially-signed','COMPLETED','CANCELLED','NOT_OCCURRED']){
+    const f=fixture(); f.record.cycle.signupDeadline=new Date('2000-01-01');
+    f.db.recommendationOperation={findUnique:async()=>null};
+    if(state==='assessment'||state==='partially-signed')f.record.signedAssessment={isLocked:false,observerSignedAt:state==='partially-signed'?new Date():null};
+    else if(state!=='stale')f.record.status=state;
+    await assert.rejects(runtime(f.db).regenerateRecommendations({...user,permissions:['recommendations.regenerate']},id(2),{requestKey:id(80),expectedRevision:state==='stale'?1:0}),error=>error.status===409);
+    assert.deepEqual(f.writes,[]);
+  }
+  const actions=runtime({});
+  await assert.rejects(actions.regenerateRecommendations({...user,permissions:['recommendations.regenerate']},id(2),{expectedRevision:-1,requestKey:id(80)}),error=>error.status===400);
+  await assert.rejects(actions.releaseRecommendations(user,id(7),{requestKey:id(80),targets:[{observationId:id(2),listId:id(8),expectedRevision:0},{observationId:id(2),listId:id(9),expectedRevision:0}]}),error=>error.status===400);
 });

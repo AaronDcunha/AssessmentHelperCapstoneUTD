@@ -131,7 +131,7 @@ test('latest attempt is selected before response filtering; selected/cancelled o
   const result = await f.read();
   assert.equal(result.items[0].outcome, 'SELECTED'); assert.equal(result.items[0].responseStatus, 'ACCEPTED');
   assert.equal(result.items[0].activeAttempt.sequence, 2); assert.equal(result.items[0].acceptedMeetingOptionId, id(12));
-  assert.equal('acceptedMeetingOptionId' in result.items[0].activeAttempt, false);
+  assert.equal(result.items[0].activeAttempt.acceptedMeetingOptionId, null); // Legacy attempt has no recorded option; do not infer from candidate.
   assert.equal(result.items[1].responseStatus, 'CANCELLED'); assert.equal(result.items[1].outcome, 'CANCELLED');
   assert.deepEqual((await f.read('responseStatus=DECLINED')).items, []);
   assert.deepEqual((await f.read('responseStatus=ACCEPTED')).items.map(item => item.id), [first.candidateId]);
