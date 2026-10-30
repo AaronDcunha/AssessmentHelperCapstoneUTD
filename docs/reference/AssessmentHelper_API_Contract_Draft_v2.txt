@@ -306,26 +306,29 @@ POST /api/evaluation-cycles/{cycleId}/signups
   Validate ownership, eligibility, signup window and nonempty unique eligible dates
   before observation deadline. Signup enters observer pool. Confirm one-course and
   duplicate-signup policy; one meeting per date is a current UI limitation.
-GET /api/evaluation-cycles/{cycleId}/signups -- scoped AC/Admin.
+GET /api/evaluation-cycles/{cycleId}/signups -- scoped AC/Admin. (COMPLETED)
   Q: departmentId?,hiringLevelId?,q?.
   R: List<{signupId,observationId,observee:User,section:Section,proposedMeetings,signedUpAt}>.
 
 4. MATCHING AND INVITATIONS
 ===========================
-POST /api/evaluation-cycles/{cycleId}/recommendations/generate -- scoped AC/Admin.
-  B: {scope?:{departmentId?,professorIds?:string[]}}.
+POST /api/evaluation-cycles/{cycleId}/recommendations/generate -- scoped AC/Admin. (COMPLETED; current response is generationId/generatedCount)
+  B: {scope?:{departmentId?,professorIds?:string[],observationIds?:string[]}}.
+  observationIds selects 1–500 exact signup observations in this cycle; unavailable,
+  paired, released or non-pending selections reject before writes. Generation remains
+  available only after signup closes and before the observation deadline.
   R: {generationId,cycleId,status,generatedCount,insufficientCount,unmatchedCount,
     generatedAt}; or 202 + operation tracking if asynchronous.
   After signup closes: up to five eligible, same-department/course-level candidates
   available for proposed meetings, excluding self. Ranking/overlap/capacity TBD.
-POST /api/evaluation-cycles/{cycleId}/recommendations/release -- scoped AC/Admin.
+POST /api/evaluation-cycles/{cycleId}/recommendations/release -- scoped AC/Admin. (COMPLETED; current response is releasedObservationIds)
   B: {generationId,observationIds?:string[]}.
   R: {releaseId,releasedObservationIds:string[],releasedAt,notificationCount}.
   Distinct from generation; create notifications idempotently.
 POST /api/observations/{observationId}/recommendations/regenerate -- scoped AC/Admin.
   B: {reason?,expectedRevision}. R: {generationId,observationId,candidateCount,
     unmatched,revision}. Preserve previous responses and invitation attempts.
-GET /api/observations/{observationId}/candidates
+GET /api/observations/{observationId}/candidates (COMPLETED)
   Q: responseStatus?. R: {observationId,releasedAt,proposedMeetings:Meeting[],
     items:Candidate[],pageInfo}. Own observee sees only released list; AC sees scope.
 POST /api/observations/{observationId}/invitations -- own observee.
