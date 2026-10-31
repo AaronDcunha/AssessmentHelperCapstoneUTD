@@ -38,7 +38,7 @@ The TXT extracts aid reading; use the Word originals when table structure or for
 
 ## Current scope
 
-- Professors can act as observees and observers in the same cycle. Signups enter the observer pool.
+- Professors can act as observees and observers in the same cycle. Observer eligibility does not require signup; all active professors are considered under the matching rules.
 - AC manages cycle deadlines, generates and releases recommendations, monitors progress, sends reminders, and reviews reports.
 - Admin manages users, roles, permissions, and hiring levels. Enforce permissions and ownership on the server.
 - Assessments use a web-based form with stored answers linked to template records. In-place question edits are supported; major changes use a new template record. Define acknowledgement/finalization details before implementing them; do not build signed-document upload routes.

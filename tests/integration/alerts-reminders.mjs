@@ -105,5 +105,8 @@ try{
  const retryKey=randomUUID();await Promise.allSettled([tx(t=>sendCycleReminders(t,committee,cycleId,payload,retryKey)),tx(t=>sendCycleReminders(t,committee,cycleId,payload,retryKey))]);
  assert.equal(await db.reminderDispatch.count({where:{dispatchId:retryKey}}),1);assert.equal(await db.notification.count({where:{userId:u1,eventKey:'reminder:'+retryKey}}),1);
  const due=await tx(t=>sendCycleReminders(t,committee,cycleId,{...payload,recipientFilter:{evaluationStatus:'due'}},randomUUID()));assert.equal(due.recipientCount,0);
+ const searchedName=(await db.appUser.findUniqueOrThrow({where:{userId:u1}})).fullName;
+ const searched=await tx(t=>sendCycleReminders(t,committee,cycleId,{...payload,recipientFilter:{q:searchedName.toLowerCase()}},randomUUID()));assert.equal(searched.recipientCount,1);
+ const noNameMatch=await tx(t=>sendCycleReminders(t,committee,cycleId,{...payload,recipientFilter:{q:'No such professor'}},randomUUID()));assert.equal(noNameMatch.recipientCount,0);
  console.log('Passed isolated alert/reminder PostgreSQL tests: observee ownership, selected-observer denial, unreleased-candidate privacy, AC scope, multiple messages, retry deduplication, all-AC delivery, read-only message context, workflow notifications, reminder recipient filters/idempotence/rollback, inactive-recipient exclusion, and transactional email enqueue with no SMTP delivery.');
 }finally{await db.$disconnect();await migration.end();if(created)await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end();}

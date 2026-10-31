@@ -16,6 +16,7 @@ export type AttentionTableRowProps = Omit<ComponentProps<"tr">, "children"> & {
   issueStatus?: StatusBadgeStatus | null;
   /** Display text supplied by the caller; no lifecycle state is inferred here. */
   observationStatus?: string | null;
+  issueDescription?: string | null;
   action?: AttentionReviewAction | null;
 };
 
@@ -29,7 +30,7 @@ function missing(field: string) {
 /** Render in tbody beneath Faculty / Issue / Observation status / Action headers.
  * Parent supplies authorized data and review destinations; callbacks require a Client Component.
  */
-export function AttentionTableRow({ faculty, issueStatus, observationStatus, action, className, ...props }: AttentionTableRowProps) {
+export function AttentionTableRow({ faculty, issueStatus, issueDescription, observationStatus, action, className, ...props }: AttentionTableRowProps) {
   const facultyName = faculty?.trim();
   const statusText = observationStatus?.trim();
   const hasIssue = issueStatus === "overdue" || issueStatus === "unmatched" || issueStatus === "incomplete" || issueStatus === "alert";
@@ -43,7 +44,10 @@ export function AttentionTableRow({ faculty, issueStatus, observationStatus, act
         {facultyName ? <span className="min-w-0 break-words">{facultyName}</span> : missing("Faculty")}
       </TableCell>
       <TableCell className={`${cellClasses} w-[288px]! px-ah-0!`}>
-        {hasIssue ? <StatusBadge status={issueStatus} /> : missing("Issue")}
+        <div className="flex-col items-start! gap-ah-4 py-ah-8">
+          {hasIssue ? <StatusBadge status={issueStatus} /> : missing("Issue")}
+          {issueDescription && <span className="text-caption text-muted">{issueDescription}</span>}
+        </div>
       </TableCell>
       <TableCell className={`${cellClasses} w-[210px]! px-ah-0!`}>
         {statusText ? <span className="min-w-0 break-words">{statusText}</span> : missing("Observation status")}

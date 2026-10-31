@@ -11,7 +11,7 @@ import {
   acApi, ApiRequestError, userDisplayName,
   type Cycle, type ObservationCandidatesResponse, type ObserverSelectionSignup,
 } from "@/lib/ac-api";
-import { currentSemesterCycle, hasGeneratedList, initialSignupAvailable, matchState, proposedMeetingsLabel, signupCourseLabel, signupWindow } from "@/lib/observer-selection";
+import { currentSemesterCycle, hasGeneratedList, initialSignupAvailable, matchState, meetingLabel, signupCourseLabel, signupWindow } from "@/lib/observer-selection";
 import { deadlineDisplay } from "@/lib/ac-configuration";
 
 type SignupRow = {
@@ -265,7 +265,9 @@ function CycleObserverSelection({ selectedCycle, canGenerate, canRelease, canReg
                   <p className="text-caption text-ink">{signupCourseLabel(row.signup)}</p>
                 </div></TableCell>
                 <TableCell className="w-[226px]!"><div className="space-y-ah-4">
-                  <p className="text-label text-ink">{proposedMeetingsLabel(row.signup.proposedMeetings)}</p>
+                  {row.signup.proposedMeetings.length ? <ul className="space-y-ah-4 text-label text-ink">
+                    {row.signup.proposedMeetings.map(meeting => <li key={meeting.id} className="whitespace-nowrap">{meetingLabel(meeting)}</li>)}
+                  </ul> : <p className="text-label text-ink">No proposed meetings</p>}
                   <p className="text-caption text-muted">{row.signup.proposedMeetings[0]?.timeZone || "Time zone unavailable"}</p>
                 </div></TableCell>
                 <TableCell className="w-[200px]!">{row.candidateError
@@ -275,7 +277,7 @@ function CycleObserverSelection({ selectedCycle, canGenerate, canRelease, canReg
                 <TableCell className="w-[216px]!">{hasGeneratedList(row.candidates)
                   ? <TextAction onClick={() => { setActionError(null); setReviewObservationId(row.signup.observationId); }}>{count > 0 ? "Review observers" : "Review issue"}</TextAction>
                   : <span className="inline-flex min-h-9 min-w-[110px] items-center justify-center text-label text-muted">—</span>}
-                  {canRelease && publishable(row) && <TextAction disabled={busy || loading} onClick={() => { setActionError(null); setPublication({rows:[row],all:false}); }}>Publish One</TextAction>}
+                  {canRelease && publishable(row) && <TextAction disabled={busy || loading} onClick={() => { setActionError(null); setPublication({rows:[row],all:false}); }}>Publish</TextAction>}
                 </TableCell>
               </tr>;
             })}

@@ -1,3 +1,35 @@
+October 30, 2026 Observation Progress pagination:
+Observation Progress now uses single-page observation API reads with temporary
+Previous/Next controls and 20/50/100 rows. Filters reset the page; search retains
+its 300ms delay. All cycles traverses cycle pages lazily in cycle-list order,
+including empty cycles, with one lookahead row and no full-list download.
+
+October 30, 2026 Faculty Due / Overdue pagination:
+The table loads a single cursor page (20 default, 50/100 optional) with temporary
+Previous/Next controls. Cycle, name, hiring-level, status or page-size changes
+restart at page one. Name search waits 300ms. The faculty-status endpoint bounds
+its reads and stops after finding limit+1 matching rows; computed eligibility
+filters are applied before paging. Report/metric/reminder full-population reads
+retain their behavior. Reminders use filters across pages, not only visible rows.
+
+October 30, 2026 flexible assessment timing (supersedes appointment-start gate):
+Participants may open, save and sign an observation assessment as soon as an
+observer and appointment are confirmed and a published template is available.
+The proposed appointment date need not have arrived; real-world timing can vary.
+Ownership, grants, observation deadline, cancellation/non-occurrence restrictions,
+observer-first acknowledgement and final locking after both signatures remain.
+
+October 30, 2026 observer eligibility correction (supersedes signup-pool rules):
+All active professors may observe without signing up for evaluation. Exclude self;
+require the same professor department, teaching the same course level in the cycle
+semester, and availability for at least one valid proposed meeting. Generation,
+regeneration, invitations, acceptance, selection and eligibility reporting share
+this check. At most five candidates are generated. Zero-candidate current lists
+immediately produce a derived Alert in AC Needs attention (no scheduler required),
+with reasonCode NO_COMPATIBLE_OBSERVERS and review linking to Observer Selection.
+It clears when the current list has candidates or an observer is assigned. Shared
+transactional shortfall notifications remain. No schema or seed change is needed.
+
 October 30, 2026 Issue #67 replacement lifecycle (supersedes earlier disabled-workflow notes):
 POST recommendations/regenerate now creates an independent draft with a required
 requestKey and expectedRevision. It leaves the current published list, invitations,

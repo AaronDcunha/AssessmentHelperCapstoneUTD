@@ -33,6 +33,22 @@ test('the existing no-ID details destination keeps the active workflow', async (
   const app = load(); const result = await app.page({ searchParams: Promise.resolve({}) });
   assert.equal(result.type, app.active); assert.equal(result.props.data.marker, 'current'); assert.equal(result.props.canReadAssessment,true); assert.equal(app.reads(), 1);
 });
+
+test('notification links open the matching current observation with workflow actions', async () => {
+  const workflow = { observation: { id } };
+  const app = load({ workflow });
+  const result = await app.page({ searchParams: Promise.resolve({ observationId: id, view: 'current' }) });
+  assert.equal(result.type, app.active);
+  assert.equal(result.props.data, workflow);
+  assert.equal(result.props.canReadAssessment, true);
+});
+
+test('a notification for another record never substitutes the selected current observation', async () => {
+  const app = load({ workflow: { observation: { id: '22222222-2222-4222-8222-222222222222' } } });
+  const result = await app.page({ searchParams: Promise.resolve({ observationId: id, view: 'current' }) });
+  assert.equal(result.type, app.details);
+  assert.equal(result.props.observationId, id);
+});
 test('direct record links enforce own-read grant and independently gate assessment loading', async () => {
   const denied = load({ permissions: ['test:admin'] });
   await assert.rejects(denied.page({ searchParams: Promise.resolve({ observationId: id }) }), /FORBIDDEN/);

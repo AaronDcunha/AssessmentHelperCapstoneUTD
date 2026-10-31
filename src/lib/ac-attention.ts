@@ -8,8 +8,9 @@ export type DashboardAttentionItem = AttentionItem & { rowKey: string };
 export function mergeAttention(attention: AttentionItem[], alerts: AlertResource[]): DashboardAttentionItem[] {
   const rows = new Map<string, DashboardAttentionItem>();
   for (const item of attention) {
-    const alertId = item.issue === "alert" ? item.alertId || item.id : undefined;
-    const rowKey = alertId ? `alert:${alertId}` : `${item.issue}:${item.id}`;
+    const noMatch = item.reasonCode === "NO_COMPATIBLE_OBSERVERS";
+    const alertId = item.issue === "alert" && !noMatch ? item.alertId || item.id : undefined;
+    const rowKey = noMatch ? `no-match:${item.id}` : alertId ? `alert:${alertId}` : `${item.issue}:${item.id}`;
     rows.set(rowKey, { ...item, alertId, rowKey });
   }
   for (const alert of alerts) {
@@ -24,6 +25,7 @@ export function mergeAttention(attention: AttentionItem[], alerts: AlertResource
 }
 
 export function attentionReviewHref(item: AttentionItem) {
+  if (item.reasonCode === "NO_COMPATIBLE_OBSERVERS") return "/ac/observer-selection";
   if (!item.observationId) return null;
   const path = `/ac/observations/${encodeURIComponent(item.observationId)}`;
   return item.issue === "alert"

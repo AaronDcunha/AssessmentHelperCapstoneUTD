@@ -93,7 +93,7 @@ export const notificationsApi = {
 /** Only approved existing internal record destinations; never trust an API-supplied URL. */
 export function notificationDestination(target: NotificationItem["target"], permissions: readonly string[]): string | null {
   if (target?.kind === "observation" && /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(target.id)
-    && permissions.includes("observations.read.own")) return `/observations/details?observationId=${encodeURIComponent(target.id)}`;
+    && permissions.includes("observations.read.own")) return `/observations/details?observationId=${encodeURIComponent(target.id)}&view=current`;
   if (target?.kind === "acObservation" && /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(target.id)
     && permissions.includes("observations.read")) return `/ac/observations/${encodeURIComponent(target.id)}`;
   return null;

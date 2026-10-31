@@ -351,7 +351,7 @@ POST /api/evaluation-cycles/{cycleId}/recommendations/generate
   observations; invalid selection rejects before writes. Initial-only generation
   excludes released/paired/assessment-started/closed observations, requires signup
   closed and observation deadline open. New draft/member UUIDs preserve older lists.
-  Deterministically choose any up to five compatible active signed-up professors,
+  Deterministically choose any up to five compatible active professors, whether or not they signed up,
   excluding self, same professor department and course level, with current-cycle-
   semester teaching. Current availability is rechecked at invitation/accept/select.
   Under-five/zero-match lists notify AC with stable recommendation-shortfall:listId
@@ -849,3 +849,11 @@ POST /api/semesters {year,season,startsOn,endsOn,timeZone}; DELETE /api/semester
 Both require cycles.manage and existing same-origin JSON controls. Delete atomically
 removes the semester, its evaluation cycle and dependent course/workflow records.
 See FACULTY_INTEGRATION_FIXES.md for full behavior, retention and verification.
+
+October 30 observer-pool correction: signup is not required to be an observer.
+GET cycle attention can return issue=alert, reasonCode=NO_COMPATIBLE_OBSERVERS
+and reason for an unmatched observation whose current draft (otherwise published
+list) has zero candidates. This is a derived matching alert, not a Faculty message
+ID; review via Observer Selection. Ungenerated and superseded lists do not qualify.
+
+Faculty Due / Overdue professor search: GET faculty-status supports q (case-insensitive professor name, maximum 200 characters), combined with existing filters. Reminder recipientFilter also accepts q with the same name matching, so reminders respect the searched faculty population.

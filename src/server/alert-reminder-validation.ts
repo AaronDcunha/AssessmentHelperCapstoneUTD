@@ -17,9 +17,10 @@ export function alertFilters(url:URL){
 export function reminderInput(value:unknown){
   const b=object(value);fields(b,["kind","recipientFilter","channels","message"]);
   if(typeof b.kind!=="string"||!/^[a-z][a-z0-9_-]{0,49}$/.test(b.kind))throw new ConfigurationError(422,"VALIDATION_ERROR","Provide a reminder kind using lowercase letters, digits, underscores or hyphens.");
-  const f=object(b.recipientFilter);fields(f,["evaluationStatus","observationStatus","departmentId","hiringLevelId","professorIds"]);
+  const f=object(b.recipientFilter);fields(f,["evaluationStatus","observationStatus","departmentId","hiringLevelId","professorIds","q"]);
   if(b.channels!==undefined&&(!Array.isArray(b.channels)||!b.channels.length||new Set(b.channels).size!==b.channels.length||b.channels.some(x=>!["inApp","email"].includes(x))))throw new ConfigurationError(422,"VALIDATION_ERROR","Choose supported delivery channels.");
   const params=new URLSearchParams();
+  if(f.q!==undefined){if(typeof f.q!=="string"||!f.q.trim()||f.q.trim().length>200)throw new ConfigurationError(422,"VALIDATION_ERROR","Search must contain 1 to 200 characters.");params.set("q",f.q.trim());}
   for(const key of ["departmentId","hiringLevelId"])if(f[key]!==undefined)params.set(key,uuid(f[key]));
   if(f.evaluationStatus!==undefined){if(!["due","overdue","not_due","needs-review","unavailable"].includes(String(f.evaluationStatus)))throw new ConfigurationError(422,"VALIDATION_ERROR","Invalid evaluation status.");params.set("evaluationStatus",String(f.evaluationStatus));}
   if(f.observationStatus!==undefined){if(typeof f.observationStatus!=="string"||!(["in-progress","complete","incomplete","unmatched"].includes(f.observationStatus)||/^[A-Z][A-Z_]{0,49}$/.test(f.observationStatus)))throw new ConfigurationError(422,"VALIDATION_ERROR","Invalid observation status.");params.set("status",f.observationStatus);}

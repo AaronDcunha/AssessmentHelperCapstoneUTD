@@ -26,6 +26,7 @@ export type AttentionItem = {
   id: string; faculty: UserSummary;
   issue: "overdue" | "unmatched" | "incomplete" | "alert" | "expiredApproval";
   observationStatus: string | null; observationId?: string | null; alertId?: string | null;
+  reasonCode?: string; reason?: string;
 };
 export type ObservationMeeting = {
   id: string; sectionId: string; date: string; startsAt: string | null; endsAt: string | null;
@@ -214,9 +215,11 @@ export const acApi = {
   deleteSemester: (id: string, body: { expectedRevision: number; expectedCycleRevision: number | null }) => requestJson<{ deleted: boolean }>(`/api/semesters/${encodeURIComponent(id)}`, { method: "DELETE", body: JSON.stringify(body) }),
   getSemesters: () => requestList<Semester>("/api/semesters"),
   getReports: (cycleId: string, filters: { departmentId?: string; hiringLevelId?: string } = {}) => requestJson<ReportsResponse>(`${cyclePath(cycleId)}/reports${queryString(filters)}`),
-  getFacultyStatus: (cycleId: string, filters: { hiringLevelId?: string; evaluationStatus?: string } = {}) => requestList<FacultyStatusItem>(`${cyclePath(cycleId)}/faculty-status${queryString(filters)}`),
+  getFacultyStatus: (cycleId: string, filters: { hiringLevelId?: string; evaluationStatus?: string; q?: string } = {}) => requestList<FacultyStatusItem>(`${cyclePath(cycleId)}/faculty-status${queryString(filters)}`),
+  getFacultyStatusPage: (cycleId: string, filters: { hiringLevelId?: string; evaluationStatus?: string; q?: string; cursor?: string; limit?: number } = {}) => requestJson<Page<FacultyStatusItem>>(`${cyclePath(cycleId)}/faculty-status${queryString(filters)}`),
   getAttention: (cycleId: string, filters: { issue?: string; departmentId?: string } = {}) => requestList<AttentionItem>(`${cyclePath(cycleId)}/attention${queryString(filters)}`),
-  getObservations: (cycleId: string, filters: { status?: string; assessmentStatus?: string } = {}) => requestList<ObservationItem>(`${cyclePath(cycleId)}/observations${queryString(filters)}`),
+  getObservations: (cycleId: string, filters: { status?: string; assessmentStatus?: string; q?: string } = {}) => requestList<ObservationItem>(`${cyclePath(cycleId)}/observations${queryString(filters)}`),
+  getObservationsPage: (cycleId: string, filters: { status?: string; assessmentStatus?: string; q?: string; cursor?: string; limit?: number } = {}) => requestJson<Page<ObservationItem>>(`${cyclePath(cycleId)}/observations${queryString(filters)}`),
   getObserverSelectionSignups: (cycleId: string) => requestList<ObserverSelectionSignup>(`${cyclePath(cycleId)}/signups`),
   generateRecommendations: (cycleId: string, body: { requestKey?: string; scope?: { departmentId?: string; professorIds?: string[]; observationIds?: string[] } } = {}) =>
     requestJson<RecommendationGenerationResponse>(`${cyclePath(cycleId)}/recommendations/generate`, { method: "POST", body: JSON.stringify(body) }),

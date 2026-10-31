@@ -14,7 +14,7 @@ the separate observation route, exact `recommendations.regenerate` grant, requir
 UUID `requestKey` and `expectedRevision`. It creates a new list and independent
 candidate UUIDs without cancelling the current release or changing any assignment.
 Matching is unchanged: current-cycle-semester teaching, same department/course
-level, signed-up active faculty, compatible meetings, exclude self, up to five.
+level, all active faculty regardless of signup, compatible meetings, exclude self, up to five.
 Under-five and zero-match lists produce AC notifications keyed by list UUID.
 
 Publish uses `recommendations.release` and `{requestKey,targets,all?}`. Each target

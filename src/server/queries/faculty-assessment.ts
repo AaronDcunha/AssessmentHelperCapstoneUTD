@@ -55,7 +55,7 @@ export async function getFacultyAssessment(user: AccountUser, options: { databas
   if (!observationId) return null;
   const record = await db.observation.findFirst({ where: { observationId, OR: [{ signup: { professor: { userId: user.id } } }, { observer: { userId: user.id } }] }, include: { observer: { include: { user: true } }, signup: { include: { professor: { include: { user: true } }, section: { include: { course: true, semester: true } } } }, cycle: true, signedAssessment: true } });
   const now = new Date();
-  if (!record?.observer || !record.scheduledAt || record.scheduledAt > now || ["NOT_OCCURRED", "CANCELLED", "CANCELED"].includes(record.status.toUpperCase())) return null;
+  if (!record?.observer || !record.scheduledAt || ["NOT_OCCURRED", "CANCELLED", "CANCELED"].includes(record.status.toUpperCase())) return null;
   const saved = record.signedAssessment;
   if (!saved && (record.cycle.observationDeadline <= now || record.completedAt || record.status.toUpperCase() === "COMPLETED")) return null;
   const template = saved ? await db.observationTemplate.findUnique({ where: { templateId: saved.templateId }, include: { criteria: { orderBy: [{ displayOrder: "asc" }, { criterionId: "asc" }] } } }) : await db.observationTemplate.findFirst({ where: { isActive: true, status: "published" }, orderBy: [{ publishedAt: "desc" }, { templateId: "desc" }], include: { criteria: { orderBy: [{ displayOrder: "asc" }, { criterionId: "asc" }] } } });

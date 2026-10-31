@@ -321,13 +321,12 @@ try {
   assert.equal(await prisma.invitationAttempt.count({ where: { candidateId: { in: [automatic.candidate.candidateId, automatic.extra.candidateId] } } }), 4);
   checked('automatic expiry, uncontacted-candidate priority, bounded resends, repeatable jobs and deduplicated committee alerts');
   selectedObservation = paired.observationId;
-  assert.equal(await forms.getFacultyAssessment(observer), null);
-  // Simulate elapsed appointment time only in this disposable database.
-  await prisma.observation.update({ where: { observationId: paired.observationId }, data: { scheduledAt: new Date(now.getTime() - 3600000), scheduledEndsAt: new Date(now.getTime() - 1800000) } });
+  assert.ok((await prisma.observation.findUniqueOrThrow({ where: { observationId: paired.observationId } })).scheduledAt > new Date(), 'Assessment workflow is tested before the proposed appointment');
   const template = await configuration.createTemplate(prisma, committee, { title: 'Sparse scale', criteria: [{ key: 'rating', prompt: 'Evidence of learning', type: 'rating', required: true, order: 0, options: [{ value: 0, label: 'Needs support' }, { value: 10, label: 'Excellent' }] }], commentPrompts: [{ prompt: 'Evidence', required: true, order: 0 }] });
   await configuration.publishTemplate(prisma, committee, template.id, { expectedRevision: 0 });
   let form = await forms.getFacultyAssessment(observer), responses = { answers: { [template.criteria[0].id]: 0 }, comments: 'Retained', promptAnswers: { [template.commentPrompts[0].id]: 'Observed evidence' } };
   assert.ok(form);
+  assert.ok(new Date(form.scheduledAt) > new Date(), 'A confirmed future appointment can open the form');
   await assert.rejects(assessments.saveFacultyAssessment(faculty[0], { action: 'acknowledge', revision: form.revision, acknowledged: true }));
   await assert.rejects(assessments.saveFacultyAssessment(observer, { action: 'save', revision: form.revision, responses: { ...responses, answers: { [template.criteria[0].id]: 5 } } }));
   const draft = await assessments.saveFacultyAssessment(observer, { action: 'save', revision: form.revision, responses });

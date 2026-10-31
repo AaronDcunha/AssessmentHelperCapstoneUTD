@@ -93,6 +93,17 @@ try {
   await db.observation.delete({ where: { observationId: cancelledRelease.observationId } });
   const generatedEmpty = await db.observation.create({ data:{ cycleId, signupId:signups[3].signupId, recommendationGenerationId:randomUUID() } });
   await recommendationFixture(db,generatedEmpty.observationId,{generationId:generatedEmpty.recommendationGenerationId});
+  const noMatches = await read('attention', 'issue=alert');
+  const noMatch = noMatches.items.find(item => item.observationId === generatedEmpty.observationId);
+  assert.equal(noMatch?.issue, 'alert', 'An empty generated list immediately appears in AC attention');
+  assert.equal(noMatch?.reasonCode, 'NO_COMPATIBLE_OBSERVERS');
+  assert.equal((await read('attention', 'issue=alert', actor, emptyCycle)).items.length, 0);
+  const resolvedCandidate = await db.observationCandidate.create({ data: {
+    observationId: generatedEmpty.observationId, recommendationListId: (await db.observation.findUniqueOrThrow({ where: { observationId: generatedEmpty.observationId } })).currentDraftListId,
+    professorId: professors[1],
+  } });
+  assert.equal((await read('attention', 'issue=alert')).items.some(item => item.observationId === generatedEmpty.observationId), false, 'A list with matches no longer shows a no-match alert');
+  await db.observationCandidate.delete({ where: { candidateId: resolvedCandidate.candidateId } });
   result = await read();
   assert.equal(value(result,'listSufficiencyRate').value,0.5,'Generated zero-match lists stay in denominator');
   assert.equal(value(result,'listSufficiencyRate').unit,'matches');
@@ -116,6 +127,29 @@ try {
   await assert.rejects(read('metrics','',{ ...actor, permissions:['reports.read'] }), e => e.status===403);
   await assert.rejects(read('metrics','departmentId=invalid'), e => e.status===422);
   const oldSemester = await db.semester.create({ data: { termCode: '23f', termName: 'Fall 2023' } });
+  const allFaculty = (await read('faculty-status')).items;
+  const pagedFaculty = [];
+  let facultyCursor;
+  do {
+    const response = await read('faculty-status', `limit=1${facultyCursor ? `&cursor=${facultyCursor}` : ''}`);
+    assert.ok(response.items.length <= 1);
+    pagedFaculty.push(...response.items);
+    facultyCursor = response.pageInfo.nextCursor;
+    assert.equal(response.pageInfo.hasMore, !!facultyCursor);
+  } while (facultyCursor);
+  assert.deepEqual(pagedFaculty.map(row => row.id), allFaculty.map(row => row.id), 'Cursor pages preserve all faculty without duplicates');
+  const dueFaculty = (await read('faculty-status', 'evaluationStatus=due')).items;
+  const duePages = [];
+  facultyCursor = null;
+  do {
+    const response = await read('faculty-status', `evaluationStatus=due&limit=1${facultyCursor ? `&cursor=${facultyCursor}` : ''}`);
+    duePages.push(...response.items);
+    facultyCursor = response.pageInfo.nextCursor;
+  } while (facultyCursor);
+  assert.deepEqual(duePages.map(row => row.id), dueFaculty.map(row => row.id), 'Computed eligibility is filtered before pagination');
+  const scans = [];
+  await getCycleReport({ evaluationCycle: db.evaluationCycle, professor: { findMany: args => { scans.push(args.take); return db.professor.findMany(args); } } }, actor, new URL('http://test?limit=1'), cycleId, 'faculty-status');
+  assert.deepEqual(scans, [2], 'The first unfiltered page reads only the requested rows plus one');
   const oldCycle = await db.evaluationCycle.create({ data: { semesterId: oldSemester.semesterId, cycleName: 'Old', signupDeadline: new Date('2023-09-01'), observationDeadline: new Date('2023-12-01'), feedbackDeadline: new Date('2023-12-10') } });
   const oldSection = await db.courseSection.create({ data: { courseId, semesterId: oldSemester.semesterId, sectionCode: '001' } });
   const oldSignup = await db.evaluationSignup.create({ data: { cycleId: oldCycle.cycleId, professorId: professors[2], sectionId: oldSection.sectionId } });

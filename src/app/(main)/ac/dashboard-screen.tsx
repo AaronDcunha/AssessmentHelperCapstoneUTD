@@ -67,6 +67,7 @@ export default function AcDashboardPage() {
                 <AttentionTableRow key={item.rowKey} faculty={userDisplayName(item.faculty)}
                   issueStatus={item.issue === "overdue" || item.issue === "unmatched" || item.issue === "incomplete" || item.issue === "alert" ? item.issue : null}
                   observationStatus={item.observationStatus}
+                  issueDescription={item.reason}
                   action={attentionReviewHref(item) ? { href: attentionReviewHref(item)!, ariaLabel: `Review ${userDisplayName(item.faculty)}'s ${item.issue === "alert" ? "alert" : "observation"}` } : null} />
               ))}
               {cycleId && !attention.loading && !alerts.loading && !attention.error && !alerts.error && rows.length === 0 && (

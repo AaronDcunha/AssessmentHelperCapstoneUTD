@@ -7,6 +7,15 @@ import { acApi } from '../../src/lib/ac-api.ts';
 const attention = ['overdue', 'unmatched', 'incomplete'].map(issue => ({ id: 'same-id', faculty: { id: 'faculty', name: 'Faculty One' }, issue, observationId: 'observation', observationStatus: 'PENDING' }));
 const alert = id => ({ id, observationId: 'observation', cycleId: 'cycle', createdBy: { id: 'faculty', name: 'Faculty One' }, context: { observee: { name: 'Faculty One' }, observationStatus: 'SCHEDULED' } });
 
+test('no-match alerts stay distinct from faculty messages and review the matching page', () => {
+  const item = { ...attention[0], issue: 'alert', reasonCode: 'NO_COMPATIBLE_OBSERVERS', reason: 'No compatible observers found.' };
+  const rows = mergeAttention([item], [alert(item.id)]);
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].alertId, undefined);
+  assert.equal(rows[0].reason, item.reason);
+  assert.equal(attentionReviewHref(rows[0]), '/ac/observer-selection');
+});
+
 test('joins alerts by stable message identity, preserving distinct messages and all non-alert issues', () => {
   const duplicated = { id: 'attention-row', alertId: 'alert-a', faculty: { id: 'faculty', name: 'Old display' }, issue: 'alert', observationId: 'observation', observationStatus: 'PENDING' };
   const rows = mergeAttention([...attention, duplicated], [alert('alert-a'), alert('alert-b'), alert('alert-a')]);

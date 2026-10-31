@@ -77,7 +77,8 @@ try {
     await db.professor.create({ data: { professorId: user.professorId, userId: user.id, departmentId, hiringLevelId: levelId } });
     const section = await db.courseSection.create({ data: { courseId, semesterId, sectionCode: String(i), teaches: { create: { professorId: user.professorId } },
       ...(i < 2 ? { classMeetings: { create: { dayOfWeek: weekday, startTime: i ? '14:00' : '10:00', endTime: i ? '15:00' : '11:00', location: 'Lifecycle room' } } } : {}) } });
-    const signup = await db.evaluationSignup.create({ data: { cycleId, professorId: user.professorId, sectionId: section.sectionId } });
+    // Potential observers 2 and 3 deliberately have no signup.
+    const signup = i < 2 ? await db.evaluationSignup.create({ data: { cycleId, professorId: user.professorId, sectionId: section.sectionId } }) : null;
     if (i < 2) {
       const record = await db.observation.create({ data: { signupId: signup.signupId, cycleId } }); observations.push(record.observationId);
       const option = await db.observationTimeOption.create({ data: { observationId: record.observationId, preferredDate: new Date(`${meetingDate}T00:00:00Z`) } }); options.push(option.timeOptionId);

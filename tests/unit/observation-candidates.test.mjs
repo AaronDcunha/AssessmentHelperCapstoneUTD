@@ -150,7 +150,7 @@ test('expired-but-recorded pending windows stay pending in this read and are nev
   assert.equal(candidate.attempts[0].status, 'PENDING');
 });
 
-test('compatibility uses the real shared checks for teaching/appointment conflicts, signup, activity and changed schedules', async () => {
+test('compatibility checks conflicts and activity while allowing professors without signup', async () => {
   const f = fixture();
   f.candidates[0].professor.teaches[0].section.classMeetings = [{ dayOfWeek: 'Monday', startTime: '10:30', endTime: '12:00', location: null }];
   assert.deepEqual((await f.read()).items[0].availableMeetingOptionIds, [id(13)]);
@@ -158,9 +158,29 @@ test('compatibility uses the real shared checks for teaching/appointment conflic
   f.appointments = [{ scheduledAt: new Date('2026-11-09T16:30:00Z'), scheduledEndsAt: new Date('2026-11-09T17:30:00Z'), signup: { section: f.record.signup.section } }];
   assert.deepEqual((await f.read()).items[0].availableMeetingOptionIds, [id(13)]);
   f.active = false; assert.deepEqual((await f.read()).items[0].availableMeetingOptionIds, []);
-  f.active = true; f.signedUp = false; assert.deepEqual((await f.read()).items[0].availableMeetingOptionIds, []);
+  f.active = true; f.signedUp = false; assert.deepEqual((await f.read()).items[0].availableMeetingOptionIds, [id(13)]);
   f.signedUp = true; f.appointments = []; f.record.timeOptions[0].startsAt = new Date('2026-11-09T18:00:00Z');
   assert.deepEqual((await f.read()).items[0].availableMeetingOptionIds, [id(13)]);
+});
+
+test('no-signup observers still require the same department, semester and course level and cannot observe themselves', async () => {
+  const f = fixture();
+  f.signedUp = false;
+  const candidate = f.candidates[0], section = candidate.professor.teaches[0].section;
+  const originalCourse = section.course;
+  section.course = { ...originalCourse, courseLevel: originalCourse.courseLevel + 1000 };
+  assert.deepEqual((await f.read()).items[0].availableMeetingOptionIds, []);
+  section.course = originalCourse;
+  const originalSemester = section.semesterId;
+  section.semesterId = id(99);
+  assert.deepEqual((await f.read()).items[0].availableMeetingOptionIds, []);
+  section.semesterId = originalSemester;
+  const find = f.db.professor.findUnique;
+  f.db.professor.findUnique = async args => ({ ...await find(args), departmentId: id(99) });
+  assert.deepEqual((await f.read()).items[0].availableMeetingOptionIds, []);
+  f.db.professor.findUnique = find;
+  f.record.signup.professorId = candidate.professorId;
+  assert.deepEqual((await f.read()).items[0].availableMeetingOptionIds, []);
 });
 
 test('invalid query/path values fail before reads; missing observations and invalid accepted-option ownership are explicit', async () => {

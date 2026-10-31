@@ -2,6 +2,24 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { acApi, ApiRequestError } from "../../src/lib/ac-api.ts";
 
+test("Faculty table requests one page and retains its cursor without fetching subsequent pages", async () => {
+  const originalFetch = globalThis.fetch, calls = [];
+  globalThis.fetch = async input => {
+    calls.push(String(input));
+    return Response.json({ items: [{ professor: { id: 'faculty' } }], pageInfo: { hasMore: true, nextCursor: 'next-faculty' } });
+  };
+  try {
+    const page = await acApi.getFacultyStatusPage('cycle', { limit: 20, cursor: 'previous', q: 'Delta True', evaluationStatus: 'due' });
+    assert.equal(calls.length, 1);
+    const url = new URL(calls[0], 'http://local');
+    assert.equal(url.searchParams.get('q'), 'Delta True');
+    assert.equal(url.searchParams.get('cursor'), 'previous');
+    assert.equal(url.searchParams.get('limit'), '20');
+    assert.equal(url.searchParams.get('evaluationStatus'), 'due');
+    assert.equal(page.pageInfo.nextCursor, 'next-faculty');
+  } finally { globalThis.fetch = originalFetch; }
+});
+
 test("AC reads use the documented cycle and observation endpoint paths", async () => {
   const originalFetch = globalThis.fetch;
   const calls = [];

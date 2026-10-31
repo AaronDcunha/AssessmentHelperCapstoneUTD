@@ -87,7 +87,11 @@ async function recommendationTransaction<T>(user: Identity, kind: string, scopeI
 
 async function createRecommendationDraft(db: Tx, record: ObservationRecord, generationId: string, now: Date) {
   const list = await db.recommendationList.create({ data: { observationId: record.observationId, generationId, generatedAt: now } });
-  const pool = await db.evaluationSignup.findMany({ where: { cycleId: record.cycleId, professorId: { not: record.signup.professorId } }, orderBy: { professorId: "asc" } });
+  const pool = await db.professor.findMany({ where: {
+    professorId: { not: record.signup.professorId }, user: { isActive: true },
+    departmentId: record.signup.professor.departmentId,
+    teaches: { some: { section: { semesterId: record.signup.section.semesterId, course: { courseLevel: record.signup.section.course.courseLevel } } } },
+  }, select: { professorId: true }, orderBy: { professorId: "asc" } });
   let count = 0;
   for (const member of pool) {
     if (count === 5) break;
@@ -117,13 +121,12 @@ export function availableOption(record: ObservationRecord, id: string, now: Date
   return { ...current, timeOptionId: id, date };
 }
 
-export async function observerAvailable(db: Pick<Tx, "professor" | "evaluationSignup" | "observation">, record: ObservationRecord, professorId: string, option: ReturnType<typeof availableOption>) {
+export async function observerAvailable(db: Pick<Tx, "professor" | "observation">, record: ObservationRecord, professorId: string, option: ReturnType<typeof availableOption>) {
   if (professorId === record.signup.professorId) return false;
   const profile = await db.professor.findUnique({ where: { professorId }, include: { user: true, teaches: { include: { section: { include: { classMeetings: true, course: true, semester: true } } } } } });
   if (!profile?.user.isActive || profile.departmentId !== record.signup.professor.departmentId) return false;
   const assignments = profile.teaches.filter(item => item.section.semesterId === record.signup.section.semesterId);
   if (!assignments.some(item => item.section.course.courseLevel === record.signup.section.course.courseLevel)) return false;
-  if (!await db.evaluationSignup.findUnique({ where: { cycleId_professorId: { cycleId: record.cycleId, professorId } } })) return false;
   for (const item of assignments) {
     const weekday = new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: "UTC" }).format(new Date(`${option.date}T12:00:00Z`));
     for (const meeting of item.section.classMeetings.filter(meeting => meeting.dayOfWeek === weekday)) {

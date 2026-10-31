@@ -103,7 +103,8 @@ test('selected generation updates only the selected observation', async () => {
     assert.deepEqual(where.observationId.in, [id(2)]);
     return [f.record];
   };
-  f.db.evaluationSignup = { findMany: async () => [] };
+  f.db.professor = { findMany: async () => [] };
+  f.record.signup.section = { semesterId:id(70), course:{courseLevel:4000} };
   f.db.recommendationList.create = async ({data}) => { assert.equal(data.observationId, id(2)); return {listId:id(80)}; };
   f.db.observationCandidate.deleteMany = async () => assert.fail('Generation must preserve historical members');
   f.db.appUser.findMany = async () => [];
@@ -215,7 +216,8 @@ test('regeneration after selection only writes a draft and retries replay the co
   f.record.signup.professor.user = { fullName:'Observee' };
   f.db.recommendationOperation = { findUnique:async({where})=>receipts.get(where.requestKey)??null, create:async({data})=>{receipts.set(data.requestKey,data);return data;} };
   f.db.recommendationList.create = async () => ({listId:id(80)});
-  f.db.evaluationSignup = {findMany:async()=>[]};
+  f.db.professor = {findMany:async()=>[]};
+  f.record.signup.section = {semesterId:id(70),course:{courseLevel:4000}};
   const actor={...user,permissions:['recommendations.regenerate']},body={requestKey:id(81),expectedRevision:0};
   const actions=runtime(f.db,messages);
   const first=await actions.regenerateRecommendations(actor,id(2),body), count=f.writes.length;
