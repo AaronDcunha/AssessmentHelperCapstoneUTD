@@ -1,3 +1,77 @@
+October 30, 2026 Observation Progress pagination:
+Observation Progress now uses single-page observation API reads with temporary
+Previous/Next controls and 20/50/100 rows. Filters reset the page; search retains
+its 300ms delay. All cycles traverses cycle pages lazily in cycle-list order,
+including empty cycles, with one lookahead row and no full-list download.
+
+October 30, 2026 Faculty Due / Overdue pagination:
+The table loads a single cursor page (20 default, 50/100 optional) with temporary
+Previous/Next controls. Cycle, name, hiring-level, status or page-size changes
+restart at page one. Name search waits 300ms. The faculty-status endpoint bounds
+its reads and stops after finding limit+1 matching rows; computed eligibility
+filters are applied before paging. Report/metric/reminder full-population reads
+retain their behavior. Reminders use filters across pages, not only visible rows.
+
+October 30, 2026 flexible assessment timing (supersedes appointment-start gate):
+Participants may open, save and sign an observation assessment as soon as an
+observer and appointment are confirmed and a published template is available.
+The proposed appointment date need not have arrived; real-world timing can vary.
+Ownership, grants, observation deadline, cancellation/non-occurrence restrictions,
+observer-first acknowledgement and final locking after both signatures remain.
+
+October 30, 2026 observer eligibility correction (supersedes signup-pool rules):
+All active professors may observe without signing up for evaluation. Exclude self;
+require the same professor department, teaching the same course level in the cycle
+semester, and availability for at least one valid proposed meeting. Generation,
+regeneration, invitations, acceptance, selection and eligibility reporting share
+this check. At most five candidates are generated. Zero-candidate current lists
+immediately produce a derived Alert in AC Needs attention (no scheduler required),
+with reasonCode NO_COMPATIBLE_OBSERVERS and review linking to Observer Selection.
+It clears when the current list has candidates or an observer is assigned. Shared
+transactional shortfall notifications remain. No schema or seed change is needed.
+
+October 30, 2026 Issue #67 replacement lifecycle (supersedes earlier disabled-workflow notes):
+POST recommendations/regenerate now creates an independent draft with a required
+requestKey and expectedRevision. It leaves the current published list, invitations,
+assignment and assessment untouched. Replacement publication uses one atomic
+requestKey/targets transaction, including mixed generations and publish-all with
+an exact reviewed target manifest. Targets carry observation/list UUIDs, workflow
+revision and optional expected released-list UUID. Stale targets roll back all
+writes and queued notifications. Same actor/key/payload retries replay the recorded
+result; changed key reuse is rejected. Uncertain concurrency returns 503: retry
+the SAME request key and payload, not a newly constructed operation.
+Publication cancels superseded memberships/outstanding invitations, retains actual
+attempt responses, accepted meeting UUIDs and approval records, and switches the
+released pointer. An existing selected assignment is archived and selection is
+reopened only if no assessment row/work exists. Signed, partially signed, completed,
+closed and deadline-expired observations are protected. Prior cancellation times
+are retained. Legacy selection actors/times and per-attempt accepted meetings stay
+null when unknown; no historical facts are backfilled. The additive migration is
+20261030000000_recommendation_publication; deploy schema/app/workers together.
+The AC frontend enables Generate, Regenerate, Publish One/Selected/All and retains
+the exact pending operation for retry. Server allowedActions gate unsafe actions.
+Matching remains current-cycle-semester/same department/course level, availability,
+exclude self/max five; display history includes five recent distinct course/terms.
+Shared transactional notifications use list-specific keys. Manual addition stays
+out of scope. No application database migration or seeding is run by this work.
+See AC_OBSERVER_SELECTION_BACKEND.md for deployment and verification commands.
+
+October 30, 2026 Issue #67 integration with main 2edbfb4 (historical baseline):
+Task 1 uses the canonical authorized GET Signups/Candidates queries; duplicate
+observer-selection server readers were removed. Selected generation scope is
+combined with list preservation and initial-only guards. Faculty Prisma reads,
+transaction-scoped links and assessment revision handling from main are retained.
+Frontend types handle nullable observations/meeting snapshots, five-entry history
+arrays, separate recorded candidate/response states, list IDs and pinned pagination.
+Release uses each selected row's actual list generation, with no cross-row fallback.
+The unimplemented regenerate route stays disabled regardless of role grants.
+KPI matching uses current draft, otherwise current published membership; survey
+evidence uses only current published membership. Historical rows cannot inflate
+metrics. Explicit cycles.manage permanent semester deletion clears pointers and
+removes list history in its existing transaction; rollback retains all records.
+Normal generation/release never deletes recommendation history. Replacement
+generation/publication remains disabled. No application migrations or seeding ran.
+
 October 29, 2026 Faculty integration follow-up:
 Semester Settings conversion/revisions verified with repeated real saves in a disposable
 DB. Finalized assessments remain readable with all three steps navigable; deadlines
@@ -17,6 +91,72 @@ Faculty History page and its shared detail implementation are unchanged. No appl
 data was reset, seeded or deleted. See FACULTY_INTEGRATION_FIXES.md for verification.
 
 ASSESSMENT HELPER IMPLEMENTATION NOTES
+October 28, 2026 Issue #67 recommendation-list foundation (supersedes single-list notes below):
+RecommendationList identities, list-scoped candidates and separate observation
+draft/released pointers now exist. Initial generation/release retain their existing
+routes and payloads. Repeated initial generation preserves earlier drafts/candidate
+IDs. Replacement generation/publication remains disabled. Faculty reads, counts,
+alerts, cycle scope, invitation actions, approvals and expiry/resends require the
+current released list and a real list publication; legacy timestamps alone do not
+grant access. AC Candidates reads default to draft then released, with explicit
+observation-scoped listId for history; Signups adds both current list UUIDs.
+The new additive migration imports only the surviving set, preserves all previous
+records/response facts, leaves unknown generation times null, and quarantines
+candidate-only imports without generation/release evidence (no current pointer).
+No final selection or assessment is changed. Deploy schema and guarded writers/
+readers together, pausing the Faculty scheduler; do not run old workers afterward.
+Aaron's approved future lifecycle: regeneration only creates a draft; cancellation
+happens on replacement publication. Replacement after final selection archives
+the old assignment and reopens selection only before assessment work starts.
+Signed/partially signed/completed/closed observations must not be overwritten.
+Manual observer addition is out of scope. Operation retry records, replacement
+publication/cancellation and assignment/assessment lifecycle work remain deferred.
+See AC_OBSERVER_SELECTION_BACKEND.md for backfill, deployment and verification.
+
+October 28, 2026 Issue #67 Candidates Phase 1:
+GET /api/observations/{observationId}/candidates adds only an AC-authorized read
+of the existing single list. observations.read already authorizes comparable
+observation-detail reads and is enforced by route and query. Faculty own grants
+do not authorize this new route, including for released lists. Existing Faculty
+readers, generation/release/invitation workers, grants, schema and migrations stay
+unchanged. Responses preserve raw candidate status, latest actual attempt status
+and timestamps, candidate-level accepted option and nullable meeting snapshots.
+No historical response/per-attempt accepted meeting is invented. Response filtering
+uses latest recorded attempts; no expiry or status write occurs during a read.
+Compatibility reuses the existing shared checks with one request time. Relevant
+courseHistory now includes older semesters, following Aaron's updated clarification:
+up to five recent distinct course/semester pairs of same-level teaching. Repeated
+sections are deduplicated before limiting. Stored YYs/YYu/YYf codes order year then
+Spring/Summer/Fall, newest first; course code, course UUID and semester UUID break
+ties. Unrecognized legacy codes sort last without guessing chronology. This only
+changes display history; current-cycle-semester eligibility, same-level/same-
+department matching and shared meeting compatibility remain unchanged.
+Current user relayed Aaron's decisions: process_explanation_to_all takes priority
+for conflicting workflow descriptions; current-semester eligibility applies for
+now; any five eligible observers are acceptable; Course history focuses on relevant
+courses; regeneration after release/invitations is required in a later phase.
+Versioned list membership and outstanding-invitation lifecycle remain unresolved;
+this Phase 1 route does not claim to distinguish a replacement draft from the
+last released list. The endpoint-specific contract documents provisional mapping.
+
+October 28, 2026 Issue #67 AC signup read (first independent portion):
+GET /api/evaluation-cycles/{cycleId}/signups now reads actual signup/observee,
+course/section/schedule, persisted proposed-option UUIDs and snapshots, observation
+identity/revision and existing generation/release markers through Prisma. Exact
+effective signups.read is required independently of Faculty participation or role
+labels; authentication reuses active-account resolution. University-wide AC access
+is a provisional implementation assumption matching current reporting, not a new
+department-access policy. Optional department/hiring-level/search filters and
+bounded signup-UUID cursor pagination are enforced in the database query.
+No generated status, matching outcome, candidate count or availability is inferred.
+Legacy missing meeting metadata stays null; no observation produces null markers
+and empty options. The schema permits multiple observations per signup; return
+409 AMBIGUOUS_OBSERVATION rather than selecting one silently (provisional safeguard).
+The API draft documents this endpoint's additive fields, nullability and errors.
+Matching, generation/release, notifications, Faculty workflows, grants, schema and
+migrations are unchanged. Matching/history, regeneration and candidate DTO decisions
+remain unresolved for the rest of #67. See AC_OBSERVER_SELECTION_BACKEND.md.
+
 October 30, 2026 KPI presentation:
 Reports use equal-height responsive metric cards with explanations inside the card.
 Zero-population messages identify the missing metric-specific data in plain language.

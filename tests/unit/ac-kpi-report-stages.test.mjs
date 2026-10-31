@@ -1,6 +1,7 @@
+import '../../scripts/server-loader.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { pendingActionOverdue, unmatchedStage } from '../../src/server/queries/ac-metrics.ts';
+const { pendingActionOverdue, unmatchedStage } = await import('../../src/server/queries/ac-metrics.ts');
 
 const now = new Date('2026-10-30T12:00:00Z');
 const past = new Date('2026-10-29T12:00:00Z');
@@ -33,6 +34,7 @@ test('cancelled generations and releases cannot advance an unmatched signup stag
   ];
   assert.equal(unmatchedStage(retained), 'awaiting-generation');
   assert.equal(unmatchedStage([...retained, { status: 'PENDING' }]), 'awaiting-generation');
-  assert.equal(unmatchedStage([...retained, { status: 'PENDING', recommendationGenerationId: 'new' }]), 'awaiting-release');
-  assert.equal(unmatchedStage([...retained, { status: 'PENDING', recommendationsReleasedAt: now }]), 'awaiting-selection');
+  assert.equal(unmatchedStage([...retained, { status: 'PENDING', currentDraftListId: 'new' }]), 'awaiting-release');
+  assert.equal(unmatchedStage([...retained, { status: 'PENDING', currentReleasedList: {publishedAt:now} }]), 'awaiting-selection');
+  assert.equal(unmatchedStage([{status:'PENDING',recommendationGenerationId:'unclassified',recommendationsReleasedAt:now}]), 'awaiting-generation');
 });

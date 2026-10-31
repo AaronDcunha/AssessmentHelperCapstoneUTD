@@ -17,7 +17,7 @@ export function FacultyAssessmentScreen({ initial, unavailable = false }: { init
   const [pending, setPending] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [acknowledged, setAcknowledged] = useState(false);
-  if (!form) return <div className="space-y-ah-24"><div className={panel}><p>{unavailable ? "The observation form is temporarily unavailable." : "No observation form is available. A scheduled observation that has started, an assigned observer and a template are required."}</p></div><ButtonLink href={facultyRoutes.details} variant="secondary">Back</ButtonLink></div>;
+  if (!form) return <div className="space-y-ah-24"><div className={panel}><p>{unavailable ? "The observation form is temporarily unavailable." : "No observation form is available. Confirm an observer and appointment, and make sure a published observation template is available."}</p></div><ButtonLink href={facultyRoutes.details} variant="secondary">Back</ButtonLink></div>;
   const current = form;
   const ratings = current.criteria.filter(criterion => criterion.type === "RATING");
   const text = current.criteria.filter(criterion => criterion.type === "TEXT");

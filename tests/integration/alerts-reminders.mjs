@@ -1,6 +1,8 @@
 // Local disposable schema only; application data and outbound delivery are untouched.
+import '../../scripts/server-loader.mjs';
 import '../configuration-loader.mjs';
 import assert from 'node:assert/strict';
+import { recommendationFixture } from '../recommendation-fixtures.mjs';
 import {randomUUID} from 'node:crypto';
 import {readFile,readdir} from 'node:fs/promises';
 import pg from 'pg';
@@ -50,7 +52,8 @@ try{
  const adminRole=await db.role.create({data:{roleName:'Admin'}});
  await db.userRole.createMany({data:[{userId:ac2,roleId:role.roleId},{userId:ac2,roleId:adminRole.roleId},{userId:inactiveAC,roleId:role.roleId},{userId:adminUser,roleId:adminRole.roleId}]});
  await db.observation.update({where:{observationId:o1},data:{observerId:p2}});
- await db.observationCandidate.create({data:{observationId:o1,professorId:p2}});
+ const list = await recommendationFixture(db, o1);
+ await db.observationCandidate.create({data:{observationId:o1,recommendationListId:list.listId,professorId:p2}});
  const creationKey=randomUUID();const create=()=>tx(t=>createObservationAlert(t,faculty,o1,{reasonCode:'OTHER',reason:'Please help',details:'Full context',creationKey}));
  const first=await create();assert.equal(first.created,true);assert.equal(first.alert.status,undefined);assert.deepEqual(first.alert.allowedActions,[]);assert.equal(first.alert.context.candidates.length,0);
  const again=await create();assert.equal(again.created,false);assert.equal(again.alert.id,first.alert.id);
@@ -71,6 +74,13 @@ try{
  await assert.rejects(tx(t=>getAlert(t,observer,first.alert.id)),e=>e.status===404);
  assert.equal((await tx(t=>getAlert(t,faculty,first.alert.id))).details,'Full context');
  assert.equal((await tx(t=>getAlert(t,committee,first.alert.id))).context.candidates.length,1);
+ // Publication exposes only that list; a replacement draft and archived release
+ // may coexist in the database without leaking through the Faculty alert DTO.
+ const releasedList = await recommendationFixture(db,o1,{released:true});
+ const releasedCandidate = await db.observationCandidate.create({data:{observationId:o1,recommendationListId:releasedList.listId,professorId:p2}});
+ const facultyAlert = await tx(t=>getAlert(t,faculty,first.alert.id));
+ assert.deepEqual(facultyAlert.context.candidates.map(candidate=>candidate.id),[releasedCandidate.candidateId]);
+ assert.equal((await tx(t=>getAlert(t,committee,first.alert.id))).context.candidates[0].id,(await db.observationCandidate.findFirst({where:{recommendationListId:list.listId}})).candidateId);
  const alerts=await tx(t=>getCycleAlerts(t,committee,cycleId,new URL('http://test')));assert.equal(alerts.items.length,1);
  await assert.rejects(tx(t=>getCycleAlerts(t,faculty,cycleId,new URL('http://test'))),e=>e.status===403);
  assert.equal((await create()).created,false);assert.equal(await db.facultyIssue.count({where:{observationId:o1,kind:'ALERT'}}),1);
@@ -95,5 +105,8 @@ try{
  const retryKey=randomUUID();await Promise.allSettled([tx(t=>sendCycleReminders(t,committee,cycleId,payload,retryKey)),tx(t=>sendCycleReminders(t,committee,cycleId,payload,retryKey))]);
  assert.equal(await db.reminderDispatch.count({where:{dispatchId:retryKey}}),1);assert.equal(await db.notification.count({where:{userId:u1,eventKey:'reminder:'+retryKey}}),1);
  const due=await tx(t=>sendCycleReminders(t,committee,cycleId,{...payload,recipientFilter:{evaluationStatus:'due'}},randomUUID()));assert.equal(due.recipientCount,0);
+ const searchedName=(await db.appUser.findUniqueOrThrow({where:{userId:u1}})).fullName;
+ const searched=await tx(t=>sendCycleReminders(t,committee,cycleId,{...payload,recipientFilter:{q:searchedName.toLowerCase()}},randomUUID()));assert.equal(searched.recipientCount,1);
+ const noNameMatch=await tx(t=>sendCycleReminders(t,committee,cycleId,{...payload,recipientFilter:{q:'No such professor'}},randomUUID()));assert.equal(noNameMatch.recipientCount,0);
  console.log('Passed isolated alert/reminder PostgreSQL tests: observee ownership, selected-observer denial, unreleased-candidate privacy, AC scope, multiple messages, retry deduplication, all-AC delivery, read-only message context, workflow notifications, reminder recipient filters/idempotence/rollback, inactive-recipient exclusion, and transactional email enqueue with no SMTP delivery.');
 }finally{await db.$disconnect();await migration.end();if(created)await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end();}

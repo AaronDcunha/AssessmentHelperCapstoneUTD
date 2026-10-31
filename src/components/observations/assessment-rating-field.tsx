@@ -27,7 +27,7 @@ export type AssessmentRatingFieldProps = Omit<ComponentProps<"div">, "children" 
 };
 
 const tileClasses = [
-  "relative min-w-[124px] max-w-full",
+  "relative min-w-0 max-w-full",
   "[&>label]:flex [&>label]:min-h-[52px] [&>label]:cursor-pointer [&>label]:items-center [&>label]:justify-center",
   "[&>label]:rounded-ah-8 [&>label]:border [&>label]:border-border [&>label]:bg-surface [&>label]:p-ah-12 [&>label]:text-center [&>label]:text-sidebar [&>label]:break-words",
   "[&:has(input:checked)>label]:border-sidebar [&:has(input:checked)>label]:bg-sidebar [&:has(input:checked)>label]:text-light",
@@ -61,10 +61,10 @@ export function AssessmentRatingField({
       className={["min-w-0", className].filter(Boolean).join(" ")}
     >
       <div className="flex min-w-0 flex-col gap-ah-12 xl:flex-row xl:items-start">
-        <p id={`${id}-label`} className="min-w-0 break-words text-body text-ink xl:flex xl:min-h-[52px] xl:w-[310px] xl:shrink-0 xl:items-center">
+        <p id={`${id}-label`} className="min-w-0 break-words text-body text-ink xl:flex xl:min-h-[72px] xl:w-[280px] xl:shrink-0 xl:items-center">
           {label}{required && <span className="sr-only"> (required)</span>}
         </p>
-        <div className="flex min-w-0 flex-wrap gap-ah-12">
+        <div className={options.length === 5 ? "grid min-w-0 flex-1 grid-cols-1 gap-ah-8 sm:grid-cols-5" : "flex min-w-0 flex-1 flex-wrap gap-ah-12"}>
           {options.map((option, index) => (
             <Input
               key={`${option.value}-${index}`} id={`${id}-option-${index}`} type="radio" name={groupName}
@@ -75,6 +75,7 @@ export function AssessmentRatingField({
               className="sr-only w-px! border-0! p-ah-0!"
               wrapperClassName={[
                 tileClasses,
+                options.length === 5 ? "[&>label]:h-full [&>label]:min-h-[72px] [&>label]:px-ah-8 [&>label]:text-label" : "min-w-[124px]",
                 readOnly ? "[&>label]:cursor-default" : "[&:has(input:enabled)>label:hover]:bg-neutral-bg [&:has(input:enabled):has(input:checked)>label:hover]:bg-active",
                 option.className,
               ].filter(Boolean).join(" ")}

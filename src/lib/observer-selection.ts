@@ -16,7 +16,17 @@ export function currentSemesterCycle(cycles: readonly Cycle[], now: number | nul
 }
 
 export function hasGeneratedList(candidates: ObservationCandidatesResponse | null) {
+  if (candidates && "list" in candidates) return !!candidates.list;
   return !!candidates && (!!candidates.generationId || !!candidates.releasedAt || candidates.items.length > 0);
+}
+
+export function initialSignupAvailable(signup: ObserverSelectionSignup, candidates: ObservationCandidatesResponse | null, candidateError: string | null) {
+  return !!signup.observationId && !candidateError && !signup.currentReleasedListId && !candidates?.currentReleasedListId && !candidates?.releasedAt;
+}
+
+export function recommendationGeneration(candidates: ObservationCandidatesResponse | null) {
+  if (candidates && "list" in candidates) return candidates.list?.generationId ?? null;
+  return candidates?.generationId ?? null;
 }
 
 export function signupWindow(deadline: string | null | undefined, now: number | null) {
@@ -46,6 +56,7 @@ function timeLabel(value: string, timeZone: string) {
 }
 
 export function meetingLabel(meeting: ObservationMeeting) {
+  if (!meeting.startsAt || !meeting.endsAt || !meeting.timeZone) return `${meeting.date} · Time unavailable`;
   return `${dateLabel(meeting.startsAt || meeting.date, meeting.timeZone)} · ${timeLabel(meeting.startsAt, meeting.timeZone)}–${timeLabel(meeting.endsAt, meeting.timeZone)}`;
 }
 
@@ -60,9 +71,8 @@ export function candidateMeetings(candidate: ObservationCandidate, meetings: rea
 
 export function courseHistoryLabel(candidate: ObservationCandidate) {
   const history = candidate.courseHistory;
-  if (typeof history === "string") return history.trim() || "—";
-  if (!history) return "—";
-  return history.label?.trim() || [history.courseCode, history.semester].filter(Boolean).join(" · ") || "—";
+  if (!history?.length) return "—";
+  return history.map(entry => `${entry.course.code} · ${entry.semester.name}`).join("; ");
 }
 
 export function matchState(generated: boolean, count: number) {

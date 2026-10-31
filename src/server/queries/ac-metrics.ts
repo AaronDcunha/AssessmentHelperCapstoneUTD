@@ -7,12 +7,18 @@ const cancelled = ["CANCELLED", "CANCELED"];
 const signupInclude = {
   professor: { include: { user: { select: { userId: true, fullName: true } } } },
   section: { include: { course: true } },
-  observations: { include: { signedAssessment: true, candidates: { include: { attempts: true } },
+  observations: { include: { signedAssessment: true, currentDraftList: true, currentReleasedList: true, candidates: { include: { attempts: true } },
     facultyIssues: { where: { kind: "NOT_OCCURRED" } }, processFeedback: true } },
 };
 type Signup = Prisma.EvaluationSignupGetPayload<{ include: typeof signupInclude }>;
 type Observation = Signup["observations"][number];
 type Faculty = { id: string; evaluationStatus: string };
+
+function recommendationMembers(observation: Observation, releasedOnly = false) {
+  const releasedId = observation.currentReleasedList?.publishedAt ? observation.currentReleasedListId : null;
+  const listId = releasedOnly ? releasedId : observation.currentDraftListId ?? releasedId;
+  return listId ? observation.candidates.filter(candidate => candidate.recommendationListId === listId) : [];
+}
 
 export function cycleSignups(db: Connection, cycleId: string, filters: { departmentId?: string | null; hiringLevelId?: string | null }) {
   return db.evaluationSignup.findMany({ where: { cycleId, professor: {
@@ -44,8 +50,8 @@ export function pendingActionOverdue(o: Observation, now: Date, observationDeadl
 
 export function unmatchedStage(observations: Observation[]) {
   const applicable = observations.filter(o => !cancelled.includes(o.status));
-  return applicable.some(o => o.recommendationsReleasedAt) ? "awaiting-selection"
-    : applicable.some(o => o.recommendationGenerationId) ? "awaiting-release" : "awaiting-generation";
+  return applicable.some(o => o.currentReleasedList?.publishedAt) ? "awaiting-selection"
+    : applicable.some(o => o.currentDraftListId) ? "awaiting-release" : "awaiting-generation";
 }
 
 function metric(key: string, label: string, numerator: number, denominator: number | null, unit = "percent", unavailableReason?: string) {
@@ -71,25 +77,26 @@ export async function cycleMetrics(db: Connection, cycle: Prisma.EvaluationCycle
   const observers = new Set(observations.flatMap(o => o.observerId ? [o.observerId] : [])).size;
   const missing = observations.filter(o => o.observerId && o.scheduledAt && (o.status === "NOT_OCCURRED" || o.facultyIssues.length)).length;
   const surveyed = signups.filter(s => s.observations.some(o => !cancelled.includes(o.status) && o.observerId && o.scheduledAt
-    && completedObservation(o) && o.completedAt && o.signedAssessment?.completedAt && o.candidates.some(c => c.invitedAt || c.attempts.length)
+    && completedObservation(o) && o.completedAt && o.signedAssessment?.completedAt && recommendationMembers(o, true).some(c => c.invitedAt || c.attempts.length)
     && o.processFeedback.some(f => f.professorId === s.professorId && f.feedbackRole === "OBSERVEE" && f.submittedAt))).length;
 
   let matches = 0, generated = 0, notGenerated = 0, ambiguous = 0;
   for (const signup of signups) {
-    const lists = signup.observations.filter(o => !cancelled.includes(o.status) && o.recommendationGenerationId);
+    const lists = signup.observations.filter(o => !cancelled.includes(o.status) && (o.currentDraftListId || o.currentReleasedList?.publishedAt));
     if (lists.length > 1) { ambiguous++; continue; }
     if (!lists.length) { notGenerated++; continue; }
     generated++;
-    matches += new Set(lists[0].candidates.map(c => c.professorId)).size;
+    matches += new Set(recommendationMembers(lists[0]).map(c => c.professorId)).size;
   }
 
   // Recheck retained pairs using the actual Faculty matching/availability service.
   // Past meetings remain checkable; this is current-data validation, not a snapshot.
   let checked = 0, valid = 0;
   for (const observation of observations) {
-    if (!observation.candidates.length) continue;
+    const members = recommendationMembers(observation);
+    if (!members.length) continue;
     const record = await workflowObservation(db, observation.observationId);
-    for (const professorId of new Set(observation.candidates.map(c => c.professorId))) {
+    for (const professorId of new Set(members.map(c => c.professorId))) {
       checked++;
       for (const option of record.timeOptions) {
         try {
@@ -104,7 +111,7 @@ export async function cycleMetrics(db: Connection, cycle: Prisma.EvaluationCycle
   return { cycleId: cycle.cycleId, available: true, source: "database", availableAt: cycle.feedbackDeadline,
     generatedAt: now, formulaVersion: "kpi-2026-10-26", reportingMode: "live-recalculation",
     definitions: {
-      eligibility: "Retained recommendation pairs rechecked against current matching rules and schedules; historical generation snapshots are unavailable.",
+      eligibility: "Current draft, otherwise current released recommendation pairs rechecked against current matching rules and schedules; historical memberships are excluded and historical matching snapshots are unavailable.",
       participation: "Due population reconstructed from evaluations before this cycle using current rank and shared eligibility. Voluntary signups can exceed 100%; no historical eligibility snapshot exists.",
       history: "Values remain live recalculations after the feedback deadline; they are not immutable final reports.",
     },

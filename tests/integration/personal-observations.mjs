@@ -1,6 +1,7 @@
 // All writes are confined to a disposable schema; application data is untouched.
 import '../configuration-loader.mjs';
 import assert from 'node:assert/strict';
+import { recommendationFixture } from '../recommendation-fixtures.mjs';
 import { randomUUID } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import pg from 'pg';
@@ -55,7 +56,8 @@ try {
   }
   await db.observationTimeOption.create({ data: { observationId:o2, preferredDate:new Date('2026-10-26'), startsAt:scheduledAt, endsAt:new Date('2026-10-26T16:00:00Z'), timeZone:'America/Chicago', location:'Room 1' } });
   // Merely being a candidate, including an accepted one, never grants own-observation membership.
-  await db.observationCandidate.create({ data: { observationId:o4, professorId:p1, status:'ACCEPTED' } });
+  const recommendations = await recommendationFixture(db, o4, { released:true });
+  await db.observationCandidate.create({ data: { observationId:o4, recommendationListId:recommendations.listId, professorId:p1, status:'ACCEPTED' } });
   const all = await list();
   assert.deepEqual(new Set(all.items.map(x=>x.id)), new Set([o1,o2,o3]));
   assert.equal(parseObservationHistoryResponse(all).length, 3);

@@ -1,4 +1,5 @@
 import "server-only";
+import { currentReleasedCandidates } from "../recommendation-scope";
 import type { Prisma } from "../../generated/prisma/client";
 import type { AccountUser } from "../account-auth";
 import { getPrisma } from "../prisma";
@@ -90,7 +91,7 @@ export async function getFacultyDashboard(user: AccountUser, options: { now?: Da
       const records = await db.observation.findMany({ where: { cycleId: cycle.id, OR: [{ signup: { professorId } }, { observerId: professorId }], status: { notIn: ["CANCELLED", "CANCELED", "NOT_OCCURRED"] } }, include: { signup: { include: { section: { include: { course: true } } } } }, orderBy: [{ scheduledAt: { sort: "asc", nulls: "last" } }, { signup: { signupDate: "desc" } }, { observationId: "asc" }] });
       records.sort((a,b) => Number(b.signup.professorId === professorId) - Number(a.signup.professorId === professorId));
       const observations = { rows: records.map(record => ({ id: record.observationId, status: record.status, participation: record.signup.professorId === professorId ? "observee" as const : "observer" as const, course: record.signup.section.course.courseCode, section: record.signup.section.sectionCode, scheduledAt: record.scheduledAt })) };
-      const pendingCount = await db.observationCandidate.count({ where: { professorId, status: "PENDING", invitedAt: { lte: now }, respondedAt: null, expiresAt: { gt: now }, observation: { cycleId: cycle.id, signup: { professorId: { not: professorId } }, observerId: null, completedAt: null, cycle: { observationDeadline: { gt: now } }, status: { notIn: ["COMPLETED", "CANCELLED", "CANCELED", "NOT_OCCURRED"] }, NOT: { signedAssessment: { is: { isLocked: true, observerSignedAt: { not: null }, observeeSignedAt: { not: null } } } } } } });
+      const pendingCount = await db.observationCandidate.count({ where: { ...currentReleasedCandidates, professorId, status: "PENDING", invitedAt: { lte: now }, respondedAt: null, expiresAt: { gt: now }, observation: { cycleId: cycle.id, signup: { professorId: { not: professorId } }, observerId: null, completedAt: null, cycle: { observationDeadline: { gt: now } }, status: { notIn: ["COMPLETED", "CANCELLED", "CANCELED", "NOT_OCCURRED"] }, NOT: { signedAssessment: { is: { isLocked: true, observerSignedAt: { not: null }, observeeSignedAt: { not: null } } } } } } });
       const pending = { rows: [{ count: pendingCount }] };
       result.availableObservations = observations.rows.map(record => ({ id: record.id, label: `${record.course}.${record.section} · ${record.participation}` }));
       const selectedId = options.observationId === undefined ? await selectedFacultyObservation() : options.observationId;

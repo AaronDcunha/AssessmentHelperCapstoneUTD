@@ -30,8 +30,14 @@ export async function deleteSemester(prisma: PrismaClient, user: ConfigurationUs
     await db.facultyIssue.deleteMany({ where: { observationId: { in: ids } } });
     await db.signedAssessment.deleteMany({ where: { observationId: { in: ids } } });
     await db.lateAcceptanceApproval.deleteMany({ where: { attempt: { candidate: { observationId: { in: ids } } } } });
+    await db.observationAssignmentHistory.deleteMany({ where: { observationId: { in: ids } } });
+    await db.recommendationOperation.deleteMany({ where: { scopeId: { in: [...ids, ...cycles] } } });
     await db.invitationAttempt.deleteMany({ where: { candidate: { observationId: { in: ids } } } });
     await db.observationCandidate.deleteMany({ where: { observationId: { in: ids } } });
+    // Explicit, authorized permanent semester deletion is the sole destructive
+    // lifecycle here. Normal generation/release never deletes historical lists.
+    await db.observation.updateMany({ where: { observationId: { in: ids } }, data: { currentDraftListId: null, currentReleasedListId: null } });
+    await db.recommendationList.deleteMany({ where: { observationId: { in: ids } } });
     await db.observationTimeOption.deleteMany({ where: { observationId: { in: ids } } });
     await db.observation.deleteMany({ where: { observationId: { in: ids } } });
     await db.evaluationSignup.deleteMany({ where: { cycleId: { in: cycles } } });

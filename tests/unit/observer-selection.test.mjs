@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { candidateMeetings, courseHistoryLabel, currentSemesterCycle, hasGeneratedList, matchState, proposedMeetingsLabel, signupCourseLabel, signupWindow } from "../../src/lib/observer-selection.ts";
+import { candidateMeetings, courseHistoryLabel, currentSemesterCycle, hasGeneratedList, initialSignupAvailable, recommendationGeneration, matchState, proposedMeetingsLabel, signupCourseLabel, signupWindow } from "../../src/lib/observer-selection.ts";
 
 test("Observer Selection always resolves the current configured semester, independent of list order", () => {
   const fall = { id: "fall", semester: { startsOn: "2026-08-31", endsOn: "2026-12-16", timeZone: "America/Chicago" } };
@@ -44,7 +44,8 @@ test("observer-selection labels use API records without inventing missing values
   assert.match(proposedMeetingsLabel([meeting]), /Nov 9.*10:00 AM.*11:15 AM/);
   assert.equal(proposedMeetingsLabel([]), "No proposed meetings");
   assert.equal(courseHistoryLabel({ courseHistory: null }), "—");
-  assert.equal(courseHistoryLabel({ courseHistory: { courseCode: "CS 4348", semester: "Fall 2025" } }), "CS 4348 · Fall 2025");
+  assert.equal(courseHistoryLabel({ courseHistory: [{ course: { code: "CS 4348" }, semester: { name: "Fall 2025" } }] }), "CS 4348 · Fall 2025");
+  assert.equal(proposedMeetingsLabel([{ ...meeting, startsAt: null, endsAt: null, timeZone: null }]), "2026-11-09 · Time unavailable");
 });
 
 test("candidate availability and match states reflect returned records", () => {
@@ -53,4 +54,16 @@ test("candidate availability and match states reflect returned records", () => {
   assert.deepEqual(matchState(true, 0), { label: "No matches", tone: "danger" });
   assert.deepEqual(matchState(true, 2), { label: "2 matches", tone: "warning" });
   assert.deepEqual(matchState(true, 5), { label: "5 matches", tone: "neutral" });
+});
+
+test("initial actions require an observation and cannot use a released or unrelated generation", () => {
+  const draft = {items:[],releasedAt:null,list:{id:"draft-a",generationId:"generation-a"},currentDraftListId:"draft-a",generationId:"legacy-other"};
+  assert.equal(initialSignupAvailable(signup,draft,null),true);
+  assert.equal(initialSignupAvailable({...signup,observationId:null},draft,null),false);
+  assert.equal(initialSignupAvailable(signup,draft,"Unavailable"),false);
+  assert.equal(initialSignupAvailable({...signup,currentReleasedListId:"released-a"},draft,null),false);
+  assert.equal(initialSignupAvailable(signup,{...draft,currentReleasedListId:"released-a"},null),false);
+  assert.equal(recommendationGeneration(draft),"generation-a");
+  assert.equal(recommendationGeneration({...draft,list:null}),null);
+  assert.equal(hasGeneratedList({...draft,list:null}),false);
 });

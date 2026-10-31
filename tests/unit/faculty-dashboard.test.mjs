@@ -182,7 +182,8 @@ test('Faculty cycle lookup reuses own teaching/participation scope even for mana
   assert.equal(scope[0].semester.courseSections.some.teaches.some.professor.userId, actor.id);
   assert.equal(scope[1].signups.some.professor.userId, actor.id);
   assert.equal(scope[2].observations.some.observer.userId, actor.id);
-  assert.equal(scope[3].observations.some.candidates.some.professor.userId, actor.id);
+  assert.equal(scope[3].observations.some.currentReleasedList.is.candidates.some.professor.userId, actor.id);
+  assert.deepEqual(scope[3].observations.some.currentReleasedList.is.publishedAt, { not: null });
   assert.deepEqual(args.where.AND[1], { feedbackDeadline: { gte: now } });
 });
 

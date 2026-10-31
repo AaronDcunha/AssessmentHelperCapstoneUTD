@@ -1,7 +1,7 @@
 import { Section } from "@/components/ui/section";
 import type { ObservationDetail, ObservationMeeting } from "@/lib/ac-api";
 
-function meetingZone(value: string | undefined) {
+function meetingZone(value: string | null | undefined) {
   if (value) {
     try { new Intl.DateTimeFormat(undefined, { timeZone: value }); return value; } catch { /* Display in UTC when zone metadata is absent or invalid. */ }
   }

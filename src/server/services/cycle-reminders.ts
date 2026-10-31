@@ -16,6 +16,7 @@ export async function sendCycleReminders(db:Database,user:ConfigurationUser,cycl
  const cycle=await db.evaluationCycle.findUnique({where:{cycleId},include:{semester:true}});
  if(!cycle)throw new ConfigurationError(404,"NOT_FOUND","Evaluation cycle not found.");
  const clauses:Prisma.ProfessorWhereInput[]=[{user:{isActive:true}}];
+ if(input.params.has("q"))clauses.push({user:{fullName:{contains:input.params.get("q")!,mode:"insensitive"}}});
  if(input.ids)clauses.push({professorId:{in:input.ids}});
  if(input.params.has("departmentId"))clauses.push({departmentId:input.params.get("departmentId")!});
  if(input.params.has("hiringLevelId"))clauses.push({hiringLevelId:input.params.get("hiringLevelId")!});

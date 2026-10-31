@@ -1,5 +1,14 @@
 # Faculty dashboard backend and linked workflows
 
+October 28 Issue #67 foundation: candidate membership is now list-scoped. Faculty
+recommendation/request readers, dashboard counts, cycle scope, own alert context,
+invitation actions, selection, late approvals and expiry/resends require the
+observation's current released list and its publication. Draft/historical rows
+remain preserved but cannot be acted on. Initial generate/release payloads remain
+unchanged; replacement publication is disabled. Deploy the new recommendation-list
+migration with all guarded readers/writers and pause the scheduler during rollout.
+See AC_OBSERVER_SELECTION_BACKEND.md; no selected observer or assessment is migrated.
+
 Updated October 26, 2026 on `Sai/faculty-dashboard-backend`. Preserves the Faculty
 checkpoint/main integration, existing frontend design and teammates' configuration,
 Admin and authentication services. History pages, navigation and APIs are excluded.
@@ -42,7 +51,7 @@ This supersedes the earlier preview and blocked-workflow notes.
    observation-deadline date. Missing boundaries block dates. Exclude started classes,
    ambiguous multiple meetings, DST gaps/folds and expansions over 366 days. Faculty
    confirm class meets; no holiday exceptions or academic dates are fabricated.
-3. **Matching:** after signup closes, use active signed-up faculty in the same
+3. **Matching:** after signup closes, use active faculty (signup is not required) in the same
    department teaching the same stored course level that semester, excluding self.
    Require a future compatible proposed meeting; select up to five by professor UUID.
    No invented scoring/capacity KPI. Recheck teaching and selected-appointment

@@ -1,6 +1,7 @@
 // Real PostgreSQL in a uniquely named disposable database. Never migrates/seeds the application database.
 import '../configuration-loader.mjs';
 import assert from 'node:assert/strict';
+import { recommendationFixture } from '../recommendation-fixtures.mjs';
 import { randomUUID } from 'node:crypto';
 import { readFile, readdir, mkdtemp, rm } from 'node:fs/promises';
 import { readFileSync, existsSync } from 'node:fs';
@@ -56,6 +57,7 @@ const reads = load('src/server/queries/faculty-workflow.ts');
 const forms = load('src/server/queries/faculty-assessment.ts');
 const dashboards = load('src/server/queries/faculty-dashboard.ts');
 const configuration = load('src/server/services/configuration.ts');
+const configurationReads = load('src/server/queries/configuration.ts');
 const now = new Date(), day = 86400000;
 const isoDate = date => date.toISOString().slice(0, 10);
 const tomorrow = new Date(now.getTime() + day), meetingDate = isoDate(tomorrow);
@@ -117,18 +119,84 @@ try {
   await assert.rejects(invitations.generateRecommendations(committee, cycleId));
   await configuration.updateCycle(prisma, committee, cycleId, { expectedRevision: 0, signupDeadline: new Date(now.getTime() - 3600000).toISOString() });
   await assert.rejects(actions.submitFacultySignup(faculty[5], { sectionId: sections[5], dates: [meetingDate] }));
+  const priorGeneration = await invitations.generateRecommendations(committee, cycleId, {scope:{observationIds:[ownRecord.observationId]}});
+  assert.equal((await prisma.observation.findUnique({where:{observationId:otherRecord.observationId}})).currentDraftListId,null);
+  const listsBeforeInvalidSelection = await prisma.recommendationList.count();
+  await assert.rejects(invitations.generateRecommendations(committee, cycleId, {scope:{observationIds:[ownRecord.observationId,randomUUID()]}}),error=>error.status===409);
+  assert.equal(await prisma.recommendationList.count(),listsBeforeInvalidSelection);
+  const priorCandidateIds = (await prisma.observationCandidate.findMany()).map(candidate => candidate.candidateId);
   const generation = await invitations.generateRecommendations(committee, cycleId);
+  assert.equal(await prisma.observationCandidate.count({ where: { candidateId: { in: priorCandidateIds } } }), priorCandidateIds.length);
+  await assert.rejects(invitations.releaseRecommendations(committee, cycleId, { generationId: priorGeneration.generationId }), error => error.status === 404);
   assert.ok(generation.generatedCount > 0);
   assert.equal((await reads.getFacultyWorkflow(faculty[0])).links.recommendations.length, 0);
+  // An invalid final target rolls back all earlier publications and notifications.
+  const drafts = await prisma.observation.findMany({ where: { cycleId }, orderBy: { observationId: 'asc' } });
+  const lastDraftId = drafts.at(-1).currentDraftListId;
+  await prisma.recommendationList.update({ where: { listId: lastDraftId }, data: { publishedAt: now } });
+  const noticeCount = await prisma.notification.count();
+  await assert.rejects(invitations.releaseRecommendations(committee, cycleId, { generationId: generation.generationId }), error => error.status === 409);
+  assert.equal(await prisma.observation.count({ where: { cycleId, currentReleasedListId: { not: null } } }), 0);
+  assert.equal(await prisma.notification.count(), noticeCount);
+  await prisma.recommendationList.update({ where: { listId: lastDraftId }, data: { publishedAt: null } });
   await invitations.releaseRecommendations(committee, cycleId, { generationId: generation.generationId });
   const notifications = await prisma.notification.count();
   await invitations.releaseRecommendations(committee, cycleId, { generationId: generation.generationId });
   assert.equal(await prisma.notification.count(), notifications);
   workspace = await reads.getFacultyWorkflow(faculty[0]);
   assert.ok(workspace.links.recommendations.length >= 2);
-  const candidates = await prisma.observationCandidate.findMany({ where: { observationId: ownRecord.observationId }, include: { professor: true } });
+  const releasedScope = load('src/server/recommendation-scope.ts').currentReleasedCandidates;
+  const candidates = await prisma.observationCandidate.findMany({ where: { ...releasedScope, observationId: ownRecord.observationId }, include: { professor: true } });
   const c1 = candidates.find(candidate => candidate.professor.userId === faculty[1].id), c2 = candidates.find(candidate => candidate.professor.userId === faculty[2].id);
   assert.ok(c1 && c2);
+  // Seed a replacement draft/history directly to verify the foundation, without
+  // enabling a public replacement-generation/publication workflow.
+  const draftList = await recommendationFixture(prisma, ownRecord.observationId);
+  const historicalList = await prisma.recommendationList.create({ data: { observationId: ownRecord.observationId, publishedAt: new Date(now.getTime() - day) } });
+  const draftMember = await prisma.observationCandidate.create({ data: { observationId: ownRecord.observationId, recommendationListId: draftList.listId, professorId: c1.professorId, status: 'PENDING', invitedAt: now, expiresAt: new Date(now.getTime() + day) } });
+  const historicalMember = await prisma.observationCandidate.create({ data: { observationId: ownRecord.observationId, recommendationListId: historicalList.listId, professorId: c2.professorId, status: 'PENDING', invitedAt: new Date(now.getTime() - day), expiresAt: new Date(now.getTime() - 1000) } });
+  const inactiveAttempts = [];
+  for (const member of [draftMember, historicalMember]) inactiveAttempts.push(await prisma.invitationAttempt.create({ data: { candidateId: member.candidateId, number: 1, invitedAt: member.invitedAt, expiresAt: member.expiresAt } }));
+  const supersededApproval = await prisma.lateAcceptanceApproval.create({ data: { attemptId: inactiveAttempts[1].attemptId } });
+  const inactiveIds = [draftMember.candidateId, historicalMember.candidateId];
+  const inactiveSnapshot = async () => JSON.stringify(await Promise.all([
+    prisma.observationCandidate.findMany({ where: { candidateId: { in: inactiveIds } }, orderBy: { candidateId: 'asc' } }),
+    prisma.invitationAttempt.findMany({ where: { candidateId: { in: inactiveIds } }, orderBy: { attemptId: 'asc' } }),
+    prisma.lateAcceptanceApproval.findUnique({ where: { approvalId: supersededApproval.approvalId } }),
+  ]));
+  const inactiveBefore = await inactiveSnapshot();
+  const isolatedWorkspace = await reads.getFacultyWorkflow(faculty[0]);
+  assert.deepEqual(new Set(isolatedWorkspace.links.recommendations.map(item => item.id)), new Set(candidates.map(item => item.candidateId)));
+  for (const [member, attempt, recipient] of [[draftMember, inactiveAttempts[0], faculty[1]], [historicalMember, inactiveAttempts[1], faculty[2]]]) {
+    const received = await reads.getFacultyWorkflow(recipient);
+    assert.ok(!received.links.requests.some(item => inactiveIds.includes(item.id)));
+    assert.ok(!received.requests.some(item => inactiveIds.includes(item.id)));
+    assert.equal(received.dashboard.pendingObserverRequestCount, 0);
+    await assert.rejects(invitations.sendFacultyInvitations(faculty[0], { observationId: ownRecord.observationId, candidateIds: [member.candidateId] }), error => error.status === 409);
+    await assert.rejects(invitations.declineFacultyInvitation(recipient, { candidateId: member.candidateId, attemptId: attempt.attemptId }), error => error.status === 409);
+    await assert.rejects(invitations.acceptFacultyInvitation(recipient, { candidateId: member.candidateId, attemptId: attempt.attemptId, meetingOptionId: randomUUID() }), error => error.status === 409);
+    await assert.rejects(invitations.selectFacultyObserver(faculty[0], { candidateId: member.candidateId }), error => error.status === 409);
+    await assert.rejects(invitations.requestLateAcceptance(recipient, { candidateId: member.candidateId, attemptId: attempt.attemptId }), error => error.status === 409);
+  }
+  await assert.rejects(invitations.reviewLateAcceptance(committee, supersededApproval.approvalId, { decision: 'approved' }), error => error.status === 409);
+  requestUser = committee;
+  const approvalRoute = load('src/app/api/evaluation-cycles/[cycleId]/expired-acceptance-requests/route.ts');
+  const approvalResponse = await approvalRoute.GET(new Request('http://local/approvals'), { params: Promise.resolve({ cycleId }) });
+  assert.equal(approvalResponse.status, 200);
+  assert.ok(!(await approvalResponse.json()).items.some(item => item.approvalId === supersededApproval.approvalId));
+  requestUser = null;
+  await assert.rejects(invitations.releaseRecommendations(committee, cycleId, { generationId: generation.generationId, observationIds: [ownRecord.observationId] }), error => error.status === 409);
+  await invitations.processFacultyInvitationExpiry();
+  assert.equal(await inactiveSnapshot(), inactiveBefore);
+  assert.equal((await invitations.generateRecommendations(committee, cycleId)).generatedCount, 0);
+  const futureSection = await prisma.courseSection.findFirst({ where: { semesterId: extraSemester.semesterId } });
+  const futureSignup = await prisma.evaluationSignup.create({ data: { cycleId: extraCycle.cycleId, professorId: sourceProfile.professorId, sectionId: futureSection.sectionId } });
+  const futureObservation = await prisma.observation.create({ data: { cycleId: extraCycle.cycleId, signupId: futureSignup.signupId } });
+  const futureDraft = await recommendationFixture(prisma, futureObservation.observationId);
+  const isolatedProfessor = await prisma.professor.findUnique({ where: { userId: faculty[5].id } });
+  await prisma.observationCandidate.create({ data: { observationId: futureObservation.observationId, recommendationListId: futureDraft.listId, professorId: isolatedProfessor.professorId } });
+  assert.ok(!(await configurationReads.getRelevantFacultyCycles(prisma, faculty[5], now)).some(cycle => cycle.cycleId === extraCycle.cycleId));
+  checked('versioned membership isolation, preserved initial drafts, atomic release rollback and disabled replacement workflows');
   await assert.rejects(invitations.sendFacultyInvitations(faculty[3], { observationId: ownRecord.observationId, candidateIds: [c1.candidateId] }));
   await invitations.sendFacultyInvitations(faculty[0], { observationId: ownRecord.observationId, candidateIds: [c1.candidateId, c2.candidateId] });
   await invitations.sendFacultyInvitations(faculty[0], { observationId: ownRecord.observationId, candidateIds: [c1.candidateId] });
@@ -165,7 +233,8 @@ try {
   const paired = await prisma.observation.findUnique({ where: { observationId: ownRecord.observationId } });
   assert.equal(paired.status, 'CONFIRMED'); assert.ok(paired.scheduledAt); assert.ok(paired.scheduledEndsAt);
   assert.equal(await prisma.observationCandidate.count({ where: { observationId: paired.observationId, status: 'SELECTED' } }), 1);
-  assert.equal(await prisma.observationCandidate.count({ where: { observationId: paired.observationId, status: { in: ['ACCEPTED', 'PENDING'] } } }), 0);
+  assert.equal(await prisma.observationCandidate.count({ where: { ...releasedScope, observationId: paired.observationId, status: { in: ['ACCEPTED', 'PENDING'] } } }), 0);
+  assert.equal(await inactiveSnapshot(), inactiveBefore);
   checked('acceptance ownership/options, concurrent actions, final pairing and atomic cancellation');
   const winner = await prisma.professor.findUnique({ where: { professorId: paired.observerId } });
   const observer = faculty.find(user => user.id === winner.userId);
@@ -174,8 +243,9 @@ try {
   const freeProfile = await prisma.professor.findUnique({ where: { userId: freeObserver.id } });
   const originalOtherOption = await prisma.observationTimeOption.findFirst({ where: { observationId: otherRecord.observationId } });
   const competing = await prisma.observation.create({ data: { signupId: otherRecord.signupId, cycleId, recommendationsReleasedAt: new Date(), status: 'PENDING', timeOptions: { create: { preferredDate: new Date(meetingDate) } } }, include: { timeOptions: true } });
-  const competingCandidate = await prisma.observationCandidate.create({ data: { observationId: competing.observationId, professorId: freeProfile.professorId } });
-  const otherCandidate = await prisma.observationCandidate.findFirst({ where: { observationId: otherRecord.observationId, professorId: freeProfile.professorId } });
+  const competingList = await recommendationFixture(prisma, competing.observationId, { released: true });
+  const competingCandidate = await prisma.observationCandidate.create({ data: { observationId: competing.observationId, recommendationListId: competingList.listId, professorId: freeProfile.professorId } });
+  const otherCandidate = await prisma.observationCandidate.findFirst({ where: { ...releasedScope, observationId: otherRecord.observationId, professorId: freeProfile.professorId } });
   for (const [record, candidate, option] of [[otherRecord, otherCandidate, originalOtherOption], [competing, competingCandidate, competing.timeOptions[0]]]) {
     await invitations.sendFacultyInvitations(faculty[3], { observationId: record.observationId, candidateIds: [candidate.candidateId] });
     const attempt = await prisma.invitationAttempt.findFirst({ where: { candidateId: candidate.candidateId }, orderBy: { number: 'desc' } });
@@ -188,12 +258,13 @@ try {
   async function freshInvitation(sourceIndex, targetIndex, extraTargetIndex) {
     const signup = await prisma.evaluationSignup.findFirst({ where: { professor: { userId: faculty[sourceIndex].id }, cycleId } });
     const record = await prisma.observation.create({ data: { signupId: signup.signupId, cycleId, recommendationsReleasedAt: new Date(), status: 'PENDING', timeOptions: { create: { preferredDate: new Date(meetingDate) } } }, include: { timeOptions: true } });
+    const list = await recommendationFixture(prisma, record.observationId, { released: true });
     const target = await prisma.professor.findUnique({ where: { userId: faculty[targetIndex].id } });
-    const candidate = await prisma.observationCandidate.create({ data: { observationId: record.observationId, professorId: target.professorId } });
+    const candidate = await prisma.observationCandidate.create({ data: { observationId: record.observationId, recommendationListId: list.listId, professorId: target.professorId } });
     let extra;
     if (extraTargetIndex !== undefined) {
       const profile = await prisma.professor.findUnique({ where: { userId: faculty[extraTargetIndex].id } });
-      extra = await prisma.observationCandidate.create({ data: { observationId: record.observationId, professorId: profile.professorId } });
+      extra = await prisma.observationCandidate.create({ data: { observationId: record.observationId, recommendationListId: list.listId, professorId: profile.professorId } });
     }
     await invitations.sendFacultyInvitations(faculty[sourceIndex], { observationId: record.observationId, candidateIds: [candidate.candidateId] });
     return { record, candidate, extra, attempt: await prisma.invitationAttempt.findFirst({ where: { candidateId: candidate.candidateId } }) };
@@ -250,13 +321,12 @@ try {
   assert.equal(await prisma.invitationAttempt.count({ where: { candidateId: { in: [automatic.candidate.candidateId, automatic.extra.candidateId] } } }), 4);
   checked('automatic expiry, uncontacted-candidate priority, bounded resends, repeatable jobs and deduplicated committee alerts');
   selectedObservation = paired.observationId;
-  assert.equal(await forms.getFacultyAssessment(observer), null);
-  // Simulate elapsed appointment time only in this disposable database.
-  await prisma.observation.update({ where: { observationId: paired.observationId }, data: { scheduledAt: new Date(now.getTime() - 3600000), scheduledEndsAt: new Date(now.getTime() - 1800000) } });
+  assert.ok((await prisma.observation.findUniqueOrThrow({ where: { observationId: paired.observationId } })).scheduledAt > new Date(), 'Assessment workflow is tested before the proposed appointment');
   const template = await configuration.createTemplate(prisma, committee, { title: 'Sparse scale', criteria: [{ key: 'rating', prompt: 'Evidence of learning', type: 'rating', required: true, order: 0, options: [{ value: 0, label: 'Needs support' }, { value: 10, label: 'Excellent' }] }], commentPrompts: [{ prompt: 'Evidence', required: true, order: 0 }] });
   await configuration.publishTemplate(prisma, committee, template.id, { expectedRevision: 0 });
   let form = await forms.getFacultyAssessment(observer), responses = { answers: { [template.criteria[0].id]: 0 }, comments: 'Retained', promptAnswers: { [template.commentPrompts[0].id]: 'Observed evidence' } };
   assert.ok(form);
+  assert.ok(new Date(form.scheduledAt) > new Date(), 'A confirmed future appointment can open the form');
   await assert.rejects(assessments.saveFacultyAssessment(faculty[0], { action: 'acknowledge', revision: form.revision, acknowledged: true }));
   await assert.rejects(assessments.saveFacultyAssessment(observer, { action: 'save', revision: form.revision, responses: { ...responses, answers: { [template.criteria[0].id]: 5 } } }));
   const draft = await assessments.saveFacultyAssessment(observer, { action: 'save', revision: form.revision, responses });
@@ -355,6 +425,7 @@ try {
   assert.equal(await prisma.evaluationCycle.findUnique({where:{cycleId}}),null);
   for(const model of ['evaluationSignup','observation']) assert.equal(await prisma[model].count({where:{cycleId}}),0,model);
   assert.equal(await prisma.courseSection.count({where:{semesterId}}),0);
+  assert.equal(await prisma.recommendationList.count({where:{observationId:{in:[ownRecord.observationId,otherRecord.observationId]}}}),0);
   assert.equal(await prisma.signedAssessment.findUnique({where:{observationId:paired.observationId}}),null);
   assert.equal(await prisma.feedbackAttachment.findUnique({where:{attachmentId:uploaded.attachmentId}}),null);
   assert.ok(await prisma.observationTemplate.count()); assert.ok(await prisma.professor.count() >= faculty.length);

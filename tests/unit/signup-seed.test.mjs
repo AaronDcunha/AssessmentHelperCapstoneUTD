@@ -1,6 +1,7 @@
+import '../../scripts/server-loader.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { seedSignups, demoSignupNames } from '../../prisma/seed-signups.mjs';
+const { seedSignups, demoSignupNames } = await import('../../prisma/seed-signups.mjs');
 import { stableId } from '../../prisma/seed-data.mjs';
 
 function database() {

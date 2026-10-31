@@ -18,9 +18,11 @@ their observation ID is retained only as internal notification context.
 
 - `/ac/observer-selection` implements the Figma Before Generation and Matching Review states, Candidate Review dialog, and Release Confirmation dialog.
 - The shared AC shell supplies the page header/sidebar. The navigation destination and direct page request both require `cycles.read`, `signups.read`, and `observations.read`.
-- Actions are independently enabled by `recommendations.generate`, `recommendations.release`, and `recommendations.regenerate`; frontend visibility never replaces backend authorization.
+- Generate/release are independently enabled by their effective permissions;
+  regeneration stays disabled while its backend route is unavailable. Frontend
+  visibility never replaces backend authorization.
 - The screen displays API-provided signups, observee/course information, proposed meetings, candidate counts, insufficient/no-match states, selection, and release status.
-- Successful generate, per-observation regenerate, and release operations refresh signup/candidate/detail data.
+- Successful generate/release operations refresh signup/candidate/detail data.
 - Row selection supports generation before lists exist; the header checkbox selects all available signups. Nothing is selected automatically. Generate applies only to the selected rows, including previously generated no-match lists. Released rows remain disabled.
 - Signup status uses the selected cycle's real signup deadline and semester time zone, updating as the deadline passes. Generation is available after signup closes, matching server enforcement. Seeded Admin grants include AC generation/release grants; actual effective permissions are still enforced.
 - Selected generation uses `scope.observationIds` (1–500 UUIDs). The server filters by cycle, pending/unpaired/unreleased status and selected IDs; unavailable IDs reject the whole request before writes. Existing department/professor scope filters are also supported. Lists from separate generations are released in separate requests; partial release failures refresh the data.
@@ -39,11 +41,21 @@ The frontend calls the proposal shapes in `AssessmentHelper_API_Contract_Draft_v
 The signup and candidate reads are backed by authorized Prisma queries. Main now
 provides recommendation generation and release services, and the frontend refreshes
 after those operations. Per-observation regeneration remains pending backend work;
-its failure is shown without substituting synthetic frontend data.
+the capability is disabled rather than invoking a missing route or fabricating data.
 
-The release contract requires `generationId`, but no separate read-current-generation endpoint is defined. The frontend retains the ID returned by generation/regeneration and also accepts an optional `generationId` from the candidate response if Task 2 includes it. If a previously generated list is loaded without that ID, release remains unavailable and the UI asks the AC user to regenerate first rather than inventing an identifier.
+The release contract requires generationId. Each row uses its selected list's
+generationId, with legacy response fallback only when list metadata is absent.
+No identifier from a different row/batch is substituted. Current draft/released
+pointers govern action availability. Signups without observations stay visible
+but cannot trigger observation API calls or actions. Candidate pages are collected
+under one pinned listId; foreign/changed list responses are rejected.
 
-Candidate course history is displayed when the candidate response supplies `courseHistory`; the draft `Candidate` shape does not currently guarantee this Figma field, so the UI displays an em dash when absent.
+Course history is the canonical array of up to five recent distinct course/semester
+pairs, including older semesters. Missing history displays an em dash. Persisted
+meeting UUIDs and nullable metadata are retained; missing times display unavailable
+rather than epoch/midnight values. Recorded candidate status and latest actual
+response status remain distinct. The regeneration endpoint is not implemented and
+no visible control invokes it in this integration.
 
 The temporary browser-only records used to review the two dialogs were removed. The
 screen now renders only API/database data. The dialogs use a document-body portal and
@@ -54,8 +66,8 @@ root scroll lock so opening a modal does not reposition the shared sidebar accou
 Review corrections: empty candidate reads without generation/release metadata remain
 Not generated; generated empty lists remain No matches. Cycle changes remount the
 workflow to clear selections, dialogs and generation state, and invalidate pending
-reads. Release is disabled during refresh. The missing-generation message now reads
-"Generate the lists again before releasing them." Generate uses the primary button,
+reads. Release is disabled during refresh and when a row has no real generation
+identity. Generate uses the primary button,
 actions sit beside the heading, and candidate rows override the shared cell wrapper's
 minimum height to match the compact Figma rows.
 

@@ -2,7 +2,7 @@ import type { Prisma } from "../../generated/prisma/client";
 import { ConfigurationError,pagination,uuid,type ConfigurationUser } from "../configuration-validation";
 import { workflowGrant,alertFilters } from "../alert-reminder-validation";
 export type AlertDatabase=Pick<Prisma.TransactionClient,"facultyIssue"|"observation"|"evaluationCycle"|"role"|"appUser"|"notification">;
-export const alertInclude={reporter:{select:{userId:true,fullName:true}},observation:{include:{signup:{include:{professor:{include:{user:{select:{userId:true,fullName:true}}}},section:{include:{course:true,semester:true}}}},observer:{include:{user:{select:{userId:true,fullName:true}}}},candidates:{include:{professor:{include:{user:{select:{userId:true,fullName:true}}}}}}}}} as const;
+export const alertInclude={reporter:{select:{userId:true,fullName:true}},observation:{include:{signup:{include:{professor:{include:{user:{select:{userId:true,fullName:true}}}},section:{include:{course:true,semester:true}}}},observer:{include:{user:{select:{userId:true,fullName:true}}}},currentReleasedList:{select:{publishedAt:true}},candidates:{include:{professor:{include:{user:{select:{userId:true,fullName:true}}}}}}}}} as const;
 export type AlertRow=Prisma.FacultyIssueGetPayload<{include:typeof alertInclude}>;
 export function alertResource(a:AlertRow,user:ConfigurationUser){
  const o=a.observation,s=o.signup.section;
@@ -11,7 +11,7 @@ export function alertResource(a:AlertRow,user:ConfigurationUser){
   createdBy:{id:a.reporter.userId,name:a.reporter.fullName},
   context:{observee:{id:o.signup.professor.userId,name:o.signup.professor.user.fullName},observer:o.observer?{id:o.observer.userId,name:o.observer.user.fullName}:null,
    section:{id:s.sectionId,course:s.course.courseCode,sectionNumber:s.sectionCode,semester:{id:s.semesterId,name:s.semester.termName}},observationStatus:o.status,
-   candidates:(user.permissions.includes("observations.read")||o.recommendationsReleasedAt?o.candidates:[]).map(c=>({id:c.candidateId,name:c.professor.user.fullName,status:c.status}))},
+   candidates:o.candidates.filter(c=>c.recommendationListId===(user.permissions.includes("observations.read")?o.currentDraftListId??o.currentReleasedListId:o.currentReleasedListId) && (user.permissions.includes("observations.read")||!!o.currentReleasedList?.publishedAt)).map(c=>({id:c.candidateId,name:c.professor.user.fullName,status:c.status}))},
   allowedActions:[]};
 }
 export async function getAlert(db:AlertDatabase,user:ConfigurationUser,id:string){

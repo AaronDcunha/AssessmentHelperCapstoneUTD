@@ -19,7 +19,7 @@ function cycleScope(user: ConfigurationUser): Prisma.EvaluationCycleWhereInput {
     { semester: relevantSemester(user.id) },
     { signups: { some: { professor: { userId: user.id } } } },
     { observations: { some: { observer: { userId: user.id } } } },
-    { observations: { some: { candidates: { some: { professor: { userId: user.id } } } } } },
+    { observations: { some: { currentReleasedList: { is: { publishedAt: { not: null }, candidates: { some: { professor: { userId: user.id } } } } } } } },
   ] };
 }
 

@@ -309,6 +309,14 @@ model Observation {
   recommendationGenerationId String? @map("recommendation_generation_id") @db.Uuid
   recommendationsReleasedAt DateTime? @map("recommendations_released_at") @db.Timestamptz(6)
   scheduledEndsAt DateTime? @map("scheduled_ends_at") @db.Timestamptz(6)
+  observerSelectedAt DateTime? @map("observer_selected_at") @db.Timestamptz(6)
+  observerSelectedById String? @map("observer_selected_by_id") @db.Uuid
+  assignmentHistory ObservationAssignmentHistory[]
+  currentDraftListId String? @map("current_draft_list_id") @db.Uuid
+  currentReleasedListId String? @map("current_released_list_id") @db.Uuid
+  currentDraftList RecommendationList? @relation("CurrentDraftList", fields: [currentDraftListId, observationId], references: [listId, observationId], onDelete: Restrict, onUpdate: NoAction)
+  currentReleasedList RecommendationList? @relation("CurrentReleasedList", fields: [currentReleasedListId, observationId], references: [listId, observationId], onDelete: Restrict, onUpdate: NoAction)
+  recommendationLists RecommendationList[] @relation("ObservationLists")
 
   // Foreign key relationships.
   signup   EvaluationSignup @relation(fields: [signupId, cycleId], references: [signupId, cycleId])
@@ -325,19 +333,79 @@ model Observation {
   facultyIssues FacultyIssue[]
   feedbackAttachments FeedbackAttachment[]
 
+  @@unique([currentDraftListId, observationId])
+  @@unique([currentReleasedListId, observationId])
   @@map("observation")
+}
+
+// Membership is scoped to one generated/imported list. Unknown legacy generation
+// metadata stays null; recordedAt is the import/creation time, not generation.
+model RecommendationList {
+  listId String @id @default(uuid()) @map("list_id") @db.Uuid
+  observationId String @map("observation_id") @db.Uuid
+  generationId String? @map("generation_id") @db.Uuid
+  generatedAt DateTime? @map("generated_at") @db.Timestamptz(6)
+  publishedAt DateTime? @map("published_at") @db.Timestamptz(6)
+  origin String @default("GENERATED")
+  recordedAt DateTime @default(now()) @map("recorded_at") @db.Timestamptz(6)
+  observation Observation @relation("ObservationLists", fields: [observationId], references: [observationId], onDelete: Restrict, onUpdate: NoAction)
+  draftFor Observation? @relation("CurrentDraftList")
+  releasedFor Observation? @relation("CurrentReleasedList")
+  candidates ObservationCandidate[]
+
+  @@unique([listId, observationId])
+  @@index([observationId])
+  @@index([generationId])
+  @@map("recommendation_list")
+}
+
+// Successful operation receipts make retries independent of later workflow changes.
+model RecommendationOperation {
+  requestKey String @id @map("request_key") @db.Uuid
+  actorId String @map("actor_id") @db.Uuid
+  scopeId String @map("scope_id") @db.Uuid
+  kind String
+  requestHash String @map("request_hash")
+  result Json
+  recordedAt DateTime @default(now()) @map("recorded_at") @db.Timestamptz(6)
+  @@index([scopeId])
+  @@map("recommendation_operation")
+}
+
+// Copies only recorded active-assignment facts when publication ends a pairing.
+model ObservationAssignmentHistory {
+  historyId String @id @default(uuid()) @map("history_id") @db.Uuid
+  observationId String @map("observation_id") @db.Uuid
+  professorId String @map("professor_id") @db.Uuid
+  recommendationListId String? @map("recommendation_list_id") @db.Uuid
+  candidateId String? @map("candidate_id") @db.Uuid
+  meetingOptionId String? @map("meeting_option_id") @db.Uuid
+  timeZone String? @map("time_zone")
+  location String?
+  scheduledAt DateTime? @map("scheduled_at") @db.Timestamptz(6)
+  scheduledEndsAt DateTime? @map("scheduled_ends_at") @db.Timestamptz(6)
+  selectedAt DateTime? @map("selected_at") @db.Timestamptz(6)
+  selectedById String? @map("selected_by_id") @db.Uuid
+  endedAt DateTime @map("ended_at") @db.Timestamptz(6)
+  endedById String @map("ended_by_id") @db.Uuid
+  replacementListId String @map("replacement_list_id") @db.Uuid
+  observation Observation @relation(fields:[observationId], references:[observationId], onDelete:Restrict, onUpdate:NoAction)
+  @@index([observationId, endedAt])
+  @@map("observation_assignment_history")
 }
 
 // Stores eligible observer candidates for an observation.
 // Tracks invitations and each candidate's response.
 model ObservationCandidate {
   candidateId   String    @id @default(uuid()) @map("candidate_id") @db.Uuid
+  recommendationListId String @map("recommendation_list_id") @db.Uuid
   observationId String    @map("observation_id") @db.Uuid
   professorId   String    @map("professor_id") @db.Uuid
   status        String    @default("ELIGIBLE")
   invitedAt     DateTime? @map("invited_at")
   expiresAt     DateTime? @map("expires_at")
   respondedAt   DateTime? @map("responded_at")
+  cancelledAt DateTime? @map("cancelled_at") @db.Timestamptz(6)
   acceptedOptionId String? @map("accepted_option_id") @db.Uuid
   acceptedOption ObservationTimeOption? @relation(fields: [acceptedOptionId], references: [timeOptionId], onDelete: Restrict)
   attempts InvitationAttempt[]
@@ -345,9 +413,11 @@ model ObservationCandidate {
   // Foreign key relationships.
   observation Observation @relation(fields: [observationId], references: [observationId])
   professor   Professor   @relation("CandidateProfessor", fields: [professorId], references: [professorId])
+  recommendationList RecommendationList @relation(fields: [recommendationListId, observationId], references: [listId, observationId], onDelete: Restrict, onUpdate: NoAction)
 
-  // Prevents duplicate candidates for the same observation.
-  @@unique([observationId, professorId])
+  // A professor can appear independently in multiple lists of one observation.
+  @@unique([recommendationListId, professorId])
+  @@index([observationId])
   @@map("observation_candidate")
 }
 
@@ -362,6 +432,7 @@ model ObservationTimeOption {
   timeZone String? @map("time_zone")
   location String?
   acceptedCandidates ObservationCandidate[]
+  acceptedAttempts InvitationAttempt[]
 
   // Each preferred date belongs to an observation.
   observation Observation @relation(fields: [observationId], references: [observationId])
@@ -378,6 +449,10 @@ model InvitationAttempt {
   expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
   respondedAt DateTime? @map("responded_at") @db.Timestamptz(6)
   status String @default("PENDING")
+  cancelledAt DateTime? @map("cancelled_at") @db.Timestamptz(6)
+  supersededByListId String? @map("superseded_by_list_id") @db.Uuid
+  acceptedOptionId String? @map("accepted_option_id") @db.Uuid
+  acceptedOption ObservationTimeOption? @relation(fields:[acceptedOptionId], references:[timeOptionId], onDelete:Restrict, onUpdate:NoAction)
   candidate ObservationCandidate @relation(fields: [candidateId], references: [candidateId], onDelete: Restrict)
   approval LateAcceptanceApproval?
   @@unique([candidateId, number])

@@ -38,7 +38,7 @@ The TXT extracts aid reading; use the Word originals when table structure or for
 
 ## Current scope
 
-- Professors can act as observees and observers in the same cycle. Signups enter the observer pool.
+- Professors can act as observees and observers in the same cycle. Observer eligibility does not require signup; all active professors are considered under the matching rules.
 - AC manages cycle deadlines, generates and releases recommendations, monitors progress, sends reminders, and reviews reports.
 - Admin manages users, roles, permissions, and hiring levels. Enforce permissions and ownership on the server.
 - Assessments use a web-based form with stored answers linked to template records. In-place question edits are supported; major changes use a new template record. Define acknowledgement/finalization details before implementing them; do not build signed-document upload routes.
@@ -73,9 +73,15 @@ worker, Mailpit setup, channel selection, retry handling and tests.
 
 Shared notification helper: see [NOTIFICATION_HELPER.md](NOTIFICATION_HELPER.md) for the canonical sendNotification function, specific-user/list/role audiences, optional email, transaction examples and Mailpit testing.
 
-
 Dependency/security updates: see [DEPENDENCY_UPDATES.md](DEPENDENCY_UPDATES.md) for
 patched versions, the Node runtime target, known deferred majors, commit contents
 and teammate installation steps.
+
+AC observer selection: see [AC_OBSERVER_SELECTION_BACKEND.md](AC_OBSERVER_SELECTION_BACKEND.md)
+for Issue #67's signup GET (signups.read) and Phase 1 AC-only candidate GET
+(observations.read), provisional university-wide scope, persisted meeting/response
+data, relevant teaching history, pagination and checks. The versioned-list foundation
+and current-release guards are implemented; replacement regeneration/publication,
+assignment archival and new Faculty candidate access remain deferred.
 
 Faculty integration follow-up and semester New/Delete contract: see [FACULTY_INTEGRATION_FIXES.md](FACULTY_INTEGRATION_FIXES.md).

@@ -14,6 +14,8 @@ const observationInclude = {
     section: { include: { course: true, semester: true, classMeetings: { orderBy: { meetingId: "asc" as const } } } } } },
   observer: { include: { user: { select: personSelect } } },
   signedAssessment: { select: { assessmentId: true, templateId: true, isLocked: true } },
+  currentDraftList: { select: { candidates: { select: { candidateId: true }, take: 1 } } },
+  currentReleasedList: { select: { publishedAt: true, candidates: { select: { candidateId: true }, take: 1 } } },
 };
 type Observation = Prisma.ObservationGetPayload<{ include: typeof observationInclude }>;
 const person = (p: { user: { userId: string; fullName: string } }) => ({ id: p.user.userId, name: p.user.fullName });
@@ -38,6 +40,14 @@ function outstanding(now: Date): Prisma.ObservationWhereInput {
     AND: [{ OR: [{ signedAssessment: { is: null } }, { signedAssessment: { is: { isLocked: false } } }] }] };
 }
 const unmatched: Prisma.ObservationWhereInput = { status: { notIn: cancelled }, observerId: null, completedAt: null };
+const noCompatibleObservers: Prisma.ObservationWhereInput = { AND: [unmatched, { OR: [
+  { currentDraftList: { is: { candidates: { none: {} } } } },
+  { currentDraftListId: null, currentReleasedList: { is: { publishedAt: { not: null }, candidates: { none: {} } } } },
+] }] };
+function noMatchAlert(o: Observation) {
+  const list = o.currentDraftList ?? (o.currentReleasedList?.publishedAt ? o.currentReleasedList : null);
+  return !o.observerId && !!list && list.candidates.length === 0;
+}
 export function observationWhere(url: URL, cycleId: string, now: Date): Prisma.ObservationWhereInput {
   const id = ids(url), q = search(url), status = filter(url, "status"), assessment = filter(url, "assessmentStatus");
   const clauses: Prisma.ObservationWhereInput[] = [{ cycleId,
@@ -84,7 +94,7 @@ function termOrder(code: string) {
   return match ? Number(match[1]) * 10 + { s: 1, u: 2, f: 3 }[match[2] as "s" | "u" | "f"] : null;
 }
 
-export async function facultyStatuses(db: Pick<Connection, "professor">, url: URL, cycle: Prisma.EvaluationCycleGetPayload<{ include: { semester: true } }>, beforeCycle = false) {
+export async function facultyStatuses(db: Pick<Connection, "professor">, url: URL, cycle: Prisma.EvaluationCycleGetPayload<{ include: { semester: true } }>, beforeCycle = false, scan?: { after?: string; limit: number }) {
   const id = ids(url), q = search(url), signedUp = filter(url, "signedUp");
   if (signedUp !== null && !["true", "false"].includes(signedUp)) invalid("signedUp must be true or false.");
   const include = { user: { select: personSelect }, hiringLevel: true, teaches: { include: { section: { include: { semester: true } } } },
@@ -92,7 +102,7 @@ export async function facultyStatuses(db: Pick<Connection, "professor">, url: UR
       where: { status: { notIn: cancelled } }, select: { observationId: true, completedAt: true, signedAssessment: true },
       orderBy: [{ completedAt: "desc" as const }, { observationId: "asc" as const }] } } } };
   const rows: Prisma.ProfessorGetPayload<{ include: typeof include }>[] = [];
-  let cursor: string | undefined;
+  let cursor: string | undefined = scan?.after;
   // Scan in bounded batches; computed statuses must be filtered before pagination.
   for (;;) {
     const batch = await db.professor.findMany({ where: {
@@ -101,9 +111,9 @@ export async function facultyStatuses(db: Pick<Connection, "professor">, url: UR
       ...(id.observeeId ? { professorId: id.observeeId } : cursor ? { professorId: { gt: cursor } } : {}),
       ...(id.observeeId && cursor ? { AND: [{ professorId: { gt: cursor } }] } : {}),
       ...(signedUp ? { evaluationSignups: { [signedUp === "true" ? "some" : "none"]: { cycleId: cycle.cycleId } } } : {}),
-    }, include, orderBy: { professorId: "asc" }, take: 200 });
+    }, include, orderBy: { professorId: "asc" }, take: scan?.limit ?? 200 });
     rows.push(...batch);
-    if (batch.length < 200) break;
+    if (scan || batch.length < 200) break;
     cursor = batch.at(-1)!.professorId;
   }
   const target = termOrder(cycle.semester.termCode);
@@ -144,8 +154,16 @@ export async function getCycleReport(db: Connection, user: ConfigurationUser, ur
   if (view === "faculty-status") {
     const status = filter(url, "evaluationStatus")?.toLowerCase();
     if (status && !["due", "overdue", "not_due", "needs-review", "unavailable"].includes(status)) invalid("Invalid evaluation status.");
-    const rows = await facultyStatuses(db, url, cycle);
-    return page(rows.filter(p => (!cursor || p.id > cursor) && (!status || p.evaluationStatus === (status === "unavailable" ? "needs-review" : status))), limit);
+    const rows: Awaited<ReturnType<typeof facultyStatuses>> = [];
+    let after = cursor ?? undefined;
+    const batchSize = status ? 100 : limit + 1;
+    for (;;) {
+      const batch = await facultyStatuses(db, url, cycle, false, { after, limit: batchSize });
+      rows.push(...batch.filter(p => !status || p.evaluationStatus === (status === "unavailable" ? "needs-review" : status)));
+      if (rows.length > limit || batch.length < batchSize) break;
+      after = batch.at(-1)!.id;
+    }
+    return page(rows, limit);
   }
   if (view === "metrics") {
     const [signups, faculty, baseline] = await Promise.all([cycleSignups(db, cycleId, id), facultyStatuses(db, url, cycle), facultyStatuses(db, url, cycle, true)]);
@@ -154,17 +172,18 @@ export async function getCycleReport(db: Connection, user: ConfigurationUser, ur
   if (view === "attention") {
     const issue = filter(url, "issue");
     if (issue && !["overdue", "unmatched", "incomplete", "alert", "expiredApproval"].includes(issue)) invalid("Invalid attention issue.");
-    if (issue && ["alert", "expiredApproval"].includes(issue)) return { ...page([], limit), unavailableReason: "This workflow is not represented in the current schema." };
-    const rows = issue === "overdue" ? [] : await db.observation.findMany({ where: { AND: [where, issue === "unmatched" ? unmatched : issue === "incomplete" ? outstanding(now) : { OR: [unmatched, outstanding(now)] },
+    if (issue === "expiredApproval") return { ...page([], limit), unavailableReason: "This workflow is not represented in the current schema." };
+    const rows = issue === "overdue" ? [] : await db.observation.findMany({ where: { AND: [where, issue === "alert" ? noCompatibleObservers : issue === "unmatched" ? unmatched : issue === "incomplete" ? outstanding(now) : { OR: [unmatched, outstanding(now)] },
       ...(cursor ? [{ observationId: { gt: cursor } }] : [])] }, include: observationInclude, orderBy: { observationId: "asc" }, take: limit + 1 });
     const overdue = !issue || issue === "overdue" ? (await facultyStatuses(db, url, cycle)).filter(p => p.evaluationStatus === "overdue" && (!cursor || p.id > cursor)) : [];
     const items = [...rows.map(o => ({ id: o.observationId, faculty: person(o.signup.professor),
-      issue: o.observerId === null ? "unmatched" : "incomplete", observationStatus: o.status,
+      issue: noMatchAlert(o) ? "alert" : o.observerId === null ? "unmatched" : "incomplete", observationStatus: o.status,
+      ...(noMatchAlert(o) ? { reasonCode: "NO_COMPATIBLE_OBSERVERS", reason: "No compatible observers found. Review the proposed meetings and eligible faculty." } : {}),
       observationId: o.observationId, createdAt: o.signup.signupDate, allowedActions: ["view"] })),
       ...overdue.map(p => ({ id: p.id, faculty: p.professor, issue: "overdue", observationStatus: null,
         observationId: p.observationId, createdAt: null, allowedActions: p.observationId ? ["view"] : [] }))];
     return { ...page(items.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0), limit),
-      unavailableIssues: ["alert", "expiredApproval"] };
+      unavailableIssues: ["expiredApproval"] };
   }
   const faculty = await facultyStatuses(db, url, cycle);
   const levels = await db.hiringLevel.findMany({ where: id.hiringLevelId ? { hiringLevelId: id.hiringLevelId } : {}, orderBy: { levelName: "asc" } });

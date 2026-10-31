@@ -6,12 +6,18 @@ import { facultyPageData } from "@/server/queries/faculty-page-data";
 import { requirePermission } from "@/server/permissions";
 
 export default async function Page({ searchParams }: {
-  searchParams: Promise<{ observationId?: string | string[] }>;
+  searchParams: Promise<{ observationId?: string | string[]; view?: string | string[] }>;
 }) {
-  const { observationId } = await searchParams;
+  const { observationId, view } = await searchParams;
   const user = await requirePermission("observations.read.own");
   if (observationId !== undefined) {
     if (typeof observationId !== "string" || !/^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(observationId)) notFound();
+    if (view === "current") {
+      const { data } = await facultyPageData();
+      if (data?.observation?.id.toLowerCase() === observationId.toLowerCase()) {
+        return <ObservationDetailsScreen data={data} canReadAssessment={user.permissions.includes("assessment.read.own")} />;
+      }
+    }
     return <ObservationDetails observationId={observationId}
       canReadAssessment={user.permissions.includes("assessment.read.own")}
       backHref={facultyRoutes.history} backLabel="Back to History" />;

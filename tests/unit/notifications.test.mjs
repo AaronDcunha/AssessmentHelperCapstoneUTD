@@ -41,7 +41,7 @@ test('HTTP, network and malformed success errors preserve denial and uncertain m
   await assert.rejects(notificationsApi.markAllRead(),e=>e.uncertain===true);
 });
 test('destinations allow only existing authorized internal observation routes', () => {
-  assert.equal(notificationDestination(item().target,['observations.read.own']),`/observations/details?observationId=${id}`);
+  assert.equal(notificationDestination(item().target,['observations.read.own']),`/observations/details?observationId=${id}&view=current`);
   for(const target of [null,{kind:'url',id:'https://evil.test'},{kind:'observation',id:'../admin'},{kind:'cycle',id}]) assert.equal(notificationDestination(target,['observations.read.own']),null);
   assert.equal(notificationDestination(item().target,[]),null);
 });
