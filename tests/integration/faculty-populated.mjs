@@ -330,6 +330,7 @@ try {
   await assert.rejects(assessments.saveFacultyAssessment(faculty[0], { action: 'acknowledge', revision: form.revision, acknowledged: true }));
   await assert.rejects(assessments.saveFacultyAssessment(observer, { action: 'save', revision: form.revision, responses: { ...responses, answers: { [template.criteria[0].id]: 5 } } }));
   const draft = await assessments.saveFacultyAssessment(observer, { action: 'save', revision: form.revision, responses });
+  assert.equal((await forms.getFacultyAssessment(observer)).revision, draft.form.revision, 'The save response revision survives the PostgreSQL JSON round trip');
   assert.deepEqual((await forms.getFacultyAssessment(faculty[0])).responses.answers, {}, 'Observees cannot read observer drafts.');
   await assert.rejects(assessments.saveFacultyAssessment(observer, { action: 'save', revision: form.revision, responses }));
   const revised = await configuration.updateTemplate(prisma, committee, template.id, { expectedRevision: 1, title: 'Edited assigned template' });

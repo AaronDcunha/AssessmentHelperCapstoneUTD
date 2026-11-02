@@ -1,3 +1,10 @@
+November 2, 2026 assessment revision correction:
+Assessment revisions recursively sort object keys before hashing, preserving
+array order. PostgreSQL jsonb field reordering no longer produces a false stale
+revision between Next/save operations. Actual answer/template/signature changes
+still invalidate old revisions. Existing forms need one reload after deployment;
+no migration or stored-answer rewrite is required.
+
 October 30, 2026 Observation Progress pagination:
 Observation Progress now uses single-page observation API reads with temporary
 Previous/Next controls and 20/50/100 rows. Filters reset the page; search retains

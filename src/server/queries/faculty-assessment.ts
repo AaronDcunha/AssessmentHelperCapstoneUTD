@@ -27,6 +27,17 @@ export type AssessmentRow = {
   templateRevision: number; commentPrompts: CommentPrompt[]; signatureLabels: { observer: string; observee: string }; timeZone: string;
 };
 
+// jsonb does not preserve object insertion order. Revisions must describe the
+// content, including ordered question/option arrays, rather than JSON key order.
+function revisionContent(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(revisionContent);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, item]) => [key, revisionContent(item)]));
+  }
+  return value;
+}
+
 export function assessmentView(row: AssessmentRow, user: AccountUser): FacultyAssessment {
   const responses = row.responses ?? { answers: {}, comments: "" };
   if (!responses.answers || typeof responses.answers !== "object" || Array.isArray(responses.answers)
@@ -39,7 +50,7 @@ export function assessmentView(row: AssessmentRow, user: AccountUser): FacultyAs
   }
   const observerSignedAt = row.observerSignedAt?.toISOString() ?? null, observeeSignedAt = row.observeeSignedAt?.toISOString() ?? null;
   commentPrompts(row.commentPrompts); signatureLabels(row.signatureLabels);
-  const revision = createHash("sha256").update(JSON.stringify([row.observationId, row.templateId, row.templateRevision, row.criteria, row.commentPrompts, row.signatureLabels, responses, observerSignedAt, observeeSignedAt, row.locked])).digest("hex");
+  const revision = createHash("sha256").update(JSON.stringify(revisionContent([row.observationId, row.templateId, row.templateRevision, row.criteria, row.commentPrompts, row.signatureLabels, responses, observerSignedAt, observeeSignedAt, row.locked]))).digest("hex");
   return { ...row, responses: row.participation === "observee" && !observerSignedAt ? { answers: {}, comments: "" } : responses, scheduledAt: row.scheduledAt?.toISOString() ?? null, observerSignedAt, observeeSignedAt, revision,
     canEdit: row.participation === "observer" && !row.locked && !observerSignedAt && !observeeSignedAt && user.permissions.includes("assessment.submit.own"),
     canAcknowledge: !row.locked && (row.participation === "observer" ? !observerSignedAt && user.permissions.includes("assessment.submit.own")

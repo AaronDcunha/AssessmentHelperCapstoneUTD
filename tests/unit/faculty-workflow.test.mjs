@@ -147,6 +147,25 @@ test('assigned templates stay linked and template edits change revisions before 
   assert.equal(db.calls.filter(call => call.assessment).length, writesBefore);
 });
 
+test('saving the next form step survives database JSON key reordering but rejects real answer changes', async () => {
+  const db = assessmentDatabase();
+  const load = runtime(db);
+  const { getFacultyAssessment } = load('src/server/queries/faculty-assessment.ts');
+  const { saveFacultyAssessment } = load('src/server/services/faculty-assessment.ts');
+  const initial = await getFacultyAssessment(user, { database: db });
+  const saved = await saveFacultyAssessment(user, { action: 'save', revision: initial.revision, responses: { answers: { rating: 4 }, comments: 'Evidence' } });
+  // PostgreSQL jsonb may return the same objects with a different key order.
+  const reorder = value => Array.isArray(value) ? value.map(reorder)
+    : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).reverse().map(([key, item]) => [key, reorder(item)])) : value;
+  db.changeTemplate({ responses: reorder(saved.form.responses) });
+  const reloaded = await getFacultyAssessment(user, { database: db });
+  assert.equal(reloaded.revision, saved.form.revision);
+  const next = await saveFacultyAssessment(user, { action: 'save', revision: saved.form.revision, responses: { ...saved.form.responses, comments: 'Next step' } });
+  assert.equal(next.form.responses.comments, 'Next step');
+  db.changeTemplate({ responses: { ...next.form.responses, answers: { rating: 3 } } });
+  await assert.rejects(saveFacultyAssessment(user, { action: 'save', revision: next.form.revision, responses: next.form.responses }), /changed/);
+});
+
 test('Faculty form retains its three-step design and renders configured sparse labels, comments and signature labels', async () => {
   const configured = [{ ...criteria[0], options: [{ value: 0, label: 'Needs support' }, { value: 10, label: 'Excellent' }] }];
   const db = assessmentDatabase({ criteria: configured, signatureLabels: { observer: 'Reviewer', observee: 'Faculty member' },
