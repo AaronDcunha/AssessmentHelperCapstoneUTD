@@ -220,10 +220,10 @@ export function ObservationDetailsScreen({ data, canReadAssessment = false }: { 
     {record ? <ObservationDetails key={record.id} observationId={record.id} canReadAssessment={canReadAssessment} backHref={routes.observations} backLabel="Back to Observations">
     <Block title="Actions"><div className="flex max-w-[992px] flex-col gap-ah-16">
       <ButtonLink variant="secondary" href={routes.form}>View Observation Form</ButtonLink>
-      <FacultyIssueControl observationId={record.id} kind="NOT_OCCURRED" />
+      <FacultyIssueControl observationId={record.id} kind="NOT_OCCURRED" disabled={!record.canReportNotCompleted} />
       <FacultyFeedbackControl data={data} />
     </div></Block>
-    {record?.participation === "observee" && <><div className="flex flex-wrap gap-ah-16"><ButtonLink href={routes.recommendations} variant="secondary">View Recommendations</ButtonLink><ButtonLink href={routes.confirmed} variant="secondary">Choose Accepted Observer</ButtonLink></div><FacultyIssueControl observationId={record.id} kind="ALERT" /></>}
+    {record?.participation === "observee" && <><div className="flex flex-wrap gap-ah-16"><ButtonLink href={routes.recommendations} variant="secondary">View Recommendations</ButtonLink>{record.canChooseObserver ? <ButtonLink href={routes.confirmed} variant="secondary">Choose Accepted Observer</ButtonLink> : <Button variant="secondary" disabled>Choose Accepted Observer</Button>}</div><FacultyIssueControl observationId={record.id} kind="ALERT" /></>}
     <p id="observation-actions-unavailable" className="text-caption text-muted">Report non-occurrence after the appointment starts and before acknowledging. The observation form requires a scheduled observation and an assigned observer.</p>
     </ObservationDetails> : <><Block title="Observation"><div className={panel}><p>{data ? "No current observation is available." : "Observation data is temporarily unavailable."}</p></div></Block><Back href={routes.observations} /></>}
   </div>;
@@ -247,7 +247,7 @@ export function AppointmentScreen({ data }: { data: FacultyWorkflow | null }) {
     <Block title="Actions"><div className="flex max-w-[992px] flex-col gap-ah-16">
       <ButtonLink variant="secondary" href={routes.details}>View Observation</ButtonLink>
       {record?.scheduledAt && record.observer ? <ButtonLink variant="secondary" href={routes.form}>Open Observation Form</ButtonLink> : <Button disabled aria-describedby="observation-actions-unavailable">Open Observation Form</Button>}
-      {record ? <FacultyIssueControl observationId={record.id} kind="NOT_OCCURRED" /> : <IncompleteReportButton primary />}
+      {record ? <FacultyIssueControl observationId={record.id} kind="NOT_OCCURRED" disabled={!record.canReportNotCompleted} /> : <IncompleteReportButton primary />}
     </div></Block>
     <p id="observation-actions-unavailable" className="text-caption text-muted">{record ? "The form opens after the scheduled observation starts. Report non-occurrence only if the meeting did not take place." : "Form submission requires a scheduled observation and an authorized participant. No appointment is available."}</p>
     <Back href={routes.observations} />

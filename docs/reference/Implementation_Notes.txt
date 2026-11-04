@@ -98,6 +98,11 @@ Faculty History page and its shared detail implementation are unchanged. No appl
 data was reset, seeded or deleted. See FACULTY_INTEGRATION_FIXES.md for verification.
 
 ASSESSMENT HELPER IMPLEMENTATION NOTES
+November 4, 2026 observation action availability:
+Report Not Completed is disabled on details and appointment pages for completed,
+closed, unscheduled, future or acknowledged observations. The query and write
+service share the non-occurrence guard. Choose Accepted Observer is disabled
+once an observer is assigned or the observation is closed/deadline-expired.
 November 4, 2026 notification deletion:
 The notifications page supports per-row Delete and Delete selected (up to 100).
 DELETE /api/notifications requires existing own read/update grants, same-origin

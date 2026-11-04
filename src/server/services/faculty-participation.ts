@@ -4,6 +4,7 @@ import { facultyTransaction, notifyCommittee, requireFacultyGrants, touchObserva
 import { createObservationAlert } from "./alerts";
 import { ConfigurationError } from "../configuration-validation";
 import { FacultyActionError } from "./faculty-actions";
+import { canReportNotCompleted } from "../../lib/observation-actions";
 
 export async function reportFacultyIssue(user: AccountUser, body: unknown) {
   requireFacultyGrants(user, "profile.read.own", "observations.read.own");
@@ -25,7 +26,7 @@ export async function reportFacultyIssue(user: AccountUser, body: unknown) {
     else {
       if (!observee && !observer) throw new FacultyActionError("Forbidden", 403);
       requireFacultyGrants(user, observee ? "assessment.acknowledge.own" : "assessment.submit.own");
-      if (!record.scheduledAt || record.scheduledAt > new Date() || record.completedAt || record.signedAssessment?.observerSignedAt || record.signedAssessment?.observeeSignedAt) throw new FacultyActionError("Report non-occurrence after the appointment starts and before any acknowledgement.");
+      if (!canReportNotCompleted(record, new Date())) throw new FacultyActionError("Report non-occurrence after the appointment starts and before any acknowledgement.");
     }
     await touchObservation(db, record);
     const existing = await db.facultyIssue.findUnique({ where: { observationId_reportedBy_kind_occurrenceKey: { observationId: id, reportedBy: user.id, kind: String(input.kind), occurrenceKey: "initial" } } });
