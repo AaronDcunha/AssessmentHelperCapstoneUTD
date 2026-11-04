@@ -1,5 +1,6 @@
 import "server-only";
 import nodemailer from "smtp-mailer";
+import {notificationEmailHtml} from "./templates/notification";
 
 export const defaultMailFrom="Assessment Helper <noreply_course_evaluation@assessmenthelper.edu>";
 export function createEmailTransport(env:NodeJS.ProcessEnv=process.env){
@@ -15,9 +16,8 @@ export function createEmailTransport(env:NodeJS.ProcessEnv=process.env){
 }
 export function emailMessage(input:{id:string;to:string;title:string;message:string},from=defaultMailFrom){
   if(/[\r\n]/.test(from)||!from.trim())throw new Error("Invalid MAIL_FROM.");
-  const escape=(value:string)=>value.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]!));
   return {from,to:{address:input.to,name:""},subject:input.title.replace(/[\r\n]+/g," "),
     messageId:`<notification-${input.id}@assessmenthelper.edu>`,
     text:`${input.title}\n\n${input.message}\n\nAssessment Helper\nThis is an automated notification. Please do not reply.`,
-    html:`<!doctype html><html><body><h1>${escape(input.title)}</h1><div style="white-space:pre-wrap">${escape(input.message)}</div><hr><p>Assessment Helper<br>This is an automated notification. Please do not reply.</p></body></html>`};
+    html:notificationEmailHtml(input)};
 }

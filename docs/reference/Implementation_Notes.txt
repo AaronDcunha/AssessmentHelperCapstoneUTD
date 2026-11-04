@@ -98,6 +98,12 @@ Faculty History page and its shared detail implementation are unchanged. No appl
 data was reset, seeded or deleted. See FACULTY_INTEGRATION_FIXES.md for verification.
 
 ASSESSMENT HELPER IMPLEMENTATION NOTES
+November 4, 2026 shared email styling:
+The SMTP emailMessage formatter automatically applies the shared notification
+template in server/email/templates/notification.ts, using the website palette,
+branded header and bordered content card. Existing callers and channel defaults
+are unchanged. Titles/messages remain escaped plain text, line breaks are retained,
+and the plain-text alternative remains. No schema or SMTP configuration change.
 October 28, 2026 Issue #67 recommendation-list foundation (supersedes single-list notes below):
 RecommendationList identities, list-scoped candidates and separate observation
 draft/released pointers now exist. Initial generation/release retain their existing

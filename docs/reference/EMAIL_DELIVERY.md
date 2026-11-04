@@ -5,6 +5,17 @@ title and full message are sent as plain text and escaped HTML, one recipient pe
 email, from `Assessment Helper <noreply_course_evaluation@assessmenthelper.edu>`.
 `MAIL_FROM` can override the sender. There is no public email-sending endpoint.
 
+All queued emails automatically use `src/server/email/templates/notification.ts`
+through the existing `emailMessage` formatter. The shared layout uses the website's
+green header, orange accent, light canvas, bordered white card and typography
+fallbacks, with inline styles and presentation tables for email clients. Content
+is escaped and line breaks are preserved. Plain-text delivery remains available.
+Existing `sendNotification` callers keep passing plain-text `title` and `message`;
+no new arguments, HTML, dependencies or caller changes are needed. Email remains
+opt-in where the helper currently requires `email: true`.
+
+Template checks: `node --test tests/unit/email-template.test.mjs`.
+
 ## Local Mailpit setup
 
 Mailpit captures SMTP locally; it does not send to real inboxes. Keep PostgreSQL
