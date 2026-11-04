@@ -1,6 +1,6 @@
 import type { Prisma } from "../../generated/prisma/client";
 import type { ConfigurationUser } from "../configuration-validation";
-import { notificationGrant, notificationBody, notificationId, notificationError } from "../notification-validation";
+import { notificationGrant, notificationBody, notificationDeleteBody, notificationId, notificationError } from "../notification-validation";
 import { notificationResources, notificationSelect, type NotificationDatabase } from "../queries/notifications";
 
 export async function setNotificationRead(db: NotificationDatabase, user: ConfigurationUser, id: string, body: unknown, now = new Date()) {
@@ -19,6 +19,16 @@ export async function markAllNotificationsRead(db: NotificationDatabase, user: C
   const changed=await db.notification.updateMany({where:{userId:user.id,inAppEnabled:true,isRead:false,createdAt:{lte:cutoff}},data:{isRead:true,readAt:cutoff}});
   const unreadCount=await db.notification.count({where:{userId:user.id,inAppEnabled:true,isRead:false}});
   return {updatedCount:changed.count,cutoff:cutoff.toISOString(),unreadCount};
+}
+
+export async function deleteNotifications(db: NotificationDatabase, user: ConfigurationUser, body: unknown) {
+  notificationGrant(user,true);
+  const ids = notificationDeleteBody(body);
+  if(user.id.startsWith("demo:")) return {deletedCount:0,unreadCount:0};
+  // Keep event keys and outbox history: clearing the inbox must not resend email.
+  const changed = await db.notification.updateMany({where:{userId:user.id,inAppEnabled:true,notificationId:{in:ids}},data:{inAppEnabled:false}});
+  const unreadCount = await db.notification.count({where:{userId:user.id,inAppEnabled:true,isRead:false}});
+  return {deletedCount:changed.count,unreadCount};
 }
 
 type NotificationWriter = Pick<Prisma.TransactionClient,"notification">;

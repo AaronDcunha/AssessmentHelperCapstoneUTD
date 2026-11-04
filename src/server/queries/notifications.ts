@@ -37,7 +37,7 @@ export async function getNotifications(db: NotificationDatabase, user: Configura
     if(asOf>now || anchor.at>asOf) notificationError(400,"INVALID_CURSOR","Invalid notification cursor.");
   }
   if(user.id.startsWith("demo:")) return {items:[],pageInfo:{hasMore:false,nextCursor:null},unreadCount:0,latestCursor:null};
-  if(anchor && !await db.notification.findFirst({where:{userId:user.id,inAppEnabled:true,notificationId:anchor.id,createdAt:anchor.at},select:{notificationId:true}})) notificationError(400,"INVALID_CURSOR","Invalid notification cursor.");
+  if(anchor && !await db.notification.findFirst({where:{userId:user.id,notificationId:anchor.id,createdAt:anchor.at},select:{notificationId:true}})) notificationError(400,"INVALID_CURSOR","Invalid notification cursor.");
   const clauses: Prisma.NotificationWhereInput[] = [{userId:user.id,inAppEnabled:true},{createdAt:{lte:asOf}},...(query.read==="unread"?[{isRead:false}]:[])];
   // Inclusive millisecond boundary avoids losing equal-timestamp arrivals; incremental clients deduplicate IDs.
   if(after) clauses.push({createdAt:{gte:after}});

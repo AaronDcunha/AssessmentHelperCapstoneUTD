@@ -22,7 +22,7 @@ export function NotificationsScreen({ permissions }: { permissions: readonly str
   const opener = useRef<HTMLElement | null>(null);
   const dialogTitle = useId(), dialogMessage = useId();
   useEffect(() => {
-    if (selectAll.current) selectAll.current.indeterminate = state.selectedIds.length > 0 && state.selectedIds.length < state.items.length;
+    if (selectAll.current) selectAll.current.indeterminate = state.selectedIds.length > 0 && state.selectedIds.length < Math.min(state.items.length,100);
   }, [state.selectedIds, state.items.length]);
   useEffect(() => {
     if (state.opened && !dialog.current?.open) dialog.current?.showModal();
@@ -49,11 +49,13 @@ export function NotificationsScreen({ permissions }: { permissions: readonly str
         </Button>
         <Button variant="secondary" disabled={updatesDisabled || selectedUnread === 0} aria-busy={state.pending === "selected"}
           onClick={() => { void store.markSelectedRead(); }}>{state.pending === "selected" ? "Marking selected…" : "Mark selected as read"}</Button>
+        <Button variant="secondary" className="text-danger" disabled={updatesDisabled || state.selectedIds.length === 0} aria-busy={state.pending === "delete"}
+          onClick={() => { void store.deleteSelected(); }}>{state.pending === "delete" ? "Deleting…" : "Delete selected"}</Button>
       </>}
       <TextAction disabled={busy} onClick={() => { void store.load(); }}>Refresh</TextAction>
     </div>
     {canUpdate && <p id="notification-selection-help" className="text-caption text-muted" role="status">
-      {state.selectedIds.length} selected. Selection applies to loaded notifications.
+      {state.selectedIds.length} selected. Select up to 100 loaded notifications at a time.
     </p>}
     {state.notice && !state.opened && <p role="status" className="text-body text-sidebar">{state.notice}</p>}
     {!state.opened && errorPanel}
@@ -66,7 +68,7 @@ export function NotificationsScreen({ permissions }: { permissions: readonly str
           <thead><tr>
             {canUpdate && <TableCell variant="header" className={styles.selectionCell}><input ref={selectAll} type="checkbox" className="size-4 accent-sidebar"
               aria-label="Select all loaded notifications" aria-describedby="notification-selection-help" disabled={updatesDisabled || state.items.length === 0}
-              checked={state.items.length > 0 && state.selectedIds.length === state.items.length} onChange={event => store.selectLoaded(event.target.checked)} /></TableCell>}
+              checked={state.items.length > 0 && state.selectedIds.length === Math.min(state.items.length,100)} onChange={event => store.selectLoaded(event.target.checked)} /></TableCell>}
             {["Notification", "Details", "Action"].map(label => <TableCell key={label} variant="header">{label}</TableCell>)}
           </tr></thead>
           <tbody>
@@ -96,7 +98,10 @@ export function NotificationsScreen({ permissions }: { permissions: readonly str
                 <TableCell><TextAction disabled={busy || state.loadingMore} aria-label={`View: ${item.title}`} onClick={() => {
                   opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
                   void store.open(item.id, canUpdate);
-                }}>View</TextAction></TableCell>
+                }}>View</TextAction>
+                  {canUpdate && <TextAction className="ml-ah-16 text-danger" disabled={updatesDisabled} aria-label={`Delete: ${item.title}`}
+                    onClick={() => { void store.remove([item.id]); }}>Delete</TextAction>}
+                </TableCell>
               </tr>)}
           </tbody>
         </table>

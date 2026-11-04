@@ -59,7 +59,7 @@ function failure(status: number): string {
     : "The notification request could not be completed. Please try again.";
 }
 async function request<T>(path: string, parse: (value: unknown) => T, init: RequestInit = {}): Promise<T> {
-  const mutation = init.method === "PATCH" || init.method === "POST";
+  const mutation = init.method === "PATCH" || init.method === "POST" || init.method === "DELETE";
   try {
     const response = await fetch(path, { ...init, credentials: "same-origin", cache: "no-store",
       headers: { Accept: "application/json", ...(mutation ? { "Content-Type": "application/json" } : {}) } });
@@ -72,6 +72,9 @@ async function request<T>(path: string, parse: (value: unknown) => T, init: Requ
   }
 }
 export const notificationsApi = {
+  delete: (notificationIds: string[]) => request("/api/notifications", value => {
+    const data = record(value); return { deletedCount: count(data.deletedCount), unreadCount: count(data.unreadCount) };
+  }, { method: "DELETE", body: JSON.stringify({ notificationIds }) }),
   list: (read: ReadFilter, afterCursor?: string, signal?: AbortSignal) => {
     const params = new URLSearchParams({ read, limit: "20" });
     if (afterCursor) params.set("cursor", afterCursor);

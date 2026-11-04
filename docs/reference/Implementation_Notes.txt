@@ -98,6 +98,12 @@ Faculty History page and its shared detail implementation are unchanged. No appl
 data was reset, seeded or deleted. See FACULTY_INTEGRATION_FIXES.md for verification.
 
 ASSESSMENT HELPER IMPLEMENTATION NOTES
+November 4, 2026 notification deletion:
+The notifications page supports per-row Delete and Delete selected (up to 100).
+DELETE /api/notifications requires existing own read/update grants, same-origin
+JSON, and a bounded UUID list. Only the caller's visible inbox rows are cleared
+via inAppEnabled=false. Event keys and email outbox/history remain to preserve
+deduplication and delivery. No schema or permission migration is needed.
 November 4, 2026 shared email styling:
 The SMTP emailMessage formatter automatically applies the shared notification
 template in server/email/templates/notification.ts, using the website palette,
