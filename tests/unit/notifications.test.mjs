@@ -115,6 +115,31 @@ test('read-only viewing does not write, while already-read messages are not patc
  await store.open(id+'read',true);assert.equal(writes,0);
 });
 
+test('deleting selected notifications clears rows, selection, open detail and updates unread count',async()=>{
+ const calls=[];
+ const store=createNotificationsController({list:async()=>page([item(),item('second')],2),delete:async ids=>{calls.push(ids);return {deletedCount:ids.length,unreadCount:0};}});
+ await store.load();await store.open(id,false);store.selectLoaded(true);await store.deleteSelected();
+ assert.deepEqual(calls,[[id,id+'second']]);
+ assert.deepEqual(store.getSnapshot().items,[]);assert.deepEqual(store.getSnapshot().selectedIds,[]);
+ assert.equal(store.getSnapshot().opened,null);assert.equal(store.getSnapshot().unreadCount,0);
+});
+
+test('uncertain deletion preserves rows and blocks more mutations until refreshed',async()=>{
+ let calls=0;
+ const store=createNotificationsController({list:async()=>page(),delete:async()=>{calls++;throw new NotificationRequestError('Unconfirmed',503,true);}});
+ await store.load();await store.remove([id]);await store.remove([id]);
+ assert.equal(calls,1);assert.equal(store.getSnapshot().items.length,1);assert.equal(store.getSnapshot().writeBlocked,true);
+});
+
+test('delete client sends a bounded ID audience through a same-origin JSON mutation',async t=>{
+ t.mock.method(globalThis,'fetch',async(url,options)=>{
+  assert.equal(url,'/api/notifications');assert.equal(options.method,'DELETE');
+  assert.equal(options.headers['Content-Type'],'application/json');assert.deepEqual(JSON.parse(options.body),{notificationIds:[id]});
+  return Response.json({deletedCount:1,unreadCount:0});
+ });
+ assert.deepEqual(await notificationsApi.delete([id]),{deletedCount:1,unreadCount:0});
+});
+
 test('notification responses preserve recorded senders and accept older records without sender metadata',()=>{
  const sender={id,name:'Faculty Sender'};
  assert.deepEqual(parseNotificationPage(page([{...item(),sender}])).items[0].sender,sender);

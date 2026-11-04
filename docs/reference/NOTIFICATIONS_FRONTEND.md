@@ -1,5 +1,14 @@
 # Notifications frontend
 
+November 4, 2026: notification rows include Delete, and the toolbar includes
+Delete selected. The existing checkboxes select up to 100 loaded notifications;
+users can load more and repeat. Both actions use DELETE /api/notifications.
+Controls require notifications.update.own; the backend checks ownership and grants.
+Success removes rows/selection, closes any deleted detail and refreshes the bell
+through the existing change event. Failed writes retain rows; uncertain outcomes
+block further writes until refresh. Deletion clears only the in-app inbox and
+preserves email delivery and event deduplication records.
+
 Implemented from Figma Shared / Notifications / Desktop, node 16:3270:
 https://www.figma.com/design/2fBuGKLRdHej1QAffDWsHr?node-id=16-3270
 

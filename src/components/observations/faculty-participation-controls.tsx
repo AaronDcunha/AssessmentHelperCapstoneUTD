@@ -8,12 +8,12 @@ import { acApi } from "@/lib/ac-api";
 import { postFacultyAction } from "./faculty-api";
 import type { FacultyWorkflow } from "@/server/queries/faculty-workflow";
 
-export function FacultyIssueControl({ observationId, kind }: { observationId: string; kind: "ALERT" | "NOT_OCCURRED" }) {
+export function FacultyIssueControl({ observationId, kind, disabled = false }: { observationId: string; kind: "ALERT" | "NOT_OCCURRED"; disabled?: boolean }) {
   const router = useRouter(), [opened, setOpened] = useState(false), [reason, setReason] = useState(""), [details, setDetails] = useState(""), [pending, setPending] = useState(false), [message, setMessage] = useState("");
   const alertRequest=useRef<{body:string;key:string}|null>(null);
-  return <div className="space-y-ah-16"><Button variant="secondary" disabled={pending} onClick={() => setOpened(!opened)}>{kind === "ALERT" ? "Alert Assessment Committee" : "Report Not Completed"}</Button>
-    {opened && <form className="space-y-ah-16 rounded-ah-8 border border-border bg-surface p-ah-24" onSubmit={async event => {
-      event.preventDefault(); if (pending) return; setPending(true); setMessage("");
+  return <div className="space-y-ah-16"><Button variant="secondary" disabled={pending || disabled} onClick={() => setOpened(!opened)}>{kind === "ALERT" ? "Alert Assessment Committee" : "Report Not Completed"}</Button>
+    {opened && !disabled && <form className="space-y-ah-16 rounded-ah-8 border border-border bg-surface p-ah-24" onSubmit={async event => {
+      event.preventDefault(); if (pending || disabled) return; setPending(true); setMessage("");
       try {
         const serialized=JSON.stringify({observationId,reason,details});
         if(kind==="ALERT"&&alertRequest.current?.body!==serialized)alertRequest.current={body:serialized,key:crypto.randomUUID()};

@@ -13,6 +13,13 @@ export function notificationBody(value: unknown, read: boolean) {
   if (Object.keys(body).some(key => !read || key !== "read") || read && typeof body.read !== "boolean") notificationError(400, "INVALID_REQUEST", read ? "Provide only read:boolean." : "Provide an empty object.");
   return body;
 }
+export function notificationDeleteBody(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) notificationError(400,"INVALID_REQUEST","Provide notificationIds.");
+  const body = value as Record<string, unknown>;
+  if (Object.keys(body).length !== 1 || !Array.isArray(body.notificationIds) || body.notificationIds.length < 1 || body.notificationIds.length > 100)
+    notificationError(400,"INVALID_REQUEST","Select between 1 and 100 notifications.");
+  return [...new Set((body.notificationIds as unknown[]).map(notificationId))];
+}
 export function notificationQuery(params: URLSearchParams, list: boolean) {
   const allowed = list ? ["read", "cursor", "limit", "after"] : [];
   for (const key of params.keys()) if (!allowed.includes(key) || params.getAll(key).length !== 1 || !params.get(key)?.trim()) notificationError(400, "INVALID_QUERY", "Invalid notification query.");

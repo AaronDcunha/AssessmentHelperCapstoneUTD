@@ -100,16 +100,35 @@ export function createNotificationsController(api = notificationsApi) {
       notifyNotificationChange(); update({ pending: null });
     }
   }
+  async function remove(ids: string[]) {
+    if (snapshot.pending || snapshot.loadingMore || snapshot.state !== "ready" || snapshot.writeBlocked) return;
+    const selected = [...new Set(ids)].filter(id => snapshot.items.some(item => item.id === id));
+    if (!selected.length || selected.length > 100) return;
+    update({pending:"delete",error:null,notice:null});
+    try {
+      const result = await api.delete(selected);
+      update({items:snapshot.items.filter(item => !selected.includes(item.id)),
+        selectedIds:snapshot.selectedIds.filter(id => !selected.includes(id)),
+        opened:snapshot.opened && selected.includes(snapshot.opened.id) ? null : snapshot.opened,
+        unreadCount:result.unreadCount,notice:`${result.deletedCount} ${result.deletedCount === 1 ? "notification" : "notifications"} deleted.`});
+      notifyNotificationChange();
+    } catch (error) {
+      if (error instanceof NotificationRequestError && error.uncertain) {
+        update({writeBlocked:true,unreadCount:null}); notifyNotificationChange();
+      }
+      errorState(error);
+    } finally { update({pending:null}); }
+  }
   return {
     subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
     getSnapshot: () => snapshot,
     load, loadMore: () => load(snapshot.filter, true), setRead: (id: string, read: boolean) => mutate(id, read), markAllRead: () => mutate(null),
-    markSelectedRead,
+    markSelectedRead, remove, deleteSelected: () => remove(snapshot.selectedIds),
     select: (id: string, checked: boolean) => {
       if (snapshot.pending || !snapshot.items.some(item => item.id === id)) return;
-      update({ selectedIds: checked ? [...new Set([...snapshot.selectedIds, id])] : snapshot.selectedIds.filter(value => value !== id) });
+      update({ selectedIds: checked ? [...new Set([...snapshot.selectedIds, id])].slice(0,100) : snapshot.selectedIds.filter(value => value !== id) });
     },
-    selectLoaded: (checked: boolean) => { if (!snapshot.pending) update({ selectedIds: checked ? snapshot.items.map(item => item.id) : [] }); },
+    selectLoaded: (checked: boolean) => { if (!snapshot.pending) update({ selectedIds: checked ? snapshot.items.slice(0,100).map(item => item.id) : [] }); },
     open: async (id: string, markRead: boolean) => {
       const item = snapshot.items.find(item => item.id === id);
       if (!item || snapshot.pending) return;

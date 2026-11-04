@@ -5,6 +5,15 @@ Prisma Client. Email delivery now uses the separate worker in EMAIL_DELIVERY.md.
 
 ## Endpoints and authorization
 
+- DELETE /api/notifications requires notifications.read.own and
+  notifications.update.own. Body: {notificationIds: UUID[]} with 1–100 IDs.
+  Returns {deletedCount,unreadCount}. IDs are deduplicated; foreign, missing and
+  previously cleared IDs have no effect and disclose no ownership information.
+  This clears inAppEnabled on the caller's visible records, retaining event keys
+  and email outbox/history so workflow retries do not recreate cleared messages.
+  Queued email delivery remains independent. No schema migration is required.
+  Paging still accepts an owned chronological anchor after it is cleared.
+
 - GET /api/notifications requires notifications.read.own. Parameters:
   read=all|unread (default all), limit=1..100 (default 20), cursor?, after?.
   Returns {items,pageInfo:{hasMore,nextCursor},unreadCount,latestCursor}.

@@ -5,6 +5,7 @@ import { getPrisma } from "../prisma";
 import { getFacultyDashboard, type FacultyDashboard } from "./faculty-dashboard";
 import { facultyDate, meetingForDate, proposedMeetingOptions, type WeeklyMeeting, type MeetingOption } from "../services/faculty-calendar";
 import { getFacultyLinks, type FacultyLinks } from "./faculty-links";
+import { canReportNotCompleted } from "../../lib/observation-actions";
 
 type Database = Prisma.TransactionClient;
 export type FacultySection = { id: string; label: string; meetings: WeeklyMeeting[]; options: MeetingOption[] };
@@ -12,6 +13,8 @@ export type FacultyObservation = {
   id: string; course: string; section: string; observee: string; observer: string | null;
   status: string; scheduledAt: string | null; participation: "observee" | "observer";
   meetings: WeeklyMeeting[]; proposedDates: MeetingOption[];
+  canReportNotCompleted?: boolean;
+  canChooseObserver?: boolean;
 };
 export type FacultyRequest = { id: string; observee: string; course: string; section: string; expiresAt: string; options: MeetingOption[] };
 export type FacultyWorkflow = {
@@ -59,11 +62,11 @@ export async function getFacultyWorkflow(user: AccountUser, options: { now?: Dat
   result.signup.allowed = !reason && result.sections.some(section => section.options.length);
   result.signup.reason = reason || (result.signup.allowed ? "" : "No unambiguous scheduled class dates are available before the observation deadline.");
   if (dashboard.currentObservation) {
-    const record = await db.observation.findFirst({ where: { observationId: dashboard.currentObservation.id, cycleId: cycle.id, OR: [{ signup: { professor: { userId: user.id } } }, { observer: { userId: user.id } }] }, include: { observer: { include: { user: true } }, signup: { include: { professor: { include: { user: true } }, section: { include: { course: true, classMeetings: true } } } }, timeOptions: { orderBy: { preferredDate: "asc" } } } });
+    const record = await db.observation.findFirst({ where: { observationId: dashboard.currentObservation.id, cycleId: cycle.id, OR: [{ signup: { professor: { userId: user.id } } }, { observer: { userId: user.id } }] }, include: { signedAssessment: true, observer: { include: { user: true } }, signup: { include: { professor: { include: { user: true } }, section: { include: { course: true, classMeetings: true } } } }, timeOptions: { orderBy: { preferredDate: "asc" } } } });
     if (record) {
       const section = record.signup.section;
       const meetings = section.classMeetings.map(meeting => ({ id: meeting.meetingId, day: meeting.dayOfWeek, startTime: meeting.startTime, endTime: meeting.endTime, location: meeting.location }));
-      result.observation = { id: record.observationId, course: section.course.courseCode, section: section.sectionCode, observee: record.signup.professor.user.fullName, observer: record.observer?.user.fullName ?? null, status: record.status, scheduledAt: record.scheduledAt?.toISOString() ?? null, participation: record.signup.professor.userId === user.id ? "observee" : "observer", meetings, proposedDates: record.timeOptions.flatMap(item => { const option = meetingForDate(item.preferredDate.toISOString().slice(0,10), meetings); return option ? [option] : []; }) };
+      result.observation = { canReportNotCompleted: canReportNotCompleted(record, now) && user.permissions.includes(record.signup.professor.userId === user.id ? "assessment.acknowledge.own" : "assessment.submit.own"), canChooseObserver: !record.observerId && !record.completedAt && !record.signedAssessment?.isLocked && !["COMPLETED", "CANCELLED", "CANCELED", "NOT_OCCURRED"].includes(record.status.toUpperCase()) && new Date(cycle.observationDeadline) > now && user.permissions.includes("observer.select.own"), id: record.observationId, course: section.course.courseCode, section: section.sectionCode, observee: record.signup.professor.user.fullName, observer: record.observer?.user.fullName ?? null, status: record.status, scheduledAt: record.scheduledAt?.toISOString() ?? null, participation: record.signup.professor.userId === user.id ? "observee" : "observer", meetings, proposedDates: record.timeOptions.flatMap(item => { const option = meetingForDate(item.preferredDate.toISOString().slice(0,10), meetings); return option ? [option] : []; }) };
     }
   }
   if (dashboard.access.observations) result.requests = result.links.requests.filter(request => request.status === "PENDING" && !request.expired).map(request => ({ ...request, options: request.options.map(option => ({ date: option.date, meetingTime: option.meetingTime })) }));

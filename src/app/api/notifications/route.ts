@@ -3,3 +3,5 @@ export const runtime="nodejs";
 export const dynamic="force-dynamic";
 const handler=notificationApi("list");
 export async function GET(request:Request){return handler(request);}
+const deleteHandler=notificationApi("delete");
+export async function DELETE(request:Request){return deleteHandler(request);}

@@ -7,7 +7,7 @@ import pg from 'pg';
 import {PrismaPg} from '@prisma/adapter-pg';
 const {PrismaClient}=await import('../../src/generated/prisma/client.ts');
 const {getNotifications,getUnreadNotificationCount}=await import('../../src/server/queries/notifications.ts');
-const {setNotificationRead,markAllNotificationsRead,createWorkflowNotification}=await import('../../src/server/services/notifications.ts');
+const {setNotificationRead,markAllNotificationsRead,createWorkflowNotification,deleteNotifications}=await import('../../src/server/services/notifications.ts');
 const {parseNotificationPage,notificationDestination}=await import('../../src/lib/notifications-api.ts');
 const url=new URL(process.env.DATABASE_URL);assert.ok(['localhost','127.0.0.1','[::1]'].includes(url.hostname));url.searchParams.delete('schema');
 const schema='notifications_test_'+randomUUID().replaceAll('-','');
@@ -82,5 +82,18 @@ try{
  const marking=db.$transaction(async t=>{await t.notification.count({where:{userId:u1}});started();await gate;return markAllNotificationsRead(t,user,{},cutoff);},{isolationLevel:'RepeatableRead',timeout:10000});
  await ready;const concurrent=await db.notification.create({data:input(randomUUID(),u1,{createdAt:cutoff})});release();await marking;
  assert.equal((await db.notification.findUnique({where:{notificationId:concurrent.notificationId}})).isRead,false);
- console.log('Passed isolated PostgreSQL notification tests: ownership, personal AC/Admin scope, authorized targets, tie-safe pagination, incremental boundary overlap, read/unread idempotence, cutoff/snapshot-safe mark-all, event deduplication and transaction rollback. No email was sent.');
+ const beforeDelete=await list('limit=1');const anchor=beforeDelete.items[0].id;
+ const outboxBefore=await db.notificationEmail.count();
+ await assert.rejects(tx(t=>deleteNotifications(t,{...user,permissions:['notifications.read.own']},{notificationIds:[anchor]})),e=>e.status===403);
+ const cleared=await tx(t=>deleteNotifications(t,user,{notificationIds:[anchor,foreign,event1.notificationId]}));
+ assert.ok(cleared.deletedCount>=1);
+ assert.equal((await db.notification.findUnique({where:{notificationId:foreign}})).inAppEnabled,true);
+ assert.equal((await db.notification.findUnique({where:{notificationId:anchor}})).inAppEnabled,false);
+ assert.ok(!(await list()).items.some(x=>x.id===anchor));
+ assert.ok(!(await list('read=unread')).items.some(x=>x.id===anchor));
+ assert.equal((await tx(t=>deleteNotifications(t,user,{notificationIds:[anchor]}))).deletedCount,0);
+ if(beforeDelete.pageInfo.nextCursor)await list(new URLSearchParams({limit:'1',cursor:beforeDelete.pageInfo.nextCursor}));
+ const replay=await tx(t=>createWorkflowNotification(t,event));assert.equal(replay.notificationId,event1.notificationId);assert.equal(replay.inAppEnabled,false);
+ assert.equal(await db.notificationEmail.count(),outboxBefore,'Deletion and event replay preserve existing email queue');
+ console.log('Passed isolated PostgreSQL notification tests including own-only single/bulk deletion, retries, hidden inbox rows, retained email/event history and paging after deleting an anchor. No email was sent.');
 }finally{await db.$disconnect();await migration.end();if(created)await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end();}

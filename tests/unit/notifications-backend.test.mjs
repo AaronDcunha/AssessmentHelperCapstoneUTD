@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 const { notificationsHandler } = await import('../../src/server/notifications-http.ts');
 const { notificationQuery, notificationBody } = await import('../../src/server/notification-validation.ts');
 const { ConfigurationError } = await import('../../src/server/configuration-validation.ts');
+const { deleteNotifications } = await import('../../src/server/services/notifications.ts');
 const id='11111111-1111-4111-8111-111111111111';
 const user={id,permissions:['notifications.read.own','notifications.update.own']};
 const forbidden=()=>assert.fail('Unauthorized request touched persistence');
@@ -29,6 +30,25 @@ test('writes reject cross-origin, malformed/extra JSON, unsupported media and ov
  ])assert.equal((await handle(request('read',options),id)).status,status);
  assert.throws(()=>notificationBody({read:true},false));
 });
+test('delete enforces write permissions, same origin and a bounded UUID list',async()=>{
+ const make=(body,origin='http://localhost')=>new Request('http://localhost/api/notifications',{method:'DELETE',headers:{origin,'content-type':'application/json'},body:JSON.stringify(body)});
+ const handle=notificationsHandler('delete',{getUser:async()=>user,execute:async()=>({deletedCount:1,unreadCount:0})});
+ assert.equal((await handle(make({notificationIds:[id]}))).status,200);
+ assert.equal((await handle(make({notificationIds:[id]},'https://evil.test'))).status,403);
+ for(const body of [{},{notificationIds:[]},{notificationIds:['bad']},{notificationIds:Array(101).fill(id)},{notificationIds:[id],userId:'other'}])assert.equal((await handle(make(body))).status,400);
+ const denied=notificationsHandler('delete',{getUser:async()=>({...user,permissions:['notifications.read.own']}),execute:forbidden});
+ assert.equal((await denied(make({notificationIds:[id]}))).status,403);
+});
+
+test('deletion scopes persistence to own visible records and retains event/outbox rows',async()=>{
+ const calls=[];
+ const db={notification:{updateMany:async args=>{calls.push(args);return {count:1};},count:async args=>{calls.push(args);return 3;}}};
+ assert.deepEqual(await deleteNotifications(db,user,{notificationIds:[id,id]}),{deletedCount:1,unreadCount:3});
+ assert.deepEqual(calls,[{where:{userId:user.id,inAppEnabled:true,notificationId:{in:[id]}},data:{inAppEnabled:false}},{where:{userId:user.id,inAppEnabled:true,isRead:false}}]);
+ await assert.rejects(deleteNotifications(db,{...user,permissions:[]},{notificationIds:[id]}),e=>e.status===403);
+ assert.equal(calls.length,2);
+});
+
 test('queries reject identity overrides, duplicate filters, empty/invalid pagination and count query fields',()=>{
  for(const query of ['userId=other','read=read','read=all&read=unread','limit=0','limit=101','limit=1.5','cursor='])assert.throws(()=>notificationQuery(new URLSearchParams(query),true));
  assert.throws(()=>notificationQuery(new URLSearchParams('read=all'),false));
