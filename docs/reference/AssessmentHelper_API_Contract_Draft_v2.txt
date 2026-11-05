@@ -689,3 +689,43 @@ POST /api/semesters {year,season,startsOn,endsOn,timeZone}; DELETE /api/semester
 Both require cycles.manage and existing same-origin JSON controls. Delete atomically
 removes the semester, its evaluation cycle and dependent course/workflow records.
 See FACULTY_INTEGRATION_FIXES.md for full behavior, retention and verification.
+
+
+November 5, 2026 Task 4 ? unified Semester Settings:
+The /ac/semester workflow now selects all semesters by name, newest year first
+(Fall, Summer, Spring within a year), including semesters with no cycle. New
+Semester shares the date/time-zone/deadline form. Existing names remain read-only.
+Cancel restores the saved baseline or exits creation. Switching/creation prompts
+before discarding edits; shared navigation/unload protection is also installed.
+Delete is confined to the selected editing area with an explicit dependent-record
+confirmation. Creation selects its result; deletion clears the local selection.
+The separate SemesterManagement list/component is removed.
+
+POST /api/semesters retains its legacy payload and Semester response. Optional
+id (caller-generated UUID) and deadlines extend it to create a semester and cycle
+in one transaction. A matching retry with the same id returns the saved resource
+and optional cycle; changed content returns 409 CREATION_KEY_REUSED. Concurrent
+retries converge through the primary/unique keys. A different id for an occupied
+term still conflicts. Retry identity lasts for the mounted creation session;
+uncertain responses lock fields/Cancel until Retry Create confirms the result.
+This uses existing primary keys and needs no schema migration.
+
+PUT /api/semesters/{semesterId} adds no-cycle configuration:
+{expectedRevision,startsOn,endsOn,timeZone,deadlines:{signupDeadline,
+observationDeadline,feedbackDeadline}} -> {semester:Semester,cycle:Cycle}.
+It requires cycles.manage, same-origin JSON and existing validation. A Serializable
+transaction checks the semester revision and absence of a cycle, updates dates/zone
+and creates one cycle. Errors roll back both writes. Stale state or an existing
+cycle returns 409; use Reload latest settings after an uncertain outcome.
+GET /api/semesters already provides no-cycle reads, so no read endpoint was added.
+Existing cycles still use PUT /api/evaluation-cycles/{id}/settings with both
+revisions. UTC conversion, unedited exact instants, DST ambiguity rejection and
+deadline ordering remain. Changing the zone explicitly reinterprets shown wall
+times. Existing semester/cycle uniqueness and deletion safeguards remain unchanged.
+This supersedes earlier guidance to navigate to Evaluation Cycles after creating
+a semester, and the earlier statement that no standalone semester update exists.
+
+Focused verification commands:
+node --test tests/unit/semester-settings.test.mjs tests/unit/configuration.test.mjs tests/unit/ac-configuration-frontend.test.mjs
+node --env-file-if-exists=.env --env-file-if-exists=.env.local tests/integration/semester-settings.mjs
+The integration check uses a generated local schema and drops only that schema.

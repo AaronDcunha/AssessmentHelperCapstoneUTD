@@ -62,3 +62,11 @@ two revision-aware saves, New Semester, delete Cancel/confirmation and cycle rem
 and content overflow checks at 1280px and 390px. All browser configuration writes were
 intercepted. Report/survey layouts and Faculty cycle/form interaction have component
 regression coverage; those populated screens were not exercised in a live browser.
+
+
+November 5, 2026 Task 4 supersedes the separate semester management UI above:
+Semester Settings now selects all semesters and creates/configures/deletes them
+inline. Optional UUID/deadlines on POST /api/semesters create semester/cycle
+atomically with retry recovery. PUT /api/semesters/{id} configures a semester
+without a cycle and creates its cycle atomically. See AC_CONFIGURATION_BACKEND.md
+for the extended contract and AC_CONFIGURATION_FRONTEND.md for verification limits.

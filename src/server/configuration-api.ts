@@ -1,4 +1,4 @@
-import { createSemester, deleteSemester } from "./services/semesters";
+import { createSemester, configureSemester, deleteSemester } from "./services/semesters";
 import { getCurrentUser } from "./permissions";
 import { getPrisma } from "./prisma";
 import type { ConfigurationUser } from "./configuration-validation";
@@ -18,6 +18,7 @@ async function execute(operation:Operation,user:ConfigurationUser,url:URL,params
     case "cycles.create": return createCycle(prisma,user,body);
     case "cycles.update": return updateCycle(prisma,user,params.cycleId,body);
     case "cycles.settings": return updateSettings(prisma,user,params.cycleId,body);
+    case "semesters.configure": return configureSemester(prisma,user,params.semesterId,body);
     case "semesters.create": return createSemester(prisma,user,body);
     case "semesters.delete": return deleteSemester(prisma,user,params.semesterId,body);
     case "semesters.list": return getSemesters(prisma,user,url);

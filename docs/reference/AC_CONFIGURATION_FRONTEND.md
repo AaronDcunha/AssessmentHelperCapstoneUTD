@@ -144,3 +144,26 @@ without changing authentication code or environment files.
 Cycle creation lists semesters newest first, with Fall, Summer, then Spring within
 each year. Ordering is applied after all semester API pages are loaded; existing-cycle
 labels and disabled options retain their chronological position.
+
+
+November 5, 2026 Task 4 - unified Semester Settings:
+Replaced the separate semester management list and cycle selector with one
+newest-first semester dropdown and shared creation/editing form. All semesters,
+including those without cycles, are available. Dates, time zone and deadlines
+are configurable inline. Cancel restores saved values or exits creation;
+switching/New Semester protects unsaved edits. Delete lives in the selected
+form with permanent dependent-record confirmation. Creation selects its result;
+deletion clears selection. Existing cycle saves retain both revision checks,
+exact unchanged deadline instants, DST/order validation and permission checks.
+Optional UUID/deadlines on semester POST create semester/cycle atomically and
+support safe retries after uncertain responses. PUT /api/semesters/{id} atomically
+configures a no-cycle semester and creates its cycle. No migration is needed.
+See AC_CONFIGURATION_BACKEND.md for the extended contract and retry behavior.
+This supersedes the older separate management/navigation workflow.
+
+Verification: all 262 unit tests, lint, TypeScript and production build passed.
+Added focused UI regressions and isolated database atomicity/retry tests;
+updated tests/e2e/semester-management.mjs for the unified workflow. Database
+execution could not run: localhost:5432 refused connections, including outside
+the sandbox. Browser checks were not run; no application/CDP server was running.
+No application database records were changed.

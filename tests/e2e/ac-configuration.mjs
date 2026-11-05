@@ -78,7 +78,7 @@ handlers.set('Fetch.requestPaused', async event => {
     if (mode === 'network') { mode = ''; await send('Fetch.failRequest', { requestId: event.requestId, errorReason: 'InternetDisconnected' }); return; }
     if (mode.startsWith('error')) { status = Number(mode.slice(5)); mode = ''; body = { error: { code: 'FIXTURE_ERROR', message: status === 409 ? 'Another editor saved a newer revision.' : 'Fixture request rejected.' } }; }
     else if (method === 'GET') {
-      if (path === '/api/evaluation-cycles') body = list(cycles);
+      if (path === '/api/evaluation-cycles') body = list(cycles.filter(c => !url.searchParams.has('semesterId') || c.semester.id === url.searchParams.get('semesterId')));
       else if (path === '/api/semesters') body = list(semesters);
       else if (/^\/api\/evaluation-cycles\/[^/]+$/.test(path)) body = cycles.find(item => item.id === path.split('/').at(-1));
       else if (path === '/api/observation-templates') body = list(templates.map(({ id, title, status, publishedAt, revision }) => ({ id, title, status, publishedAt, revision })));
@@ -141,9 +141,9 @@ try {
   await value('[name="signupDeadline"]', '2027-01-02T13:00'); await click('Save Changes'); await wait(`location.pathname==='/ac/cycles'`);
   assert.equal(writes.at(-1).input.expectedRevision, 0); assert.equal('semesterId' in writes.at(-1).input, false);
 
-  await navigate('/ac/semester'); await wait(`document.querySelector('[name="cycleId"]')?.options.length===4`);
+  await navigate('/ac/semester'); await wait(`document.querySelector('[name="semesterId"]')?.options.length===4`);
   assert.equal(await evaluate(`!!document.querySelector('[name="startsOn"]')`), false, 'Multiple cycles require explicit selection');
-  await value('[name="cycleId"]', uuid(11)); await textIncludes('Semester boundaries have not been configured');
+  await value('[name="semesterId"]', uuid(1)); await textIncludes('Semester boundaries have not been configured');
   await value('[name="startsOn"]', '2026-08-20'); await value('[name="endsOn"]', '2026-12-20');
   await click('Save Settings'); await textIncludes('Settings saved.');
   assert.equal(writes.at(-1).input.deadlines.signupDeadline, '2026-10-31T23:59:22.123Z');
@@ -153,11 +153,13 @@ try {
   mode = 'error409'; await value('[name="startsOn"]', '2026-08-23'); await click('Save Settings'); await textIncludes('newer revision');
   assert.equal(await evaluate(`document.querySelector('[name="startsOn"]').value`), '2026-08-23');
   await click('Reload latest settings'); await wait(`document.querySelector('[name="startsOn"]').value==='2026-08-21'`);
-  // A completed save for the old selection must not select that cycle again.
+  // Semester switching remains disabled until the pending save completes.
   mode = 'slow-settings'; await value('[name="startsOn"]', '2026-08-24'); await click('Save Settings');
-  await value('[name="cycleId"]', uuid(12)); await textIncludes('Semester boundaries have not been configured'); await pause(500);
-  assert.equal(await evaluate(`document.querySelector('[name="cycleId"]').value`), uuid(12));
-  await value('[name="cycleId"]', uuid(11)); await wait(`document.querySelector('[name="startsOn"]')?.value==='2026-08-24'`);
+  assert.equal(await evaluate(`document.querySelector('[name="semesterId"]').disabled`), true);
+  await wait(`!document.querySelector('[name="semesterId"]').disabled`);
+  await value('[name="semesterId"]', uuid(2)); await textIncludes('Semester boundaries have not been configured'); await pause(500);
+  assert.equal(await evaluate(`document.querySelector('[name="semesterId"]').value`), uuid(2));
+  await value('[name="semesterId"]', uuid(1)); await wait(`document.querySelector('[name="startsOn"]')?.value==='2026-08-24'`);
   await shot('semester-desktop');
   await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
   assert.equal(await evaluate(`document.documentElement.scrollWidth<=innerWidth`), true); await shot('semester-mobile');

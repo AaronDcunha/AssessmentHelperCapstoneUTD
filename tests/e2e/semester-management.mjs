@@ -50,54 +50,72 @@ async function click(text) { assert(await evaluate(`(() => {const e=[...document
 async function textIncludes(text) { await wait(`document.querySelector('main')?.textContent.includes(${JSON.stringify(text)})`); }
 
 const uuid = n => `00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
-let semesters = [{ id: uuid(1), name: 'Fall 2026', startsOn: '2026-08-31', endsOn: '2026-12-16', timeZone: 'America/Chicago', revision: 0 }];
-let cycle = { id: uuid(2), semester: semesters[0], revision: 0, signupDeadline: '2026-10-31T22:30:00.000Z', observationDeadline: '2026-11-30T23:00:00.000Z', feedbackDeadline: '2026-12-20T23:00:00.000Z', allowedActions: ['update','updateSettings'] };
+let semesters = [
+ { id: uuid(1), name: 'Fall 2026', year: 2026, season: 'Fall', startsOn: '2026-08-31', endsOn: '2026-12-16', timeZone: 'America/Chicago', revision: 0 },
+ { id: uuid(3), name: 'Spring 2027', year: 2027, season: 'Spring', startsOn: null, endsOn: null, timeZone: 'America/Chicago', revision: 0 },
+];
+let cycles = [{ id: uuid(2), semester: semesters[0], revision: 0, signupDeadline: '2026-10-31T22:30:00.123Z', observationDeadline: '2026-11-30T23:00:00.000Z', feedbackDeadline: '2026-12-20T23:00:00.000Z', allowedActions: ['update','updateSettings'] }];
 const writes = []; let failure;
 async function fulfill(event, body, status=200) { await send('Fetch.fulfillRequest',{requestId:event.requestId,responseCode:status,responseHeaders:[{name:'Content-Type',value:'application/json'}],body:Buffer.from(JSON.stringify(body)).toString('base64')}); }
 handlers.set('Fetch.requestPaused',async event => {
  try {
-  const path=new URL(event.request.url).pathname, method=event.request.method;
+  const url=new URL(event.request.url), path=url.pathname, method=event.request.method;
   if(path.startsWith('/api/auth/')||path==='/api/me'){await send('Fetch.continueRequest',{requestId:event.requestId});return;}
+  const list=items=>({items,pageInfo:{hasMore:false,nextCursor:null}});
   if(method==='GET'){
-   const list=items=>({items,pageInfo:{hasMore:false,nextCursor:null}});
    if(path==='/api/semesters')await fulfill(event,list(semesters));
-   else if(path==='/api/evaluation-cycles')await fulfill(event,list(cycle?[cycle]:[]));
-   else if(path===`/api/evaluation-cycles/${uuid(2)}`)await fulfill(event,cycle);
+   else if(path==='/api/evaluation-cycles')await fulfill(event,list(cycles.filter(c=>!url.searchParams.has('semesterId')||c.semester.id===url.searchParams.get('semesterId'))));
+   else if(path.startsWith('/api/evaluation-cycles/'))await fulfill(event,cycles.find(c=>path.endsWith(c.id)));
    else await fulfill(event,list([]));
    return;
   }
   const body=JSON.parse(event.request.postData??'{}'); writes.push({path,method,body});
   if(method==='POST'&&path==='/api/semesters'){
-   assert.equal(body.year,2027);assert.equal(body.season,'Spring');
-   const semester={id:uuid(3),name:'Spring 2027',startsOn:body.startsOn,endsOn:body.endsOn,timeZone:body.timeZone,revision:0};semesters.push(semester);await fulfill(event,semester,201);
+   assert.equal(body.year,2028);assert.equal(body.season,'Spring');assert.ok(body.id);assert.ok(body.deadlines);
+   const semester={id:body.id,name:'Spring 2028',year:2028,season:'Spring',startsOn:body.startsOn,endsOn:body.endsOn,timeZone:body.timeZone,revision:0};
+   const cycle={id:uuid(5),semester,revision:0,...body.deadlines,allowedActions:['updateSettings']};semesters.push(semester);cycles.push(cycle);await fulfill(event,{...semester,cycle},201);
   }else if(method==='PUT'&&path.endsWith('/settings')){
+   const cycle=cycles.find(c=>path.includes(c.id));
    assert.equal(body.expectedCycleRevision,cycle.revision);assert.equal(body.expectedSemesterRevision,cycle.semester.revision);
    assert.deepEqual(body.deadlines,{signupDeadline:cycle.signupDeadline,observationDeadline:cycle.observationDeadline,feedbackDeadline:cycle.feedbackDeadline});
-   cycle={...cycle,...body.deadlines,revision:cycle.revision+1,semester:{...cycle.semester,...body.semester,revision:cycle.semester.revision+1}};semesters[0]=cycle.semester;await fulfill(event,{cycle,semester:cycle.semester});
+   const saved={...cycle,...body.deadlines,revision:cycle.revision+1,semester:{...cycle.semester,...body.semester,revision:cycle.semester.revision+1}};
+   cycles=cycles.map(c=>c.id===saved.id?saved:c);semesters=semesters.map(s=>s.id===saved.semester.id?saved.semester:s);await fulfill(event,{cycle:saved,semester:saved.semester});
+  }else if(method==='PUT'&&path===`/api/semesters/${uuid(3)}`){
+   assert.equal(body.expectedRevision,0);
+   const semester={...semesters.find(s=>s.id===uuid(3)),startsOn:body.startsOn,endsOn:body.endsOn,timeZone:body.timeZone,revision:1};
+   const cycle={id:uuid(4),semester,revision:0,...body.deadlines,allowedActions:['updateSettings']};semesters=semesters.map(s=>s.id===semester.id?semester:s);cycles.push(cycle);await fulfill(event,{semester,cycle});
   }else if(method==='DELETE'&&path===`/api/semesters/${uuid(1)}`){
-   assert.deepEqual(body,{expectedRevision:2,expectedCycleRevision:2});semesters=semesters.filter(s=>s.id!==uuid(1));cycle=null;await fulfill(event,{deleted:true});
+   assert.deepEqual(body,{expectedRevision:2,expectedCycleRevision:2});semesters=semesters.filter(s=>s.id!==uuid(1));cycles=cycles.filter(c=>c.semester.id!==uuid(1));await fulfill(event,{deleted:true});
   }else throw Error('Unexpected business mutation '+method+' '+path);
  }catch(error){failure=error;await send('Fetch.failRequest',{requestId:event.requestId,errorReason:'Failed'}).catch(()=>{});}
 });
+async function field(name,next){await value(`[name="${name}"]`,next);}
+async function select(id){await field('semesterId',id);}
+async function fill(year) {
+ for(const [name,next]of Object.entries({startsOn:`${year}-01-11`,endsOn:`${year}-05-14`,signupDeadline:`${year}-02-01T12:00`,observationDeadline:`${year}-03-01T12:00`,feedbackDeadline:`${year}-06-01T12:00`}))await field(name,next);
+}
 try{
  await send('Page.enable');await send('Runtime.enable');await send('Network.enable');
  for(const [name,value]of jar)await send('Network.setCookie',{name,value,url:base,httpOnly:true});
  await send('Fetch.enable',{patterns:[{urlPattern:`${base}/api/*`}]});
- await navigate('/ac/semester');await textIncludes('Save Settings');await textIncludes('Delete Fall 2026');
+ await navigate('/ac/semester');await wait(`document.querySelector('[name="semesterId"] option[value="${uuid(1)}"]')`);
+ assert.deepEqual(await evaluate(`[...document.querySelector('[name="semesterId"]').options].filter(o=>o.value).map(o=>o.textContent)`),['Spring 2027','Fall 2026']);
+ await select(uuid(1));await textIncludes('Save Settings');
  assert.equal(await evaluate(`document.querySelector('[name="signupDeadline"]').value`),'2026-10-31T17:30');
- await click('Save Settings');await textIncludes('Settings saved.');await wait(`!([...document.querySelectorAll('main button')].find(b=>b.textContent==='Save Settings')?.disabled)`);
- await click('Save Settings');await wait(`document.querySelector('main').textContent.includes('Settings saved.')`);await wait(`!([...document.querySelectorAll('main button')].find(b=>b.textContent==='Save Settings')?.disabled)`);
- assert.equal(writes.filter(w=>w.method==='PUT').length,2);
- await click('New Semester');
- for(const [name,next]of Object.entries({year:'2027',season:'Spring',startsOn:'2027-01-11',endsOn:'2027-05-14'}))await value(`[name="${name}"]`,next);
- await click('Create Semester');await textIncludes('Semester created.');await textIncludes('Delete Spring 2027');
+ for(let n=1;n<=2;n++){await click('Save Settings');await textIncludes('Settings saved.');await wait(`!([...document.querySelectorAll('main button')].find(b=>b.textContent==='Save Settings')?.disabled)`);}
+ assert.equal(writes.filter(w=>w.path.endsWith('/settings')).length,2);
+ await field('startsOn','2026-09-01');await click('Cancel');assert.equal(await evaluate(`document.querySelector('[name="startsOn"]').value`),'2026-08-31');
+ await select(uuid(3));await textIncludes('This semester has no evaluation cycle.');await fill(2027);await click('Save and Create Cycle');await textIncludes('Settings saved.');
+ await click('New Semester');await field('year','2028');await fill(2028);await click('Create Semester');await textIncludes('Semester and evaluation cycle created.');
+ assert.equal(await evaluate(`document.querySelector('[name="semesterId"]').selectedOptions[0].textContent`),'Spring 2028');
  for(const width of [1280,390]){
   await send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});
   assert.equal(await evaluate(`document.querySelector('main').scrollWidth<=document.querySelector('main').clientWidth+1`),true,'No horizontal content overflow at '+width);
  }
- await click('Delete Fall 2026');await textIncludes('This permanently deletes');assert.equal(writes.filter(w=>w.method==='DELETE').length,0);
- await click('Cancel');assert.equal(writes.filter(w=>w.method==='DELETE').length,0);
- await click('Delete Fall 2026');await click('Permanently Delete Semester');await textIncludes('Semester and its evaluation cycle deleted.');
+ await select(uuid(1));await textIncludes('Save Settings');await click('Delete Semester');await textIncludes('This permanently deletes');assert.equal(writes.filter(w=>w.method==='DELETE').length,0);
+ await click('Keep Semester');assert.equal(writes.filter(w=>w.method==='DELETE').length,0);
+ await click('Delete Semester');await click('Permanently Delete Semester');await textIncludes('Semester and dependent records deleted.');
+ assert.equal(await evaluate(`document.querySelector('[name="semesterId"]').value`),'');
  assert.equal(writes.filter(w=>w.method==='DELETE').length,1);if(failure)throw failure;
- console.log('Passed browser Semester Settings: exact zone input, two revision-aware saves, New Semester, desktop/mobile overflow, delete cancel/confirmation and cycle removal. All business writes intercepted.');
+ console.log('Passed unified Semester Settings browser workflow, inline no-cycle configuration, exact saves, create/select, Cancel, confirmed delete and responsive overflow checks. All writes intercepted.');
 }finally{await send('Fetch.disable').catch(()=>{});socket.close();await fetch(`${debug}/json/close/${target.id}`).catch(()=>{});}
