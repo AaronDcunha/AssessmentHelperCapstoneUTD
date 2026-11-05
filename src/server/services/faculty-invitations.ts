@@ -8,6 +8,8 @@ import { meetingOccurrence } from "./faculty-meetings";
 import { facultyDate, type WeeklyMeeting } from "./faculty-calendar";
 import { sendNotification } from "./notification-delivery";
 import { requireCurrentReleasedCandidate } from "../recommendation-scope";
+import { currentLateAcceptanceCycle, lateAcceptanceInclude } from "../queries/late-acceptance";
+import { lateAcceptanceState } from "./late-acceptance-state";
 
 type Tx = Prisma.TransactionClient;
 type Identity = Pick<AccountUser, "id" | "permissions">;
@@ -249,17 +251,20 @@ export async function requestLateAcceptance(user: Identity, body: unknown) {
 export async function reviewLateAcceptance(user: Identity, approvalId: string, body: unknown) {
   requireFacultyGrants(user, "late-acceptance.review"); workflowId(approvalId);
   const input = workflowInput(body, ["decision"]);
-  if (!["approved", "rejected"].includes(String(input.decision))) throw new FacultyActionError("Choose approved or rejected.", 400);
+  if (input.decision !== "approved" && input.decision !== "rejected") throw new FacultyActionError("Choose approved or rejected.", 400);
   return facultyTransaction(async db => {
-    const approval = await db.lateAcceptanceApproval.findUnique({ where: { approvalId }, include: { attempt: { include: { candidate: true } } } });
+    const approval = await db.lateAcceptanceApproval.findUnique({ where: { approvalId }, include: lateAcceptanceInclude });
     if (!approval) throw new FacultyActionError("Approval request not found.", 404);
-    const record = await workflowObservation(db, approval.attempt.candidate.observationId); requireCurrentReleasedCandidate(record, approval.attempt.candidate); await touchObservation(db, record);
-    const now = new Date(); open(record, now);
-    const latest = await db.invitationAttempt.findFirst({ where: { candidateId: approval.attempt.candidateId }, orderBy: { number: "desc" } });
-    if (approval.status !== "PENDING" || latest?.attemptId !== approval.attemptId || record.observerId || latest.expiresAt > now) throw new FacultyActionError("The approval request was decided or its invitation was superseded.");
-    await db.lateAcceptanceApproval.update({ where: { approvalId }, data: { status: String(input.decision).toUpperCase(), decidedAt: now, decidedBy: user.id } });
+    const now = new Date(), current = await currentLateAcceptanceCycle(db, now);
+    if (current?.cycleId !== approval.attempt.candidate.observation.cycleId) throw new FacultyActionError("This request is outside the current configured cycle.");
+    const state = lateAcceptanceState(approval, now);
+    if (!state.actionable) throw new FacultyActionError(state.reason!);
+    const record = await workflowObservation(db, approval.attempt.candidate.observationId);
+    await touchObservation(db, record);
+    const saved = await db.lateAcceptanceApproval.updateMany({ where: { approvalId, status: "PENDING" }, data: { status: String(input.decision).toUpperCase(), decidedAt: now, decidedBy: user.id } });
+    if (saved.count !== 1) throw new FacultyActionError("This request has already been decided. Refresh requests.");
     if (input.decision === "approved") await invite(db, approval.attempt.candidateId, record, now);
-    return { message: input.decision === "approved" ? "A new response window is open. The observer must accept normally." : "Approval request rejected." };
+    return { request: { id: approvalId, status: String(input.decision).toUpperCase(), decidedAt: now.toISOString() }, message: input.decision === "approved" ? "A new response window is open. The observer must accept normally." : "Approval request rejected." };
   });
 }
 

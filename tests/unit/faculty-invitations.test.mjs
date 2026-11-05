@@ -175,7 +175,10 @@ test('every invitation/selection/approval mutation rejects draft, historical and
       if (kind === 'draft' || kind === 'historical') f.candidate.recommendationListId = id(80);
       if (kind === 'unpublished') f.record.currentReleasedList.publishedAt = null;
       if (kind === 'no-pointer') f.record.currentReleasedListId = null;
-      f.db.lateAcceptanceApproval = { findUnique: async () => ({ attempt: { candidate: f.candidate } }) };
+      f.record.cycleId = id(7);
+      f.candidate.observation = f.record;
+      f.db.evaluationCycle = { findMany: async () => [{ cycleId: id(7), semester: { startsOn: new Date('2000-01-01'), endsOn: new Date('2099-01-01'), timeZone: 'America/Chicago' } }] };
+      f.db.lateAcceptanceApproval = { findUnique: async () => ({ status: 'PENDING', attempt: { candidate: f.candidate } }) };
       const actions = runtime(f.db);
       await assert.rejects(name === 'reviewLateAcceptance' ? actions[name](actor, id(70), body) : actions[name](actor, body), error => error.status === 409, `${kind}: ${name}`);
       assert.equal(f.writes.some(write => ['candidate', 'attempt', 'notification', 'observation'].includes(write.name)), false);
