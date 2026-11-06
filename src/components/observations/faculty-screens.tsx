@@ -149,7 +149,7 @@ export function ConfirmedObserversScreen() {
 export function RequestsScreen({ data }: { data: FacultyWorkflow | null }) {
   const router = useRouter();
   const [feedback, setFeedback] = useState("");
-  const [pending, setPending] = useState<string | null>(null);
+  const [pending, setPending] = useState<{ id: string; action: "accept" | "decline" | "late-acceptance" } | null>(null);
   const [selection, setSelection] = useState<Record<string, string>>({});
   const [declined, setDeclined] = useState<string[]>([]);
   const requests = data?.links?.requests.filter(request => !declined.includes(request.id)) ?? [];
@@ -161,26 +161,26 @@ export function RequestsScreen({ data }: { data: FacultyWorkflow | null }) {
       <div className="space-y-ah-8"><p>{request.observee}</p><p>{request.course}.{request.section}</p><p className="text-caption text-muted">Respond before {dateTime(request.expiresAt, data?.dashboard.cycle?.timeZone)}</p></div>
       <fieldset className="space-y-ah-12"><legend className="sr-only">Choose a proposed date for {request.observee}</legend>
         {!request.options.length && <p className="text-muted">No unambiguous proposed meetings are available.</p>}
-        {request.options.map(option => <label key={option.id} className="flex items-center gap-ah-12 text-caption"><input type="radio" name={request.id} disabled={request.expired || request.status === "ACCEPTED"} checked={selection[request.id] === option.id} onChange={() => setSelection(previous => ({ ...previous, [request.id]: option.id }))} />{option.date} · {option.meetingTime}</label>)}
+        {request.options.map(option => <label key={option.id} className="flex items-center gap-ah-12 text-caption"><input type="radio" name={request.id} disabled={pending !== null || !data?.links?.allowedActions.respond || request.expired || request.status !== "PENDING"} checked={selection[request.id] === option.id} onChange={() => setSelection(previous => ({ ...previous, [request.id]: option.id }))} />{option.date} · {option.meetingTime}</label>)}
       </fieldset>
-      <div className="space-y-ah-12"><Button fullWidth disabled={pending !== null || !selection[request.id] || request.expired || request.status === "ACCEPTED"} onClick={async () => {
-        setPending(request.id); setFeedback("");
+      <div className="space-y-ah-12"><Button fullWidth disabled={pending !== null || !data?.links?.allowedActions.respond || !selection[request.id] || request.expired || request.status !== "PENDING"} onClick={async () => {
+        setPending({ id: request.id, action: "accept" }); setFeedback("");
         try { const result = await postFacultyAction<{ message: string }>("requests/accept", { candidateId: request.id, meetingOptionId: selection[request.id], attemptId: request.attemptId }); setFeedback(result.message); router.refresh(); }
         catch (error) { setFeedback(error instanceof Error ? error.message : "Acceptance failed."); }
         finally { setPending(null); }
-      }}>{request.status === "ACCEPTED" ? "Availability recorded" : "Accept selected date"}</Button>
-        {request.expired && request.status !== "ACCEPTED" && <Button variant="secondary" disabled={pending !== null || !!request.approvalStatus} onClick={async () => {
-          setPending(request.id);
+      }}>{pending?.id === request.id && pending.action === "accept" ? "Accepting…" : request.status === "ACCEPTED" ? "Availability recorded" : "Accept selected date"}</Button>
+        {request.expired && request.status !== "ACCEPTED" && <Button variant="secondary" disabled={pending !== null || !data?.links?.allowedActions.lateAcceptance || !!request.approvalStatus} onClick={async () => {
+          setPending({ id: request.id, action: "late-acceptance" }); setFeedback("");
           try { const result = await postFacultyAction<{ message: string }>("requests/late-acceptance", { candidateId: request.id, attemptId: request.attemptId }); setFeedback(result.message); router.refresh(); }
           catch (error) { setFeedback(error instanceof Error ? error.message : "Approval request failed."); }
           finally { setPending(null); }
-        }}>{request.approvalStatus ? `Approval ${request.approvalStatus.toLowerCase()}` : "Request AC approval"}</Button>}
-        <Button variant="secondary" fullWidth disabled={pending !== null || request.expired || request.status === "ACCEPTED"} onClick={async () => {
-          setPending(request.id); setFeedback("");
+        }}>{pending?.id === request.id && pending.action === "late-acceptance" ? "Requesting approval…" : request.approvalStatus ? `Approval ${request.approvalStatus.toLowerCase()}` : "Request AC approval"}</Button>}
+        <Button variant="secondary" fullWidth disabled={pending !== null || !data?.links?.allowedActions.respond || request.expired || request.status !== "PENDING"} onClick={async () => {
+          setPending({ id: request.id, action: "decline" }); setFeedback("");
           try { const response = await postFacultyAction<{ message: string }>("requests/decline", { candidateId: request.id, attemptId: request.attemptId }); setDeclined(previous => [...previous, request.id]); setFeedback(response.message); router.refresh(); }
           catch (error) { setFeedback(error instanceof Error ? error.message : "The invitation was not declined."); }
           finally { setPending(null); }
-        }}>{pending === request.id ? "Declining…" : "Decline"}</Button></div>
+        }}>{pending?.id === request.id && pending.action === "decline" ? "Declining…" : "Decline"}</Button></div>
     </div>)}
     {feedback && <p role="status" className="text-muted">{feedback}</p>}
     <p className="text-muted">Acceptance offers your selected date. The observee still chooses the final observer.</p>

@@ -223,7 +223,7 @@ export async function declineFacultyInvitation(user: Identity, body: unknown) {
     if (!attempt || attempt.attemptId !== attemptId || record.observerId || candidate.status !== "PENDING" || attempt.status !== "PENDING" || attempt.invitedAt > now || attempt.expiresAt <= now) throw new FacultyActionError("This invitation changed, expired or was already answered.");
     await db.observationCandidate.update({ where: { candidateId }, data: { status: "DECLINED", respondedAt: now } });
     await db.invitationAttempt.update({ where: { attemptId }, data: { status: "DECLINED", respondedAt: now } });
-    await notify(db, record.signup.professor.userId, "Observer request declined", "An invited observer declined your observation request.", { eventKey: `invitation-declined:${attemptId}`, observationId: record.observationId });
+    await notify(db, record.signup.professor.userId, "Observer request declined", "An invited observer declined your observation request. Please review your remaining observer options.", { eventKey: `invitation-declined:${attemptId}`, observationId: record.observationId });
     return { message: "Invitation declined." };
   });
 }
@@ -484,8 +484,11 @@ export async function selectFacultyObserver(user: Identity, body: unknown) {
     await db.observation.update({ where: { observationId: record.observationId }, data: { observerId: candidate.professorId, scheduledAt: option.startsAt, scheduledEndsAt: option.endsAt, observerSelectedAt: now, observerSelectedById: user.id, status: "CONFIRMED" } });
     await db.observationCandidate.update({ where: { candidateId }, data: { status: "SELECTED" } });
     const others = await db.observationCandidate.findMany({ where: { observationId: record.observationId, recommendationListId: candidate.recommendationListId, candidateId: { not: candidateId }, status: { in: ["PENDING", "ACCEPTED", "ELIGIBLE", "EXPIRED"] } }, include: { professor: true } });
+    // Snapshot the recorded response states before cancellation. A PENDING row
+    // still qualifies if the expiry scheduler has not updated it yet.
+    const closureRecipientIds = others.filter(other => other.invitedAt && !other.cancelledAt && ["PENDING", "ACCEPTED"].includes(other.status)).map(other => other.professor.userId);
     await cancelRecommendationInvitations(db, { candidateId: { in: others.map(other => other.candidateId) } }, now);
-    for (const other of others.filter(other => other.invitedAt)) await notify(db, other.professor.userId, "Observation invitation closed", "Another observer was selected for this observation.", { eventKey: `invitation-closed:${candidateId}`, observationId: record.observationId });
+    await sendNotification({ recipients: { userIds: closureRecipientIds }, email: true, title: "Observation invitation closed", message: "Thank you for your time and willingness to participate in this observation. Another observer has been selected, so your invitation is now closed. No further action is needed.", type: "FACULTY_WORKFLOW", eventKey: `invitation-closed:${candidateId}`, observationId: record.observationId }, db);
     await notify(db, candidate.professor.userId, "Observation appointment confirmed", "You were selected for the meeting you accepted.", { eventKey: `appointment-confirmed:${candidateId}`, observationId: record.observationId });
     await notify(db, user.id, "Observation appointment confirmed", "Your observer and their selected meeting are confirmed.", { eventKey: `appointment-confirmed:${candidateId}`, observationId: record.observationId });
     return { message: "Observer selected and appointment confirmed. Remaining invitations were cancelled." };

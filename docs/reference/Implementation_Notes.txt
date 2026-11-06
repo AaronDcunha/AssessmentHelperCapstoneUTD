@@ -1,3 +1,23 @@
+November 6, 2026 Issue #94 invitation declines and closure notifications:
+The existing Faculty Accept/Decline routes and decline service are retained.
+Recommendations show readable invitation statuses, including Declined. Request
+controls use response grants and separate Accept/Decline/AC-approval busy labels;
+late approval retains its independent permission. Decline notifications explicitly
+ask the observee to review remaining observer options, using the existing attempt
+event key and Serializable transaction.
+Final selection snapshots closure recipients before cancellation: only invited,
+non-cancelled PENDING/ACCEPTED members of the current published list, excluding the
+selected observer. Recorded PENDING qualifies even if its window elapsed before
+the expiry scheduler ran; response-time deadline checks remain enforced. DECLINED,
+EXPIRED, ELIGIBLE, never-invited and previously cancelled members receive no closure
+notification. Broader cancellation still closes expired/uncontacted memberships,
+preserving attempt responses, accepted meetings, cancellation times and approvals.
+sendNotification receives account UUIDs, observation context, email:true and the
+existing transaction. Stable keys, notification uniqueness and the insert-only
+email outbox preserve deduplication and rollback. Selected-observer confirmation
+remains separate. No schema, route, resend-policy or application data changes.
+See FACULTY_DASHBOARD_BACKEND.md for focused verification commands.
+
 November 2, 2026 assessment revision correction:
 Assessment revisions recursively sort object keys before hashing, preserving
 array order. PostgreSQL jsonb field reordering no longer produces a false stale

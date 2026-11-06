@@ -13,7 +13,7 @@ function harness(file, post = async () => ({ message: 'Saved' })) {
   const mock = name => {
     if (name === 'react') return react;
     if (name === 'react/jsx-runtime') return require(name);
-    if (name === 'next/navigation') return { useRouter: () => ({ replace: path => navigations.push(path), refresh() {} }) };
+    if (name === 'next/navigation') return { useRouter: () => ({ replace: path => navigations.push(path), refresh: () => navigations.push('refresh') }) };
     if (name.endsWith('faculty-api')) return { postFacultyAction: post };
     if (name.endsWith('faculty-routes')) return { facultyRoutes: { details: '/observations/details' } };
     return new Proxy({}, { get: (_, key) => String(key) });
@@ -61,4 +61,84 @@ test('failed signup loading offers retry and never claims there are no assigned 
   const app = harness('../../src/components/observations/faculty-screens.tsx');
   const shell = app.exports.SignupScreen({ data: null }), tree = app.render(shell.type, shell.props);
   const text = JSON.stringify(tree); assert.ok(text.includes('Unable to load your courses')); assert.ok(text.includes('Retry')); assert.ok(!text.includes('No assigned course'));
+});
+
+const invitationData = (request = {}, actions = {}) => ({
+  dashboard: { access: { observations: true }, cycle: { timeZone: 'America/Chicago' } },
+  links: { allowedActions: { respond: true, lateAcceptance: true, ...actions }, requests: [{
+    id: 'candidate', attemptId: 'attempt', observee: 'Observee', course: 'TEST', section: '1',
+    expiresAt: '2098-01-01T00:00:00Z', expired: false, status: 'PENDING', approvalStatus: null,
+    options: [{ id: 'meeting', date: '2098-01-01', meetingTime: '10:00' }], ...request,
+  }] },
+});
+const button = (tree, label) => nodes(tree).find(node => node.type === 'Button' && node.props.children === label);
+
+test('decline needs no meeting, posts existing attempt payload, and removes the card only after success', async () => {
+  for (const fail of [false, true]) {
+    let settle; const calls = [];
+    const app = harness('../../src/components/observations/faculty-screens.tsx', (path, body) => {
+      calls.push({ path, body }); return new Promise((resolve, reject) => { settle = () => fail ? reject(Error('Reload invitation')) : resolve({ message: 'Invitation declined.' }); });
+    });
+    const render = () => app.render(app.exports.RequestsScreen, { data: invitationData() });
+    assert.equal(button(render(), 'Decline').props.disabled, false);
+    const work = button(render(), 'Decline').props.onClick();
+    assert.equal(button(render(), 'Declining…').props.disabled, true);
+    assert.equal(button(render(), 'Accept selected date').props.disabled, true);
+    assert.deepEqual(calls, [{ path: 'requests/decline', body: { candidateId: 'candidate', attemptId: 'attempt' } }]);
+    settle(); await work;
+    assert.equal(!!button(render(), 'Decline'), fail);
+    assert.ok(JSON.stringify(render()).includes(fail ? 'Reload invitation' : 'Invitation declined.'));
+    assert.deepEqual(app.navigations, fail ? [] : ['refresh']);
+  }
+});
+
+test('accept and late approval keep distinct busy labels and their existing payloads', async () => {
+  for (const late of [false, true]) {
+    let finish; const calls = [];
+    const app = harness('../../src/components/observations/faculty-screens.tsx', (path, body) => { calls.push({ path, body }); return new Promise(resolve => { finish = resolve; }); });
+    const data = invitationData(late ? { expired: true, status: 'EXPIRED' } : {}, late ? { respond: false } : {});
+    const render = () => app.render(app.exports.RequestsScreen, { data });
+    if (!late) nodes(render()).find(node => node.type === 'input' && node.props.type === 'radio').props.onChange();
+    const control = button(render(), late ? 'Request AC approval' : 'Accept selected date');
+    assert.equal(control.props.disabled, false);
+    const work = control.props.onClick();
+    assert.equal(button(render(), late ? 'Requesting approval…' : 'Accepting…').props.disabled, true);
+    assert.ok(button(render(), 'Decline')); assert.ok(!button(render(), 'Declining…'));
+    finish({ message: 'Saved' }); await work;
+    assert.deepEqual(calls, [{ path: late ? 'requests/late-acceptance' : 'requests/accept', body: { candidateId: 'candidate', attemptId: 'attempt', ...(!late ? { meetingOptionId: 'meeting' } : {}) } }]);
+    assert.deepEqual(app.navigations, ['refresh']);
+  }
+});
+
+test('request controls respect response permissions, closed states, expiry and independent late approval grants', () => {
+  for (const [request, actions] of [[{}, { respond: false }], [{ status: 'ACCEPTED' }, {}], [{ status: 'CANCELLED' }, {}], [{ expired: true, status: 'EXPIRED' }, { lateAcceptance: false }]]) {
+    const app = harness('../../src/components/observations/faculty-screens.tsx');
+    const tree = app.render(app.exports.RequestsScreen, { data: invitationData(request, actions) });
+    assert.equal(button(tree, 'Decline').props.disabled, true);
+    assert.equal(button(tree, request.status === 'ACCEPTED' ? 'Availability recorded' : 'Accept selected date').props.disabled, true);
+    assert.equal(nodes(tree).find(node => node.type === 'input').props.disabled, true);
+    if (request.expired) assert.equal(button(tree, 'Request AC approval').props.disabled, true);
+  }
+});
+
+test('candidate statuses are readable while only eligible candidates can be invited and accepted candidates confirmed', async () => {
+  const calls = [], app = harness('../../src/components/observations/faculty-candidates.tsx', async (path, body) => { calls.push({ path, body }); return { message: 'Saved' }; });
+  const states = ['ELIGIBLE', 'PENDING', 'DECLINED', 'ACCEPTED', 'EXPIRED', 'CANCELLED'];
+  const data = { dashboard: { access: { observations: true } }, observation: { id: 'observation' }, links: { allowedActions: { invite: true, select: true }, recommendations: states.map((status, i) => ({ id: `candidate-${i}`, observationId: 'observation', name: status, status, dates: ['2098-01-01'], acceptedMeeting: { startsAt: '2098-01-01T16:00:00Z', endsAt: '2098-01-01T17:00:00Z', timeZone: 'America/Chicago' } })) } };
+  const render = accepted => app.render(app.exports.FacultyCandidates, { data, accepted });
+  let tree = render(false);
+  const badges = nodes(tree).filter(node => node.type === 'span').map(node => node.props.children);
+  assert.deepEqual(badges, ['Not invited', 'Pending', 'Declined', 'Accepted', 'Expired', 'Cancelled']);
+  const checkboxes = nodes(tree).filter(node => node.type === 'input');
+  assert.deepEqual(checkboxes.map(node => node.props.disabled), [false, true, true, true, true, true]);
+  checkboxes[0].props.onChange({ target: { checked: true } });
+  tree = render(false); assert.equal(button(tree, 'Send Requests').props.disabled, false);
+  await button(tree, 'Send Requests').props.onClick();
+  assert.deepEqual(calls[0], { path: 'invitations', body: { observationId: 'observation', candidateIds: ['candidate-0'] } });
+  tree = render(true); assert.equal(button(tree, 'Confirm Observer').props.disabled, false);
+  assert.deepEqual(nodes(tree).filter(node => node.type === 'span').map(node => node.props.children), ['Accepted']);
+  await button(tree, 'Confirm Observer').props.onClick();
+  assert.deepEqual(calls[1], { path: 'selected-observer', body: { candidateId: 'candidate-3' } });
+  const empty = app.render(app.exports.FacultyCandidates, { data: null });
+  assert.equal(nodes(empty).find(node => node.type === 'td').props.colSpan, 4);
 });
