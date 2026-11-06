@@ -41,7 +41,7 @@ export function Input({ label, hint, error, wrapperClassName, className, ...prop
   const field = useField({ ...props, hint, error });
   return (
     <Field {...{ label, hint, error, wrapperClassName }} id={field.id}>
-      <input {...props} {...field} aria-invalid={error ? true : props["aria-invalid"]} className={[controlClasses, error ? "border-danger" : "border-border", className].filter(Boolean).join(" ")} />
+      <input {...props} {...field} aria-invalid={error ? true : props["aria-invalid"]} className={[controlClasses, error ? "border-danger" : "border-muted", className].filter(Boolean).join(" ")} />
     </Field>
   );
 }
@@ -50,7 +50,7 @@ export function Textarea({ label, hint, error, wrapperClassName, className, rows
   const field = useField({ ...props, hint, error });
   return (
     <Field {...{ label, hint, error, wrapperClassName }} id={field.id}>
-      <textarea {...props} {...field} rows={rows} aria-invalid={error ? true : props["aria-invalid"]} className={[controlClasses, error ? "border-danger" : "border-border", className].filter(Boolean).join(" ")} />
+      <textarea {...props} {...field} rows={rows} aria-invalid={error ? true : props["aria-invalid"]} className={[controlClasses, error ? "border-danger" : "border-muted", className].filter(Boolean).join(" ")} />
     </Field>
   );
 }
@@ -59,7 +59,7 @@ export function Select({ label, hint, error, wrapperClassName, className, childr
   const field = useField({ ...props, hint, error });
   return (
     <Field {...{ label, hint, error, wrapperClassName }} id={field.id}>
-      <select {...props} {...field} aria-invalid={error ? true : props["aria-invalid"]} className={[controlClasses, error ? "border-danger" : "border-border", className].filter(Boolean).join(" ")}>
+      <select {...props} {...field} aria-invalid={error ? true : props["aria-invalid"]} className={[controlClasses, error ? "border-danger" : "border-muted", className].filter(Boolean).join(" ")}>
         {children}
       </select>
     </Field>

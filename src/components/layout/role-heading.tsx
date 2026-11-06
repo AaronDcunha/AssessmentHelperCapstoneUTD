@@ -1,7 +1,7 @@
 "use client";
 
 import type { ComponentProps, ReactNode } from "react";
-import { DownIcon, UpIcon } from "@/components/ui/icons";
+import { DownIcon } from "@/components/ui/icons";
 
 export type RoleHeadingProps = Omit<ComponentProps<"button">,
   "children" | "type" | "onClick" | "aria-expanded" | "aria-controls"
@@ -17,10 +17,10 @@ export type RoleHeadingProps = Omit<ComponentProps<"button">,
 
 /** Controlled sidebar disclosure. The parent owns state, panel markup, and permissions. */
 export function RoleHeading({
-  label, icon, expanded, onExpandedChange, "aria-controls": controls, className, ...props
+  label, icon: _icon, expanded, onExpandedChange, "aria-controls": controls, className, ...props
 }: RoleHeadingProps) {
-  const Chevron = expanded ? UpIcon : DownIcon;
-
+  // Keep the shared icon prop compatible; the compact disclosure uses its chevron instead.
+  void _icon;
   return (
     <button
       {...props}
@@ -29,13 +29,12 @@ export function RoleHeading({
       aria-controls={controls}
       onClick={() => onExpandedChange(!expanded)}
       className={[
-        "flex min-h-ah-64 w-[256px] max-w-full cursor-pointer items-center gap-ah-12 rounded-ah-0 p-ah-8 text-left text-label text-light transition-colors hover:bg-active focus-visible:outline-light disabled:cursor-not-allowed disabled:opacity-50",
+        "ah-role-heading flex min-h-[44px] w-full cursor-pointer items-center gap-ah-12 rounded-ah-8 px-ah-8 py-ah-12 text-left text-label font-semibold text-light transition-colors hover:bg-active focus-visible:outline-light disabled:cursor-not-allowed disabled:opacity-50",
         className,
       ].filter(Boolean).join(" ")}
     >
-      <span aria-hidden="true" className="flex size-ah-24 shrink-0 items-center justify-center">{icon}</span>
-      <span className="min-h-ah-40 min-w-0 flex-1 [overflow-wrap:anywhere]">{label}</span>
-      <Chevron />
+      <DownIcon size={16} className={`transition-transform duration-200 ease-out motion-reduce:transition-none ${expanded ? "" : "-rotate-90"}`} />
+      <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{label}</span>
     </button>
   );
 }

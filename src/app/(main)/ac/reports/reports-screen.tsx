@@ -16,8 +16,9 @@ export default function ReportsPage() {
   return (
     <div className="space-y-ah-24">
       <CycleSelector />
-      <section aria-label="Key performance indicators" className="grid auto-rows-fr grid-cols-1 gap-ah-16 sm:grid-cols-2 xl:grid-cols-4">
-        {metrics.loading ? Array.from({ length: 7 }, (_, i) => <div key={i} className="min-h-[220px] animate-pulse rounded-ah-8 bg-neutral-bg" aria-label="Loading metric" />)
+      <p role="status" className="sr-only">{metrics.loading ? "Loading key performance indicators." : ""}</p>
+      <section aria-label="Key performance indicators" aria-busy={metrics.loading} className="grid auto-rows-fr grid-cols-1 gap-ah-16 sm:grid-cols-2 xl:grid-cols-4">
+        {metrics.loading ? Array.from({ length: 7 }, (_, i) => <div key={i} className="min-h-[220px] animate-pulse rounded-ah-8 bg-neutral-bg motion-reduce:animate-none" aria-hidden="true" />)
           : metrics.data.metrics.map(metric => {
             const needsReview = metric.key === "assessmentParticipationRate" ? metrics.data.counts?.baselineNeedsReview ?? 0 : 0;
             const description = [metric.unavailableReason, needsReview ? `Participation excludes ${needsReview} faculty whose evaluation requirements need review.` : null].filter(Boolean).join(" ");
