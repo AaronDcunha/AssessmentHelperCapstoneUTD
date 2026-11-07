@@ -95,12 +95,12 @@ export function NotificationsScreen({ permissions }: { permissions: readonly str
                   </div>
                 </TableCell>
                 <TableCell><p className={styles.messagePreview}>{item.message}</p></TableCell>
-                <TableCell><TextAction disabled={busy || state.loadingMore} aria-label={`View: ${item.title}`} onClick={() => {
+                <TableCell><div className={styles.rowActions}><TextAction disabled={busy || state.loadingMore} aria-label={`View: ${item.title}`} onClick={() => {
                   opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
                   void store.open(item.id, canUpdate);
                 }}>View</TextAction>
-                  {canUpdate && <TextAction className="ml-ah-16 text-danger" disabled={updatesDisabled} aria-label={`Delete: ${item.title}`}
-                    onClick={() => { void store.remove([item.id]); }}>Delete</TextAction>}
+                  {canUpdate && <TextAction className="text-danger" disabled={updatesDisabled} aria-label={`Delete: ${item.title}`}
+                    onClick={() => { void store.remove([item.id]); }}>Delete</TextAction>}</div>
                 </TableCell>
               </tr>)}
           </tbody>
