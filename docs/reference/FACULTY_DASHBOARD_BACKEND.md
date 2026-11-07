@@ -1,5 +1,43 @@
 # Faculty dashboard backend and linked workflows
 
+November 6, 2026 Issue #94: `/observations/requests` retains the existing Accept
+and Decline flows, with distinct busy labels and `allowedActions.respond` guards.
+Late acceptance uses its own `allowedActions.lateAcceptance` grant. The observee's
+recommendation table displays readable states, including Declined; only ELIGIBLE
+candidates remain selectable for initial invitations. The decline notification
+asks the observee to review remaining observer options.
+
+Selection captures closure recipients before cancellation: invited, non-cancelled
+PENDING/ACCEPTED candidates in the current released list, excluding the selected
+observer. Recorded PENDING qualifies even when its deadline elapsed before the
+scheduler updated it. Declined, expired, eligible, never-invited, historical and
+previously cancelled memberships are excluded. Broader cancellation and selected
+observer/observee confirmations remain; response/deadline checks and attempt,
+meeting, cancellation and approval history are preserved. All notifications use
+sendNotification with account IDs, observation context, email:true and the existing
+Serializable transaction. Event keys remain invitation-declined:attemptId,
+invitation-closed:selectedCandidateId and appointment-confirmed:selectedCandidateId.
+No migrations or new routes are required.
+
+Focused regression commands (Node 24; PostgreSQL integration uses disposable local
+databases only, never application migrations/seeding):
+
+```sh
+node --test tests/unit/faculty-invitations.test.mjs tests/unit/faculty-integration-fixes.test.mjs tests/unit/faculty-workflow.test.mjs tests/unit/notifications-backend.test.mjs
+node --env-file-if-exists=.env --env-file-if-exists=.env.local tests/integration/faculty-invitation-closure.mjs
+node --env-file-if-exists=.env --env-file-if-exists=.env.local tests/integration/faculty-populated.mjs
+node --env-file-if-exists=.env --env-file-if-exists=.env.local tests/integration/recommendation-lifecycle.mjs
+npx tsc --noEmit --incremental false
+npm run lint
+```
+
+The Task 8 integration suite verifies exact closure audiences (including elapsed
+PENDING and inconsistent legacy exclusions), decline read status, concurrent
+decline retries/acceptance/final selection, notification/outbox counts, rollback
+after a real outbox insert, closed-action rejection and retained response history.
+The UI interaction regressions verify labels, grants, unchanged payloads, failure
+handling, candidate status labels and existing invitation/confirmation controls.
+
 October 28 Issue #67 foundation: candidate membership is now list-scoped. Faculty
 recommendation/request readers, dashboard counts, cycle scope, own alert context,
 invitation actions, selection, late approvals and expiry/resends require the

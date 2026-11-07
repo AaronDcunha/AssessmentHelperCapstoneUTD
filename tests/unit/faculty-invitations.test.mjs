@@ -20,7 +20,7 @@ function runtime(db, notifications) {
     cache.set(path, loaded);
     const localRequire = name => {
       if (name === 'server-only') return {};
-      if (notifications && name.endsWith('/notification-delivery')) return { sendNotification: async input => { notifications.push(input); } };
+      if (notifications && name.endsWith('/notification-delivery')) return { sendNotification: async (input, tx) => { assert.equal(tx, db); notifications.push(input); } };
       if (name.endsWith('/prisma')) return { getPrisma: () => ({ ...db, $transaction: async (action, options) => {
         assert.equal(options.isolationLevel, 'Serializable');
         return action(db);
@@ -141,6 +141,67 @@ test('decline records candidate and current attempt together and notifies the ob
   assert.equal(f.writes[1].input.data.status, 'DECLINED');
   assert.equal(f.writes[2].input.data.status, 'DECLINED');
   assert.equal(f.writes[3].input.data.userId, id(9));
+  assert.equal(f.writes[3].input.data.eventKey, `invitation-declined:${id(4)}`);
+  assert.equal(f.writes[3].input.data.targetId, id(2));
+  assert.equal(f.writes[3].input.data.emailRequested, true);
+  assert.match(f.writes[3].input.data.message, /review your remaining observer options/i);
+});
+
+test('closed invitation responses reject stale actions without status or notification writes', async () => {
+  for (const state of ['cancelled-membership', 'paired', 'DECLINED', 'CANCELLED', 'ACCEPTED', 'completed', 'deadline']) {
+    const f = fixture();
+    if (state === 'cancelled-membership') f.candidate.cancelledAt = new Date();
+    else if (state === 'paired') f.record.observerId = id(40);
+    else if (state === 'completed') f.record.completedAt = new Date();
+    else if (state === 'deadline') f.record.cycle.observationDeadline = new Date('2000-01-01');
+    else f.candidate.status = state;
+    for (const action of ['declineFacultyInvitation', 'acceptFacultyInvitation']) {
+      await assert.rejects(runtime(f.db)[action](user, { candidateId: id(3), attemptId: id(4), ...(action.startsWith('accept') ? { meetingOptionId: id(5) } : {}) }), e => e.status === 409, `${state}: ${action}`);
+    }
+    assert.equal(f.writes.some(write => ['candidate', 'attempt', 'notification'].includes(write.name)), false);
+  }
+});
+
+test('selection snapshots only invited non-cancelled pending/accepted recipients before broad cancellation', async () => {
+  const f = fixture(), messages = [];
+  f.record.signup.professor.userId = user.id;
+  f.record.signup.professorId = id(9);
+  f.record.signup.professor.departmentId = id(20);
+  const date = new Date('2098-01-06T00:00:00Z');
+  const semester = { semesterId: id(21), startsOn: new Date('2098-01-01'), endsOn: new Date('2098-12-31'), timeZone: 'America/Chicago' };
+  f.record.signup.section = { semesterId: semester.semesterId, semester, course: { courseLevel: 4000 }, classMeetings: [{ meetingId: id(22), dayOfWeek: new Intl.DateTimeFormat('en-US', { weekday: 'long', timeZone: 'UTC' }).format(date), startTime: '10:00', endTime: '11:00' }] };
+  f.record.timeOptions = [{ timeOptionId: id(5), preferredDate: date }];
+  Object.assign(f.candidate, { professorId: id(11), professor: { userId: id(10) }, status: 'ACCEPTED', acceptedOptionId: id(5) });
+  f.db.professor = { findUnique: async () => ({ departmentId: id(20), user: { isActive: true }, teaches: [{ section: { semesterId: semester.semesterId, course: { courseLevel: 4000 }, classMeetings: [] } }] }) };
+  f.db.observation.findMany = async () => [];
+  const others = [
+    { status: 'PENDING', invitedAt: date }, { status: 'ACCEPTED', invitedAt: date },
+    { status: 'PENDING', invitedAt: date, expiresAt: new Date('2000-01-01') },
+    { status: 'EXPIRED', invitedAt: date }, { status: 'ELIGIBLE', invitedAt: null },
+    { status: 'ELIGIBLE', invitedAt: date }, { status: 'PENDING', invitedAt: null },
+    { status: 'PENDING', invitedAt: date, cancelledAt: date }, { status: 'ACCEPTED', invitedAt: date, cancelledAt: date },
+  ].map((member, i) => ({ candidateId: id(30 + i), professor: { userId: id(50 + i) }, ...member }));
+  f.db.observationCandidate.findMany = async ({ where }) => {
+    assert.equal(where.observationId, f.record.observationId);
+    assert.equal(where.recommendationListId, f.candidate.recommendationListId);
+    assert.deepEqual(where.candidateId, { not: f.candidate.candidateId });
+    assert.deepEqual(where.status.in, ['PENDING', 'ACCEPTED', 'ELIGIBLE', 'EXPIRED']);
+    return others;
+  };
+  f.db.observationCandidate.updateMany = async () => {
+    // Mimic cancellation mutating the records: recipients must already be captured.
+    others.forEach(member => { member.status = 'CANCELLED'; member.cancelledAt = date; });
+    return { count: others.length };
+  };
+  f.db.invitationAttempt.updateMany = async () => ({ count: 1 });
+  await runtime(f.db, messages).selectFacultyObserver({ ...user, permissions: [...user.permissions, 'observer.select.own'] }, { candidateId: f.candidate.candidateId });
+  assert.deepEqual(messages[0].recipients, { userIds: [id(50), id(51), id(52)] });
+  assert.equal(messages[0].message, 'Thank you for your time and willingness to participate in this observation. Another observer has been selected, so your invitation is now closed. No further action is needed.');
+  assert.equal(messages[0].eventKey, `invitation-closed:${id(3)}`);
+  assert.equal(messages[0].observationId, id(2));
+  assert.equal(messages[0].email, true);
+  assert.deepEqual(messages.slice(1).map(message => message.recipients), [{ userId: id(10) }, { userId: user.id }]);
+  assert.ok(messages.slice(1).every(message => message.title === 'Observation appointment confirmed'));
 });
 
 test('release validates the generation selection and retry avoids duplicate notifications', async () => {
