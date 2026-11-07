@@ -23,7 +23,6 @@ export function NavigationItem({ label, icon, active = false, className, ...prop
     >
       <span aria-hidden="true" className="flex size-ah-24 shrink-0 items-center justify-center">{icon}</span>
       <span className="min-w-0 [overflow-wrap:anywhere]">{label}</span>
-      {active && <span aria-hidden="true" className="absolute left-ah-0 top-ah-8 h-[28px] w-ah-4 bg-accent" />}
     </Link>
   );
 }
