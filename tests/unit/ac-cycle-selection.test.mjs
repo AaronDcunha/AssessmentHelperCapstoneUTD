@@ -13,7 +13,7 @@ const cache = new Map();
 let selection = "", context, providerMode = false;
 let resource = { data: [], loading: false, error: null };
 const pending = [];
-const react = { ...realReact, useCallback: fn => fn, useContext: () => context,
+const react = { ...realReact, useCallback: fn => fn, useEffect: () => {}, useContext: () => context,
   useState: initial => providerMode ? [selection, value => { selection = value; }] : [initial, () => {}] };
 function load(filename) {
   const path = resolve(root, filename);
@@ -79,7 +79,7 @@ test("monitoring screens wait for a real cycle, follow selection changes and sup
       assert(calls.every(path => path.startsWith(`/api/evaluation-cycles/${cycle.id}/`)));
     }
     calls.length = 0; selection = "all"; provider(); await render();
-    assert.deepEqual(calls.sort(), cycles.map(c => `/api/evaluation-cycles/${c.id}/observations`).sort());
+    assert.deepEqual(calls.sort(), cycles.map(c => `/api/evaluation-cycles/${c.id}/observations?limit=21`).sort());
     calls.length = 0; resource.data = []; provider(); await render();
     assert.deepEqual(calls, []);
   } finally { globalThis.fetch = originalFetch; }
