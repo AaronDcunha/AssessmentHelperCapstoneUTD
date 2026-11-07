@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/form-fields";
+import { Section } from "@/components/ui/section";
 import { TableCell } from "@/components/ui/table";
 import { TextAction } from "@/components/ui/text-action";
 import { ApiRequestError } from "@/lib/ac-api";
@@ -84,15 +85,13 @@ function Review({ request, back, reload }: { request: LateAcceptanceRequest; bac
     } finally { submitting.current = false; setBusy(false); }
   }
   const outcome = decision ?? (["APPROVED", "REJECTED"].includes(current.status) ? current.status : null);
-  const outcomeHeading = useRef<HTMLHeadingElement>(null);
+  const outcomeHeading = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     if (outcome || !current.actionable) outcomeHeading.current?.focus();
   }, [outcome, current.actionable]);
-  const card = "max-w-[760px] space-y-ah-24 rounded-ah-8 border border-border bg-surface p-ah-32";
-  if (outcome) return <section className={card} aria-live="polite"><h2 ref={outcomeHeading} tabIndex={-1} className="text-section">{outcome === "APPROVED" ? "Acceptance window reopened" : "Late acceptance request rejected"}</h2><Badge request={{ ...current, displayStatus: outcome, actionable: false }} /><p>{outcome === "APPROVED" ? "This approval reopened normal invitation acceptance. It did not assign an observer. The observer must accept a valid meeting, then the observee confirms the final observer." : "The expired invitation was not reopened by this decision. This rejection did not assign an observer."}</p><ButtonLink href={back}>Back to requests</ButtonLink></section>;
-  if (!current.actionable) return <section className={card} aria-live="polite"><h2 ref={outcomeHeading} tabIndex={-1} className="text-section">This request can no longer be approved</h2><Badge request={current} /><p>{current.requester.name}: {current.actionReason}</p><p className="text-caption text-muted">Approval requires the latest expired invitation, an unpaired open observation, and time remaining before the observation deadline.</p><ButtonLink href={back}>Refresh requests</ButtonLink></section>;
-  return <section className={card}>
-    <h2 className="text-section">{current.actionable ? "Review late acceptance request" : "This request can no longer be approved"}</h2>
+  if (outcome) return <Section aria-live="polite" contentClassName="space-y-ah-24" title={<span ref={outcomeHeading} tabIndex={-1}>{outcome === "APPROVED" ? "Acceptance window reopened" : "Late acceptance request rejected"}</span>}><Badge request={{ ...current, displayStatus: outcome, actionable: false }} /><p>{outcome === "APPROVED" ? "This approval reopened normal invitation acceptance. It did not assign an observer. The observer must accept a valid meeting, then the observee confirms the final observer." : "The expired invitation was not reopened by this decision. This rejection did not assign an observer."}</p><ButtonLink href={back}>Back to requests</ButtonLink></Section>;
+  if (!current.actionable) return <Section aria-live="polite" contentClassName="space-y-ah-24" title={<span ref={outcomeHeading} tabIndex={-1}>This request can no longer be approved</span>}><Badge request={current} /><p>{current.requester.name}: {current.actionReason}</p><p className="text-caption text-muted">Approval requires the latest expired invitation, an unpaired open observation, and time remaining before the observation deadline.</p><ButtonLink href={back}>Refresh requests</ButtonLink></Section>;
+  return <Section title="Review late acceptance request" contentClassName="space-y-ah-24">
     <p className="text-muted">{current.requester.name} → {current.observee.name} · {current.course}.{current.section}</p><Badge request={current} />
     <dl className="grid gap-ah-16 sm:grid-cols-2"><div><dt className="text-caption text-muted">Observer requesting</dt><dd>{current.requester.name}</dd></div><div><dt className="text-caption text-muted">Professor being observed</dt><dd>{current.observee.name}</dd></div></dl>
     <div className="space-y-ah-8 rounded-ah-8 bg-canvas p-ah-16"><h3 className="text-label">Reason for requesting late acceptance</h3><p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{current.reason || "No reason provided."}</p></div>
@@ -102,7 +101,7 @@ function Review({ request, back, reload }: { request: LateAcceptanceRequest; bac
     {error && <p role="alert" className="text-danger">{error}</p>}
     <p className="text-caption text-muted">The request must still be pending and refer to the latest expired invitation. A superseded invitation or closed observation cannot be approved.</p>
     <div className="flex flex-wrap gap-ah-16" aria-busy={busy}>
-      {current.actionable && !denied && !uncertain ? <><ButtonLink href={back} variant="secondary" onClick={e => { if (busy) e.preventDefault(); }} aria-disabled={busy}>Keep pending</ButtonLink><Button variant="secondary" disabled={busy} onClick={() => void decide("rejected")}>Reject request</Button><Button disabled={busy} onClick={() => void decide("approved")}>{busy ? "Saving decision…" : "Approve & reopen"}</Button></> : <><ButtonLink href={back}>Refresh requests</ButtonLink>{uncertain && <Button variant="secondary" disabled={busy} onClick={async () => { setBusy(true); try { setSaved(await reload()); setUncertain(false); setError(null); } catch { setError("Unable to verify the saved state. Please retry."); } finally { setBusy(false); } }}>Retry saved state</Button>}</>}
+      {current.actionable && !denied && !uncertain ? <><ButtonLink href={back} variant="secondary" onClick={e => { if (busy) e.preventDefault(); }} aria-disabled={busy}>Back to requests</ButtonLink><Button variant="secondary" disabled={busy} onClick={() => void decide("rejected")}>Reject request</Button><Button disabled={busy} onClick={() => void decide("approved")}>{busy ? "Saving decision…" : "Approve & reopen"}</Button></> : <><ButtonLink href={back}>Refresh requests</ButtonLink>{uncertain && <Button variant="secondary" disabled={busy} onClick={async () => { setBusy(true); try { setSaved(await reload()); setUncertain(false); setError(null); } catch { setError("Unable to verify the saved state. Please retry."); } finally { setBusy(false); } }}>Retry saved state</Button>}</>}
     </div>
-  </section>;
+  </Section>;
 }

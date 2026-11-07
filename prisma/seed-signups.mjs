@@ -9,7 +9,7 @@ import { stableId } from './seed-data.mjs';
 // The same ten existing demo professors on every teammate's database.
 export const demoSignupNames = ['Gale Aster', 'Robin Wren', 'Quartz Prairie', 'Cove Yew', 'Zenith Reese', 'Fern Journey', 'Finley Timber', 'Delta True', 'Grove Haven', 'Violet Lux'];
 
-export async function seedSignups(prisma, { dryRun = false, now = new Date(), cycleId } = {}) {
+export async function seedSignups(prisma, { dryRun = false, now = new Date(), cycleId, lateInvitations = false } = {}) {
   return prisma.$transaction(async db => {
     const cycles = await db.evaluationCycle.findMany({ where: cycleId ? { cycleId } : {}, include: { semester: true } });
     const applicable = cycles.filter(c => cycleId || (c.semester.startsOn && c.semester.endsOn
@@ -17,7 +17,7 @@ export async function seedSignups(prisma, { dryRun = false, now = new Date(), cy
       && facultyDate(now, c.semester.timeZone) <= c.semester.endsOn.toISOString().slice(0, 10)));
     assert.equal(applicable.length, 1, 'A single current semester with a cycle is required; configure dates or pass --cycle-id=UUID.');
     const cycle = applicable[0], semester = cycle.semester;
-    assert.ok(semester.startsOn && semester.endsOn && cycle.observationDeadline > now, 'Configure semester dates and a future observation deadline before seeding.');
+    assert.ok(semester.startsOn && semester.endsOn && cycle.observationDeadline > now, 'Configure semester dates and a future observation deadline before seeding. Current observation deadline: ' + cycle.observationDeadline.toISOString());
     const calendar = { startsOn: semester.startsOn.toISOString().slice(0, 10), endsOn: semester.endsOn.toISOString().slice(0, 10), timeZone: semester.timeZone, termCode: semester.termCode };
     const rows = [];
     for (const name of demoSignupNames) {
@@ -50,8 +50,64 @@ export async function seedSignups(prisma, { dryRun = false, now = new Date(), cy
       }
       rows.push({ name, action: dryRun ? 'would create' : 'created', signupId, observationId, course: `${choice.section.course.courseCode}.${choice.section.sectionCode}`, dates });
     }
-    return { dryRun, semester: semester.termName, signupDeadlinePassed: cycle.signupDeadline <= now, rows };
+    const invitations = lateInvitations ? await seedLateInvitations(db, cycle, now, dryRun) : [];
+    return { invitations, dryRun, semester: semester.termName, signupDeadlinePassed: cycle.signupDeadline <= now, rows };
   }, { isolationLevel: 'Serializable', timeout: 60000 });
+}
+
+async function seedLateInvitations(db, cycle, now, dryRun) {
+  const scenarios = [
+    { observee: 'Gale Aster', observer: 'Robin Wren', requested: false },
+    { observee: 'Quartz Prairie', observer: 'Cove Yew', requested: true },
+  ];
+  const professorId = name => stableId('professor:' + name.toLowerCase().replaceAll(' ', '_'));
+  const hour = 60 * 60 * 1000;
+  const invitedAt = new Date(now.getTime() - 72 * hour);
+  const expiresAt = new Date(now.getTime() - 24 * hour);
+  const results = [];
+  for (const scenario of scenarios) {
+    const observationId = stableId('signup-demo-observation-v1:' + cycle.cycleId + ':' + professorId(scenario.observee));
+    const listId = stableId('late-invite-demo-v1:' + observationId);
+    const observation = await db.observation.findUnique({
+      where: { observationId },
+      include: { recommendationLists: true, timeOptions: true, signedAssessment: { select: { observationId: true } } },
+    });
+    if (observation?.recommendationLists.some(list => list.listId === listId)) {
+      results.push({ ...scenario, action: 'preserved existing fixture' });
+      continue;
+    }
+    if (observation && (observation.status !== 'PENDING' || observation.observerId ||
+        observation.completedAt || observation.signedAssessment || observation.currentReleasedListId ||
+        observation.recommendationLists.some(list => list.publishedAt) ||
+        !observation.timeOptions.some(option => option.preferredDate.toISOString().slice(0, 10) >= facultyDate(now, cycle.semester.timeZone)))) {
+      results.push({ ...scenario, action: 'skipped existing workflow or missing future meetings' });
+      continue;
+    }
+    if (!observation && !dryRun) {
+      results.push({ ...scenario, action: 'skipped because the demo observation is missing' });
+      continue;
+    }
+    if (!dryRun) {
+      await db.recommendationList.create({ data: { listId, observationId, publishedAt: invitedAt } });
+      await db.observation.update({
+        where: { observationId },
+        data: { currentReleasedListId: listId, recommendationsReleasedAt: invitedAt },
+      });
+      const candidate = await db.observationCandidate.create({
+        data: { observationId, recommendationListId: listId, professorId: professorId(scenario.observer), status: 'EXPIRED', invitedAt, expiresAt },
+      });
+      const attempt = await db.invitationAttempt.create({
+        data: { candidateId: candidate.candidateId, number: 1, status: 'EXPIRED', invitedAt, expiresAt },
+      });
+      if (scenario.requested) {
+        await db.lateAcceptanceApproval.create({
+          data: { attemptId: attempt.attemptId, reason: 'I missed the invitation deadline and can still attend a proposed meeting.' },
+        });
+      }
+    }
+    results.push({ ...scenario, action: dryRun ? 'would create' : 'created' });
+  }
+  return results;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
@@ -61,9 +117,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     const url = new URL(process.env.DATABASE_URL);
     assert.ok(['localhost', '127.0.0.1', '[::1]'].includes(url.hostname), 'Demo signup seeding requires local PostgreSQL.');
     const args = process.argv.slice(2);
-    assert.ok(args.every(a => a === '--dry-run' || /^--cycle-id=[a-f\d-]{36}$/i.test(a)), 'Usage: npm run db:seed:signups -- [--dry-run] [--cycle-id=UUID]');
+    assert.ok(args.every(a => a === '--dry-run' || a === '--late-invitations' || /^--cycle-id=[a-f\d-]{36}$/i.test(a)), 'Usage: npm run db:seed:signups -- [--dry-run] [--late-invitations] [--cycle-id=UUID]');
     prisma = getPrisma();
-    const result = await seedSignups(prisma, { dryRun: args.includes('--dry-run'), cycleId: args.find(a => a.startsWith('--cycle-id='))?.split('=')[1] });
+    const result = await seedSignups(prisma, { dryRun: args.includes('--dry-run'), lateInvitations: args.includes('--late-invitations'), cycleId: args.find(a => a.startsWith('--cycle-id='))?.split('=')[1] });
     console.log(JSON.stringify(result, null, 2));
     if (result.signupDeadlinePassed) console.log('Demo fixtures bypass the signup cutoff; normal signup rules and deadlines are unchanged.');
   } catch (error) { console.error(error.message); process.exitCode = 1; }

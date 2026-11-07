@@ -7,7 +7,7 @@ Direct review uses `/ac/late-acceptance-requests/{approvalId}`. Only effective
 
 The shared shell supplies navigation and header; the screen uses semantic palette,
 typography, spacing, buttons, form fields and table cells. Search/status survive
-review/back navigation through URL parameters. Keep pending performs no write.
+review/back navigation through URL parameters. Back to requests performs no write.
 Each list visit fetches fresh rows/counts. Request changes hide old data immediately;
 the existing resource hook ignores late responses. Conflicts reload the exact saved
 request; uncertain reloads hide decisions until resolved. Both decision buttons are
@@ -80,7 +80,7 @@ notification/email implementation or matching generation was changed.
   headless Chrome, all business APIs intercepted in that browser target. Checks
   list, skeleton, pending/approved/rejected/stale views, safe saved text, conflict
   reload, disabled decision controls, empty/no-results/error/retry retaining
-  filters, Keep pending without a write, keyboard focus on saved outcomes,
+  filters, Back to requests without a write, keyboard focus on saved outcomes,
   stale filter-response exclusion, missing current cycle and 390px overflow. Screenshots are in OS temp as
   `late-acceptance-{list,pending,approved,rejected,stale,mobile}.png`.
 - `npm run lint`, `npx tsc --noEmit`, and production `npm run build` pass. Restricted

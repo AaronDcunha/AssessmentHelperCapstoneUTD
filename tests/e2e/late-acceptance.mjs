@@ -98,13 +98,20 @@ handlers.set('Fetch.requestPaused',async event=>{
  }catch(error){fixtureFailure=error;await send('Fetch.failRequest',{requestId:event.requestId,errorReason:'Failed'}).catch(()=>{});}
 });
 const main=expression=>`document.querySelector('main')?.textContent.includes(${JSON.stringify(expression)})`;
+async function waitForIntercept(getRelease) {
+ for(let i=0;i<250;i++) {
+  if(getRelease())return;
+  await pause(20);
+ }
+ throw new Error('Timed out waiting for intercepted request.');
+}
 async function screenshot(name){const r=await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:true});writeFileSync(join(tmpdir(),'late-acceptance-'+name+'.png'),Buffer.from(r.data,'base64'));}
 try {
  await send('Network.enable');await send('Page.enable');await send('Network.setCookies',{cookies:[...jar].map(([name,value])=>({name,value,url:base}))});
  await send('Emulation.setDeviceMetricsOverride',{width:1480,height:1160,deviceScaleFactor:1,mobile:false});
  await send('Fetch.enable',{patterns:['evaluation-cycles','expired-acceptance-requests','notifications'].map(name=>({urlPattern:base+'/api/'+name+'*'}))});
  mode='loading';await navigate(root);await wait(`!!document.querySelector('[aria-label="Loading late acceptance requests"]')`);
- assert.equal(decisions.length,0);mode='normal';releaseRead();await wait(main('Fixture Observer'));
+ assert.equal(decisions.length,0);await waitForIntercept(()=>releaseRead);mode='normal';releaseRead();await wait(main('Fixture Observer'));
  assert.equal(await evaluate(main('Current semester · Browser fixture semester')),true);
  assert.equal(await evaluate(main('2 pending requests · 1 approved · 1 no longer actionable')),true);
  await screenshot('list');
@@ -112,10 +119,10 @@ try {
  await wait(main('Review late acceptance request'));await wait(main('Saved reason <script>not executable</script>'));
  assert.equal(await evaluate("!!document.querySelector('main script')"),false);
  await screenshot('pending');
- await evaluate(`[...document.querySelectorAll('main a')].find(a=>a.textContent==='Keep pending').click()`);await wait(main('Fixture Observer'));assert.equal(decisions.length,0);
+ await evaluate(`[...document.querySelectorAll('main a')].find(a=>a.textContent==='Back to requests').click()`);await wait(main('Fixture Observer'));assert.equal(decisions.length,0);
  await navigate(root+'/'+requestId);await wait(main('Review late acceptance request'));
  mode='submitting';await click('Approve & reopen');await wait("[...document.querySelectorAll('main button')].filter(e=>e.disabled).length===2");
- mode='normal';releaseDecision();await wait(main('Acceptance window reopened'));assert.equal(decisions.length,1);await wait(`document.activeElement?.textContent==='Acceptance window reopened'`);await screenshot('approved');
+ await waitForIntercept(()=>releaseDecision);mode='normal';releaseDecision();await wait(main('Acceptance window reopened'));assert.equal(decisions.length,1);await wait(`document.activeElement?.textContent==='Acceptance window reopened'`);await screenshot('approved');
  await evaluate(`[...document.querySelectorAll('main a')].find(a=>a.textContent==='Back to requests').click()`);await wait(main('Fixture Observer'));assert.ok(readQueries.length>=3);
  record={...original};await navigate(root+'/'+requestId);await wait(main('Review late acceptance request'));await click('Reject request');await wait(main('Late acceptance request rejected'));await screenshot('rejected');
  record={...original};await navigate(root+'/'+requestId);await wait(main('Review late acceptance request'));mode='conflict';await click('Approve & reopen');await wait(main('An observer has already been confirmed.'));
@@ -129,7 +136,7 @@ try {
  mode='normal';record={...original};await navigate(root);await wait(main('Fixture Observer'));
  const input=value=>evaluate(`(()=>{const input=document.querySelector('main input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(value)});input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
  mode='loading';releaseRead=null;await input('slow');await wait(`!!document.querySelector('[aria-label="Loading late acceptance requests"]')`);
- while(!releaseRead)await pause(20);
+ await waitForIntercept(()=>releaseRead);
  mode='normal';record={...original,requester:{...original.requester,name:'Latest filtered observer'}};await input('fast');await wait(main('Latest filtered observer'));
  releaseRead();await pause(150);assert.equal(await evaluate(main('Latest filtered observer')),true);assert.equal(await evaluate(main('Fixture Observer')),false);
  if(fixtureFailure)throw fixtureFailure;
