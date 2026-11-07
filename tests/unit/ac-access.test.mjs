@@ -40,6 +40,7 @@ const pages = [
   ["", "ac.dashboard"], ["cycles", "ac.cycles"], ["cycles/new", "ac.cycleCreate"],
   ["cycles/[cycleId]/edit", "ac.cycleEdit"], ["faculty", "ac.faculty"],
   ["observer-selection", "ac.observerSelection"],
+  ["late-acceptance-requests", "ac.lateAcceptance"], ["late-acceptance-requests/[requestId]", "ac.lateAcceptance"],
   ["observations", "ac.progress"], ["observations/[observationId]", "ac.detail"],
   ["template", "ac.template"], ["reports", "ac.reports"], ["semester", "ac.semester"],
 ].map(([path, key]) => [load(`src/app/(main)/ac/${path ? path + "/" : ""}page.tsx`).default, key]);

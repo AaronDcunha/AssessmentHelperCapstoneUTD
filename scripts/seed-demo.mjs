@@ -9,7 +9,7 @@ if (!['localhost', '127.0.0.1', '[::1]'].includes(database.hostname)) throw new 
 
 for (const [label, args] of [
   ['Basic demo data', ['prisma/seed.mjs']],
-  ['Ten demo signups', ['--import', './scripts/server-loader.mjs', 'prisma/seed-signups.mjs']],
+  ['Ten demo signups and late invitations', ['--import', './scripts/server-loader.mjs', 'prisma/seed-signups.mjs', '--late-invitations']],
 ]) {
   console.log(`\n${label}`);
   const result = spawnSync(process.execPath, args, { cwd: root, env: process.env, stdio: 'inherit', shell: false });
