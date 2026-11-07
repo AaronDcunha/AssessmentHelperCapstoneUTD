@@ -13,6 +13,7 @@ export function configurationError(error: unknown): string {
     409: "The change could not be saved. This may be a duplicate, a stale revision, or a referenced-question restriction. Your edits are preserved; review the message before reloading.",
     422: "Check the entered fields.",
   };
+  if (error.code === "DATABASE_MIGRATION_REQUIRED") return `${error.message} Your edits are preserved.`;
   if (error.status && error.status >= 500) return "The server could not complete the request. Please retry; your edits are preserved.";
   return [prefix[error.status ?? 0], error.status && error.status < 500 && !error.message.startsWith("Request failed with status") ? error.message : undefined].filter(Boolean).join(" ") || "The request failed. Please retry.";
 }

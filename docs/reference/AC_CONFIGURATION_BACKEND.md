@@ -11,7 +11,7 @@ Every route requires an active Auth.js account. Current database permissions are
 | Create/edit cycles; save semester settings | `cycles.manage` |
 | Read every cycle/semester | `cycles.read` or `cycles.manage` |
 | Read relevant cycles/semesters | `course-sections.read.own`, `signups.read.own`, or `observations.read.own` |
-| Create/edit/publish templates | `templates.manage` |
+| Create/edit/publish/archive/unarchive templates; reassign unfinished observations | `templates.manage` (reassignment also requires `observations.read`) |
 | Read draft and published templates | `templates.read` or `templates.manage` |
 | Read published templates | `assessment.read.own` |
 
@@ -59,12 +59,15 @@ Lists return `{items,pageInfo:{nextCursor,hasMore}}`, sorted by UUID ascending. 
 
 ## Templates
 
-- `GET /api/observation-templates`: `status?: draft|published`, `cursor?`, `limit?`; summary items contain `{id,title,status,publishedAt,revision}`.
+- `GET /api/observation-templates`: `status?: draft|published|archived`, `cursor?`, `limit?`; summary items contain `{id,title,status,publishedAt,revision}`.
 - `GET /api/observation-templates/current`: most recently published active template; publication time descending, UUID descending as a tie breaker. Returns 404 if none exists. Applicability is global, so `cycleId` is rejected.
 - `GET /api/observation-templates/{templateId}`: full template.
 - `POST /api/observation-templates`: `{title,criteria,commentPrompts?,signatureLabels?}`; creates an inactive draft.
 - `PATCH /api/observation-templates/{templateId}`: `{expectedRevision,title?,criteria?,commentPrompts?,signatureLabels?}`.
 - `POST /api/observation-templates/{templateId}/publish`: `{expectedRevision}`; activates a complete draft and records publication time. Already published returns 409.
+- `POST /api/observation-templates/{templateId}/unarchive`: `{expectedRevision}`; restores an archived template as an inactive draft. Only archived templates may transition this way.
+- `DELETE /api/observation-templates/{templateId}`: `{expectedRevision}`; permanently deletes only an unused draft and otherwise archives it.
+- `PATCH /api/observations/{observationId}/template`: `{templateId,expectedRevision,confirmImpact?}`; explicitly reassigns only an unfinished, unacknowledged observation.
 
 Full templates contain `{id,title,status,publishedAt,revision,criteria,commentPrompts,signatureLabels}`. There is no separate version field/model. PATCH supports drafts and published records, following the October 18 decision. Editing a published template does not republish it or change its priority for `/current`. Previously published records remain readable and linked assessments are not reassigned.
 
@@ -83,9 +86,11 @@ concurrent retries, creator/content mismatch, later edits and independent keys.
 
 Each criterion is `{id?,key,prompt,type,required,order,options?,weight?}`. Types are `rating` and `text`; rating options are `{value: integer,label}` with unique values. Criterion keys, supplied IDs and nonnegative integer orders must be unique in the template. There must be 1-100 criteria; rating criteria require 2-20 options. Weight defaults to 1 and must be finite/nonnegative. Text criteria cannot have options.
 
-Supplied arrays replace that section; omitted sections remain unchanged. Preserve criterion IDs when editing existing questions, including order swaps. Foreign IDs are rejected. Removing criteria is blocked once any assessment references the template; create a new template for major changes. Editing existing question text intentionally changes what older linked assessments display. Stored assessment response JSON is not rewritten.
+Supplied arrays replace that section; omitted sections remain unchanged. Preserve criterion IDs when editing existing questions, including order swaps. Foreign IDs are rejected. Observation creation pins the latest active published template, and publishing another template never switches existing observations. Unacknowledged forms follow edits: compatible answers remain, while removed questions, changed types/scales, and removed comment prompts require `confirmImpact:true` and are appended to `responseArchive`. The first acknowledgement stores the full template snapshot; partially signed and finalized forms always render that immutable snapshot and are never rewritten by later template edits.
 
-Comment prompts are `{id?,prompt,required,order}`; generated IDs are returned when omitted. Signature labels default to `{observer:"Observer",observee:"Observee"}`. Revisions start at 0 and increment on PATCH/publish. Stale writes return 409. Existing active seeded templates migrate to published; existing rating ranges get numeric option labels, while new seed inserts use descriptive scale labels.
+Published or used templates are archived rather than permanently deleted. Archived templates are read-only and remain available to assigned observations and historical assessments. An AC/Admin may unarchive one as an inactive draft, review or edit it under the normal answer-preservation rules, and explicitly publish it again. Unarchiving does not reassign existing observations or change frozen assessment snapshots. Only an unused draft may be physically deleted.
+
+Comment prompts are `{id?,prompt,required,order}`; generated IDs are returned when omitted. Signature labels default to `{observer:"Observer",observee:"Observee"}`. Revisions start at 0 and increment on PATCH/publish/archive/unarchive. Stale writes return 409. Existing active seeded templates migrate to published; existing rating ranges get numeric option labels, while new seed inserts use descriptive scale labels.
 
 ## Migration and verification
 

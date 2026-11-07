@@ -24,6 +24,11 @@ export async function deleteSemester(prisma: PrismaClient, user: ConfigurationUs
     const cycles = semester.evaluationCycles.map(c => c.cycleId);
     const observations = await db.observation.findMany({ where: { cycleId: { in: cycles } }, select: { observationId: true } });
     const ids = observations.map(o => o.observationId);
+    const protectedRecord = await db.observation.findFirst({ where: { observationId: { in: ids }, OR: [
+      { completedAt: { not: null } }, { status: { in: ["COMPLETED", "CLOSED", "NOT_OCCURRED"] } },
+      { signedAssessment: { is: { OR: [{ observerSignedAt: { not: null } }, { observeeSignedAt: { not: null } }, { isLocked: true }, { completedAt: { not: null } }] } } },
+    ] }, select: { observationId: true } });
+    if (protectedRecord) throw new ConfigurationError(409, "HISTORICAL_RECORDS_RETAINED", "This semester contains acknowledged or completed evaluations and cannot be permanently deleted. Historical evaluations must be retained.");
     const attachments = await db.feedbackAttachment.findMany({ where: { observationId: { in: ids } }, select: { storageKey: true } });
     await db.feedbackAttachment.deleteMany({ where: { observationId: { in: ids } } });
     await db.processFeedback.deleteMany({ where: { observationId: { in: ids } } });

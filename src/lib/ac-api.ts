@@ -34,6 +34,7 @@ export type ObservationMeeting = {
 };
 export type ObserverSelectionSignup = {
   signupId: string; observationId: string | null; observee: UserSummary;
+  revision?: number;
   observationRevision?: number | null;
   currentDraftListId?: string | null; currentReleasedListId?: string | null;
   section: {
@@ -78,7 +79,7 @@ export type RecommendationRegenerationResponse = {
 export type ObservationItem = {
   id: string; observee?: UserSummary | null; observer?: UserSummary | null;
   course?: { code?: string; title?: string; name?: string } | string | null;
-  section?: { course?: { code?: string; title?: string; name?: string } | null } | null;
+  section?: { course?: { code?: string; title?: string; name?: string } | null; semester?: { id?: string; name?: string } | null } | null;
   status?: string | null; assessmentStatus?: string | null; revision?: number;
   scheduledMeeting?: ObservationMeeting | null;
 };
@@ -124,7 +125,7 @@ export type ObservationTemplateWrite = {
   commentPrompts: TemplateComment[];
   signatureLabels: { observer: string; observee: string };
 };
-export type TemplateSummary = { id: string; title: string; status: "draft" | "published"; publishedAt: string | null; revision: number };
+export type TemplateSummary = { id: string; title: string; status: "draft" | "published" | "archived"; publishedAt: string | null; revision: number };
 export type ObservationTemplate = ObservationTemplateWrite & TemplateSummary;
 
 export class ApiRequestError extends Error {
@@ -231,6 +232,9 @@ export const acApi = {
     requestCandidates(observationId, filters),
   getMetrics: (cycleId: string, filters: { departmentId?: string; hiringLevelId?: string } = {}) => requestJson<MetricsResponse>(`${cyclePath(cycleId)}/metrics${queryString(filters)}`),
   getObservation: (observationId: string) => requestJson<ObservationDetail>(`/api/observations/${encodeURIComponent(observationId)}`),
+  deleteObservation: (observationId: string, expectedRevision: number) => requestJson<{deleted:boolean;replacementObservationId:string;signupId:string}>(`/api/observations/${encodeURIComponent(observationId)}`, { method: "DELETE", body: JSON.stringify({ expectedRevision }) }),
+  deleteSignup: (signupId: string, body: { expectedRevision: number; observations: Array<{id:string;expectedRevision:number}> }) => requestJson<{deleted:boolean;deletedObservationIds:string[]}>(`/api/evaluation-signups/${encodeURIComponent(signupId)}`, { method: "DELETE", body: JSON.stringify(body) }),
+  reassignObservationTemplate: (observationId:string, body:{templateId:string;expectedRevision:number;confirmImpact?:boolean}) => requestJson<{observationId:string;templateId:string;revision:number;archivedResponseCount:number}>(`/api/observations/${encodeURIComponent(observationId)}/template`, { method: "PATCH", body: JSON.stringify(body) }),
   getObservationTemplate: (observationId: string) => requestJson<AssignedObservationTemplate>(`/api/observations/${encodeURIComponent(observationId)}/template`),
   getObservationAssessment: (observationId: string) => requestJson<ObservationAssessmentResponse>(`/api/observations/${encodeURIComponent(observationId)}/assessment`),
   getHiringLevels: () => requestList<HiringLevel>("/api/hiring-levels", false),
@@ -245,8 +249,10 @@ export const acApi = {
   getTemplates: () => requestList<TemplateSummary>("/api/observation-templates"),
   getTemplate: (templateId: string) => requestJson<ObservationTemplate>(`/api/observation-templates/${encodeURIComponent(templateId)}`),
   createTemplate: (body: ObservationTemplateWrite & { creationKey?: string }) => requestJson<ObservationTemplate>("/api/observation-templates", { method: "POST", body: JSON.stringify(body) }),
-  updateTemplate: (templateId: string, body: ObservationTemplateWrite & { expectedRevision: number }) => requestJson<ObservationTemplate>(`/api/observation-templates/${encodeURIComponent(templateId)}`, { method: "PATCH", body: JSON.stringify(body) }),
+  updateTemplate: (templateId: string, body: ObservationTemplateWrite & { expectedRevision: number; confirmImpact?: boolean }) => requestJson<ObservationTemplate>(`/api/observation-templates/${encodeURIComponent(templateId)}`, { method: "PATCH", body: JSON.stringify(body) }),
   publishTemplate: (templateId: string, expectedRevision: number) => requestJson<ObservationTemplate>(`/api/observation-templates/${encodeURIComponent(templateId)}/publish`, { method: "POST", body: JSON.stringify({ expectedRevision }) }),
+  unarchiveTemplate: (templateId: string, expectedRevision: number) => requestJson<ObservationTemplate>(`/api/observation-templates/${encodeURIComponent(templateId)}/unarchive`, { method: "POST", body: JSON.stringify({ expectedRevision }) }),
+  deleteTemplate: (templateId:string, expectedRevision:number) => requestJson<{deleted:boolean;archived:boolean;templateId:string}>(`/api/observation-templates/${encodeURIComponent(templateId)}`, { method: "DELETE", body: JSON.stringify({ expectedRevision }) }),
 };
 
 export function userDisplayName(user?: UserSummary | null) {

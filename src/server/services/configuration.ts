@@ -3,6 +3,7 @@ import type { Prisma, PrismaClient } from "../../generated/prisma/client";
 import { ConfigurationError, commentPrompts, criteria, date, deadlines, fields, invalid, object, revision,
   signatureLabels, text, timeZone, uuid, type ConfigurationUser } from "../configuration-validation";
 import { authorize, getCycle, getTemplate } from "../queries/configuration";
+import { createTemplateSnapshot } from "../template-snapshot";
 
 function missing(message: string): never { throw new ConfigurationError(404, "NOT_FOUND", message); }
 function stale(): never { throw new ConfigurationError(409, "STALE_REVISION", "This record changed. Reload it before saving."); }
@@ -74,11 +75,6 @@ export async function updateSettings(prisma: PrismaClient, user: ConfigurationUs
 type Questions = ReturnType<typeof criteria>;
 async function saveCriteria(db: Prisma.TransactionClient, id: string, questions: Questions, existingIds: Set<string>) {
   for (const question of questions) if (question.id && !existingIds.has(question.id)) invalid("Criterion ID does not belong to this template.");
-  const retained = new Set(questions.flatMap(q => q.id ? [q.id] : []));
-  if ([...existingIds].some(key => !retained.has(key))) {
-    const used = await db.signedAssessment.findFirst({ where: { templateId: id }, select: { assessmentId: true } });
-    if (used) throw new ConfigurationError(409, "CRITERIA_IN_USE", "Cannot remove criteria from a template with assessments. Create a new template for major changes.");
-  }
   // Recreate in the same transaction to support order/key swaps while retaining
   // criterion IDs and leaving stored assessment response JSON unchanged.
   await db.templateCriterion.deleteMany({ where: { templateId: id } });
@@ -92,12 +88,13 @@ async function saveCriteria(db: Prisma.TransactionClient, id: string, questions:
 }
 function validateTemplate(input: unknown, update: boolean) {
   const body = { ...object(input) };
-  fields(body, ["title", "criteria", "commentPrompts", "signatureLabels", ...(update ? ["expectedRevision"] : [])]);
+  fields(body, ["title", "criteria", "commentPrompts", "signatureLabels", ...(update ? ["expectedRevision", "confirmImpact"] : [])]);
   if (!update || body.title !== undefined) body.title = text(body.title);
   if (!update || body.criteria !== undefined) body.criteria = criteria(body.criteria);
   if (body.commentPrompts !== undefined) body.commentPrompts = commentPrompts(body.commentPrompts).map(prompt => ({ ...prompt, id: prompt.id ?? randomUUID() }));
   if (body.signatureLabels !== undefined) body.signatureLabels = signatureLabels(body.signatureLabels);
-  if (update && !Object.keys(body).some(key => key !== "expectedRevision")) invalid("Provide at least one template field to update.");
+  if (update && body.confirmImpact !== undefined && typeof body.confirmImpact !== "boolean") invalid("confirmImpact must be true or false.");
+  if (update && !Object.keys(body).some(key => !["expectedRevision", "confirmImpact"].includes(key))) invalid("Provide at least one template field to update.");
   return body;
 }
 export async function createTemplate(prisma: PrismaClient, user: ConfigurationUser, input: unknown) {
@@ -145,6 +142,44 @@ export async function updateTemplate(prisma: PrismaClient, user: ConfigurationUs
   const body = validateTemplate(input, true);
   return prisma.$transaction(async db => {
     const current = await readTemplate(db, id, body.expectedRevision);
+    if (current.status === "archived") throw new ConfigurationError(409, "ARCHIVED_TEMPLATE", "Archived templates are retained for history and cannot be edited.");
+    const before = await db.observationTemplate.findUniqueOrThrow({ where: { templateId: id }, include: { criteria: { orderBy: [{ displayOrder: "asc" }, { criterionId: "asc" }] }, assessments: true } });
+    const questions = body.criteria as Questions | undefined;
+    const nextQuestions = questions?.map(question => ({ ...question, id: question.id ?? randomUUID() }));
+    const existingIds = new Set(before.criteria.map(row => row.criterionId));
+    for (const question of nextQuestions ?? []) if (question.id && !existingIds.has(question.id) && questions?.some(inputQuestion => inputQuestion.id === question.id)) invalid("Criterion ID does not belong to this template.");
+    const targetQuestions = nextQuestions ?? before.criteria.map(c => ({ id: c.criterionId, key: c.criterionKey, prompt: c.criterionText, type: c.questionType.toLowerCase() as "rating" | "text", required: c.isRequired, order: c.displayOrder, weight: c.weight, options: Array.isArray(c.options) ? c.options as { value: number; label: string }[] : undefined }));
+    const targetByKey = new Map(targetQuestions.map(question => [question.key, question]));
+    const sourceById = new Map(before.criteria.map(question => [question.criterionId, question]));
+    const targetPrompts = (body.commentPrompts ?? before.commentPrompts) as Array<{id?:string;prompt:string;required:boolean;order:number}>;
+    const promptIds = new Set(targetPrompts.flatMap(prompt => prompt.id ? [prompt.id] : []));
+    const updates: Array<{ assessmentId: string; responses: Prisma.InputJsonValue; archive: Prisma.InputJsonValue }> = [];
+    let impact = 0;
+    for (const assessment of before.assessments) {
+      if (assessment.observerSignedAt || assessment.observeeSignedAt || assessment.isLocked) {
+        if (!assessment.templateSnapshot) await db.signedAssessment.update({ where: { assessmentId: assessment.assessmentId }, data: { templateSnapshot: createTemplateSnapshot(before) as Prisma.InputJsonValue } });
+        continue;
+      }
+      const responses = assessment.responses as {answers?:Record<string,string|number>;comments?:string;promptAnswers?:Record<string,string>};
+      if (!responses || typeof responses !== "object" || !responses.answers || typeof responses.answers !== "object") throw new ConfigurationError(409, "ASSESSMENT_FORMAT", "A saved draft requires manual review before this template can be edited.");
+      const answers: Record<string,string|number> = {}, promptAnswers: Record<string,string> = {};
+      const archived: Array<Record<string,unknown>> = [];
+      for (const [sourceId, answer] of Object.entries(responses.answers)) {
+        const source = sourceById.get(sourceId), target = source ? targetByKey.get(source.criterionKey) : undefined;
+        const type = target?.type.toUpperCase();
+        const compatible = target && type === source!.questionType && (type !== "RATING" || target.options?.some(option => option.value === answer));
+        if (compatible) answers[target!.id!] = answer;
+        else archived.push({ kind: "answer", key: source?.criterionKey ?? sourceId, value: answer, reason: target ? "question type or scale changed" : "question removed" });
+      }
+      for (const [promptId, answer] of Object.entries(responses.promptAnswers ?? {})) {
+        if (promptIds.has(promptId)) promptAnswers[promptId] = answer;
+        else archived.push({ kind: "comment", key: promptId, value: answer, reason: "comment prompt removed" });
+      }
+      impact += archived.length;
+      const prior = Array.isArray(assessment.responseArchive) ? assessment.responseArchive : [];
+      updates.push({ assessmentId: assessment.assessmentId, responses: { answers, comments: responses.comments ?? "", promptAnswers }, archive: [...prior, ...archived] as Prisma.InputJsonValue });
+    }
+    if (impact && body.confirmImpact !== true) throw new ConfigurationError(409, "TEMPLATE_IMPACT_CONFIRMATION_REQUIRED", `${impact} saved answer(s) or comment(s) would become incompatible. Confirm to archive them without silent loss.`);
     const result = await db.observationTemplate.updateMany({ where: { templateId: id, revision: current.revision }, data: {
       ...(body.title === undefined ? {} : { templateName: body.title as string }),
       ...(body.commentPrompts === undefined ? {} : { commentPrompts: body.commentPrompts as Prisma.InputJsonValue }),
@@ -152,10 +187,8 @@ export async function updateTemplate(prisma: PrismaClient, user: ConfigurationUs
       revision: { increment: 1 },
     } });
     if (!result.count) stale();
-    if (body.criteria !== undefined) {
-      const existing = await db.templateCriterion.findMany({ where: { templateId: id }, select: { criterionId: true } });
-      await saveCriteria(db, id, body.criteria as Questions, new Set(existing.map(row => row.criterionId)));
-    }
+    if (nextQuestions !== undefined) await saveCriteria(db, id, nextQuestions, new Set([...existingIds, ...nextQuestions.map(row => row.id!)]));
+    for (const update of updates) await db.signedAssessment.update({ where: { assessmentId: update.assessmentId }, data: { responses: update.responses, responseArchive: update.archive } });
     return getTemplate(db, user, id);
   });
 }
@@ -172,5 +205,41 @@ export async function publishTemplate(prisma: PrismaClient, user: ConfigurationU
     const complete = await getTemplate(db, user, id);
     criteria(complete.criteria); text(complete.title); commentPrompts(complete.commentPrompts); signatureLabels(complete.signatureLabels);
     return complete;
+  });
+}
+
+export async function unarchiveTemplate(prisma: PrismaClient, user: ConfigurationUser, id: string, input: unknown) {
+  authorize(user, ["templates.manage"]);
+  const body = object(input);
+  fields(body, ["expectedRevision"]);
+  return prisma.$transaction(async db => {
+    const current = await readTemplate(db, id, body.expectedRevision);
+    if (current.status !== "archived") throw new ConfigurationError(409, "INVALID_TRANSITION", "Only archived templates can be restored.");
+    const result = await db.observationTemplate.updateMany({
+      where: { templateId: uuid(id), revision: current.revision, status: "archived" },
+      data: { status: "draft", isActive: false, archivedAt: null, revision: { increment: 1 } },
+    });
+    if (!result.count) stale();
+    return getTemplate(db, user, id);
+  });
+}
+
+export async function deleteTemplate(prisma: PrismaClient, user: ConfigurationUser, id: string, input: unknown) {
+  authorize(user, ["templates.manage"]); id = uuid(id);
+  const body = object(input); fields(body, ["expectedRevision"]); const expected = revision(body.expectedRevision);
+  return prisma.$transaction(async db => {
+    const template = await db.observationTemplate.findUnique({ where: { templateId: id }, select: { revision: true, status: true,
+      _count: { select: { assessments: true, assignedObservations: true } } } });
+    if (!template) missing("Observation template not found.");
+    if (template.revision !== expected) stale();
+    const used = template.status !== "draft" || template._count.assessments > 0 || template._count.assignedObservations > 0;
+    if (used) {
+      const changed = await db.observationTemplate.updateMany({ where: { templateId: id, revision: expected }, data: { status: "archived", isActive: false, archivedAt: new Date(), revision: { increment: 1 } } });
+      if (!changed.count) stale();
+      return { deleted: false, archived: true, templateId: id, revision: expected + 1 };
+    }
+    await db.templateCriterion.deleteMany({ where: { templateId: id } });
+    await db.observationTemplate.delete({ where: { templateId: id } });
+    return { deleted: true, archived: false, templateId: id };
   });
 }

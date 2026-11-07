@@ -23,7 +23,7 @@ function filters(url: URL) {
 }
 
 const select = {
-  signupId: true, signupDate: true,
+  signupId: true, signupDate: true, revision: true,
   professor: { select: { user: { select: { userId: true, fullName: true, email: true } } } },
   section: { select: {
     sectionId: true, sectionCode: true, semesterId: true,
@@ -51,7 +51,7 @@ function signupResponse(row: SignupRow) {
   }
   const observation = row.observations[0], section = row.section, course = section.course;
   return {
-    signupId: row.signupId, observationId: observation?.observationId ?? null,
+    signupId: row.signupId, revision: row.revision, observationId: observation?.observationId ?? null,
     observee: { id: row.professor.user.userId, name: row.professor.user.fullName, email: row.professor.user.email },
     section: {
       id: section.sectionId, sectionNumber: section.sectionCode, semesterId: section.semesterId,

@@ -2,7 +2,7 @@ import { ConfigurationError, hasAnyPermission, object, sameOrigin, type Configur
 import { cycleReadPermissions, templateReadPermissions } from "./queries/configuration";
 
 export type Operation = "cycles.list" | "cycles.get" | "cycles.create" | "cycles.update" | "cycles.settings" |
-  "semesters.list" | "semesters.create" | "semesters.delete" | "templates.list" | "templates.get" | "templates.current" | "templates.create" | "templates.update" | "templates.publish";
+  "semesters.list" | "semesters.create" | "semesters.delete" | "templates.list" | "templates.get" | "templates.current" | "templates.create" | "templates.update" | "templates.publish" | "templates.unarchive" | "templates.delete";
 export function configurationHandler(operation:Operation, dependencies:{getUser:()=>Promise<ConfigurationUser|null>; execute:(operation:Operation,user:ConfigurationUser,url:URL,params:Record<string,string>,body:unknown)=>Promise<unknown>}) {
   return async (request:Request,context:{params:Promise<Record<string,string>>}) => {
     try {
@@ -35,6 +35,7 @@ export function configurationHandler(operation:Operation, dependencies:{getUser:
       if (!failure && error && typeof error==="object" && "code" in error) {
         if (error.code==="P2002") failure=new ConfigurationError(409,"DUPLICATE","A record with these unique fields already exists.");
         if (error.code==="P2003") failure=new ConfigurationError(409,"RELATED_RECORD","A related record is unavailable or still in use.");
+        if (["P2021","P2022"].includes(String(error.code))) failure=new ConfigurationError(503,"DATABASE_MIGRATION_REQUIRED","The database schema is not up to date. Apply the pending Prisma migrations and retry.");
         if (error.code==="P2034") failure=new ConfigurationError(409,"CONCURRENT_UPDATE","Concurrent update; reload and retry.");
       }
       if (!failure) { console.error("Configuration request failed."); failure=new ConfigurationError(500,"INTERNAL_ERROR","Unable to complete the configuration request."); }

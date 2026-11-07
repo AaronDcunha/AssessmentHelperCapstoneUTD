@@ -7,5 +7,6 @@ export default async function ObserverSelectionPage() {
     canGenerate={user.permissions.includes("recommendations.generate")}
     canRelease={user.permissions.includes("recommendations.release")}
     canRegenerate={user.permissions.includes("recommendations.regenerate")}
+    canDelete={user.permissions.includes("signups.delete")}
   />;
 }

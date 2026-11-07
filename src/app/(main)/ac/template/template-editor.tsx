@@ -49,7 +49,7 @@ function TemplateWorkspace({ initial }: { initial: TemplateSummary[] }) {
       <Select label="Observation template" name="templateId" value={activeId} disabled={busy} wrapperClassName="min-w-0 flex-1" onChange={event => choose(event.target.value)}>
         <option value="">Select a draft or published template</option>
         {selection === "new" && !created && <option value="new">New unsaved template</option>}
-        {summaries.map(item => <option key={item.id} value={item.id}>{item.title} — {item.status === "draft" ? "Draft" : "Published"}</option>)}
+        {summaries.map(item => <option key={item.id} value={item.id}>{item.title} — {item.status === "draft" ? "Draft" : item.status === "archived" ? "Archived" : "Published"}</option>)}
       </Select>
       <Button variant="secondary" disabled={busy} onClick={() => choose("new")}>+ New template</Button>
     </div>
@@ -117,8 +117,15 @@ function TemplateForm({ initial, onSaved, onDirty, onBusy, reload }: { initial: 
       if (publish && !window.confirm("Publish this saved template for Faculty use?")) return;
       busy.current = true; setSaving(true); onBusy(true);
       if (!saved && !creationAttempt.current) creationAttempt.current = { ...payload, creationKey: crypto.randomUUID() };
-      const result = publish ? await acApi.publishTemplate(saved!.id, saved!.revision)
-        : saved ? await acApi.updateTemplate(saved.id, { ...payload, expectedRevision: saved.revision }) : await acApi.createTemplate(creationAttempt.current!);
+      let result;
+      try { result = publish ? await acApi.publishTemplate(saved!.id, saved!.revision)
+        : saved ? await acApi.updateTemplate(saved.id, { ...payload, expectedRevision: saved.revision }) : await acApi.createTemplate(creationAttempt.current!); }
+      catch (error) {
+        if (!publish && saved && error instanceof ApiRequestError && error.code === "TEMPLATE_IMPACT_CONFIRMATION_REQUIRED"
+          && window.confirm(`${error.message}\n\nCompatible answers will be preserved. Incompatible values will be retained in the assessment archive. Continue?`)) {
+          result = await acApi.updateTemplate(saved.id, { ...payload, expectedRevision: saved.revision, confirmImpact: true });
+        } else throw error;
+      }
       creationAttempt.current = null;
       if (active.current) { setCreationUncertain(false); accept(result); setSuccess(true); setMessage(publish ? "Template published." : result.status === "draft" ? "Draft saved. Publish when ready for Faculty use." : "Published template changes saved."); }
     } catch (error) { if (active.current) {
@@ -129,6 +136,29 @@ function TemplateForm({ initial, onSaved, onDirty, onBusy, reload }: { initial: 
       setConflict((error as { status?: number }).status === 409);
     } }
     finally { busy.current = false; if (active.current) { setSaving(false); onBusy(false); } }
+  }
+  async function removeTemplate() {
+    if (!saved || dirty || busy.current) return;
+    const action = saved.status === "draft" ? "delete this unused draft permanently" : "archive this template and retain every linked observation and assessment";
+    if (!window.confirm(`Do you want to ${action}?`)) return;
+    busy.current = true; setSaving(true); onBusy(true); setMessage(null);
+    try { const result = await acApi.deleteTemplate(saved.id, saved.revision); if (result.deleted) window.location.reload(); else { setMessage("Template archived. Existing observations and historical assessments still use their assigned or frozen copy."); setSuccess(true); reload(); } }
+    catch (error) { setMessage(configurationError(error)); setSuccess(false); }
+    finally { busy.current = false; if (active.current) { setSaving(false); onBusy(false); } }
+  }
+  async function unarchiveTemplate() {
+    if (!saved || saved.status !== "archived" || dirty || busy.current) return;
+    if (!window.confirm("Restore this archived template as an editable draft? It will remain unavailable for new observations until you explicitly publish it again.")) return;
+    busy.current = true; setSaving(true); onBusy(true); setMessage(null); setSuccess(false);
+    try {
+      const restored = await acApi.unarchiveTemplate(saved.id, saved.revision);
+      accept(restored);
+      setMessage("Template restored as a draft. Review and publish it when it is ready for new observations.");
+      setSuccess(true);
+    } catch (error) {
+      setMessage(configurationError(error));
+      setConflict((error as { status?: number }).status === 409);
+    } finally { busy.current = false; if (active.current) { setSaving(false); onBusy(false); } }
   }
 
   if (preview) return <TemplatePreview draft={draft} onBack={() => setPreview(false)} />;
@@ -143,12 +173,13 @@ function TemplateForm({ initial, onSaved, onDirty, onBusy, reload }: { initial: 
       {tabs.map((tab, index) => <Button key={tab} id={`template-tab-${index}`} role="tab" tabIndex={section === index ? 0 : -1} aria-selected={section === index} aria-controls="template-panel" variant={section === index ? "primary" : "secondary"} disabled={saving} onClick={() => setSection(index)}>{index + 1}&nbsp; {tab}</Button>)}
     </div>
     <div className="flex flex-wrap items-center gap-ah-12">
-      <span className="rounded-ah-pill bg-neutral-bg px-ah-12 py-ah-4 text-label">{saved ? saved.status === "published" ? "Published" : "Saved draft" : "Unsaved draft"}</span>
+      <span className="rounded-ah-pill bg-neutral-bg px-ah-12 py-ah-4 text-label">{saved ? saved.status === "published" ? "Published" : saved.status === "archived" ? "Archived" : "Saved draft" : "Unsaved draft"}</span>
       {dirty && <span className="text-caption text-warning">Unsaved changes</span>}
       {saved && <span className="text-caption text-muted">Revision {saved.revision}</span>}
     </div>
-    {saved?.status === "published" && <p className="text-caption text-warning">Saving edits changes this published template in place, including what linked assessments display. Removing referenced questions is restricted by the server.</p>}
-    <fieldset disabled={saving || creationUncertain} className="min-w-0 space-y-ah-24">
+    {saved?.status === "published" && <p className="text-caption text-warning">Saving edits updates unfinished forms only. Compatible answers are preserved; incompatible values require confirmation and are archived. A form is frozen permanently when either participant acknowledges it.</p>}
+    {saved?.status === "archived" && <p className="text-caption text-muted">Archived templates are read-only and retained for assigned observations and historical evaluations. Restore one as a draft before editing or publishing it again.</p>}
+    <fieldset disabled={saving || creationUncertain || saved?.status === "archived"} className="min-w-0 space-y-ah-24">
       <Input label="Template title" maxLength={2000} value={draft.title} onChange={event => edit(current => ({ ...current, title: event.target.value }))} />
       <div role="tabpanel" id="template-panel" aria-labelledby={`template-tab-${section}`} className="space-y-ah-16">
         <h3 className="text-section">{tabs[section]}</h3>
@@ -197,8 +228,10 @@ function TemplateForm({ initial, onSaved, onDirty, onBusy, reload }: { initial: 
         {section > 0 && <Button variant="secondary" disabled={saving} onClick={() => setSection(value => value - 1)}>← Previous section</Button>}
       </div>
       <div className="flex flex-wrap gap-ah-12">
-        <Button disabled={saving} onClick={() => save()}>{saving ? "Saving…" : creationUncertain ? "Retry Save" : "Save template"}</Button>
+        <Button disabled={saving || saved?.status === "archived"} onClick={() => save()}>{saving ? "Saving…" : creationUncertain ? "Retry Save" : "Save template"}</Button>
         {saved?.status === "draft" && <Button variant="secondary" disabled={saving || dirty} onClick={() => save(true)}>Publish template</Button>}
+        {saved?.status === "archived" && <Button variant="secondary" disabled={saving || dirty} onClick={() => void unarchiveTemplate()}>Unarchive template</Button>}
+        {saved && saved.status !== "archived" && <Button variant="danger" disabled={saving || dirty} onClick={() => void removeTemplate()}>{saved.status === "draft" ? "Delete draft" : "Archive template"}</Button>}
         {section < 2 && <Button variant="secondary" disabled={saving} onClick={() => setSection(value => value + 1)}>Next section →</Button>}
       </div>
     </div>

@@ -4,7 +4,7 @@ import { getPrisma } from "./prisma";
 import type { ConfigurationUser } from "./configuration-validation";
 import { getCycle, getCycles, getSemesters,
   getTemplate, getTemplates, getCurrentTemplate } from "./queries/configuration";
-import { createCycle, updateCycle, updateSettings, createTemplate, updateTemplate, publishTemplate } from "./services/configuration";
+import { createCycle, updateCycle, updateSettings, createTemplate, updateTemplate, publishTemplate, unarchiveTemplate, deleteTemplate } from "./services/configuration";
 
 import { configurationHandler as handler, type Operation } from "./configuration-http";
 
@@ -27,6 +27,8 @@ async function execute(operation:Operation,user:ConfigurationUser,url:URL,params
     case "templates.create": return createTemplate(prisma,user,body);
     case "templates.update": return updateTemplate(prisma,user,params.templateId,body);
     case "templates.publish": return publishTemplate(prisma,user,params.templateId,body);
+    case "templates.unarchive": return unarchiveTemplate(prisma,user,params.templateId,body);
+    case "templates.delete": return deleteTemplate(prisma,user,params.templateId,body);
   }
 }
 

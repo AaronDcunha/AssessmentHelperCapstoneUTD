@@ -115,7 +115,7 @@ export async function getTemplate(db: Connection, user: ConfigurationUser, id: s
 export async function getTemplates(db: Connection, user: ConfigurationUser, url: URL) {
   authorize(user, templateReadPermissions);
   const { limit, cursor } = pagination(url), status = url.searchParams.get("status");
-  if (status !== null && !["draft", "published"].includes(status)) invalid("Invalid template status.");
+  if (status !== null && !["draft", "published", "archived"].includes(status)) invalid("Invalid template status.");
   const rows = await db.observationTemplate.findMany({
     where: { AND: [managesTemplates(user) ? {} : { status: "published" }, ...(status ? [{ status }] : [])],
       ...(cursor ? { templateId: { gt: cursor } } : {}) },
@@ -127,7 +127,7 @@ export async function getTemplates(db: Connection, user: ConfigurationUser, url:
 export async function getCurrentTemplate(db: Connection, user: ConfigurationUser, url: URL) {
   authorize(user, templateReadPermissions);
   if (url.searchParams.has("cycleId")) invalid("Templates are university-wide; cycleId applicability is not supported.");
-  const template = await db.observationTemplate.findFirst({ where: { status: "published", isActive: true },
+  const template = await db.observationTemplate.findFirst({ where: { status: "published", isActive: true, archivedAt: null },
     orderBy: [{ publishedAt: "desc" }, { templateId: "desc" }], include: { criteria: { orderBy: { displayOrder: "asc" } } } });
   if (!template) throw new ConfigurationError(404, "NOT_FOUND", "No published template is available.");
   return templateResponse(template);
