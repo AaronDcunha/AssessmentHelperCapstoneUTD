@@ -6,6 +6,7 @@ import { getPrisma } from "../prisma";
 import { selectedFacultyObservation } from "../faculty-context";
 import { getFacultyDashboard } from "./faculty-dashboard";
 import { commentPrompts, signatureLabels } from "../configuration-validation";
+import { readTemplateSnapshot } from "../template-snapshot";
 
 type Database = Prisma.TransactionClient;
 export type Criterion = { id: string; prompt: string; type: string; min: number | null; max: number | null; required: boolean; options: { value: number; label: string }[] | null };
@@ -69,10 +70,22 @@ export async function getFacultyAssessment(user: AccountUser, options: { databas
   if (!record?.observer || !record.scheduledAt || ["NOT_OCCURRED", "CANCELLED", "CANCELED"].includes(record.status.toUpperCase())) return null;
   const saved = record.signedAssessment;
   if (!saved && (record.cycle.observationDeadline <= now || record.completedAt || record.status.toUpperCase() === "COMPLETED")) return null;
-  const template = saved ? await db.observationTemplate.findUnique({ where: { templateId: saved.templateId }, include: { criteria: { orderBy: [{ displayOrder: "asc" }, { criterionId: "asc" }] } } }) : await db.observationTemplate.findFirst({ where: { isActive: true, status: "published" }, orderBy: [{ publishedAt: "desc" }, { templateId: "desc" }], include: { criteria: { orderBy: [{ displayOrder: "asc" }, { criterionId: "asc" }] } } });
-  if (!template || template.status !== "published") return null;
+  const snapshot = saved ? readTemplateSnapshot(saved.templateSnapshot) : null;
+  const templateId = snapshot?.id ?? saved?.templateId ?? record.assignedTemplateId;
+  // The fallback is only for a legacy row read during rolling deployment. New
+  // observations always persist assignedTemplateId at creation/migration time.
+  const template = snapshot ? null : templateId ? await db.observationTemplate.findUnique({ where: { templateId }, include: { criteria: { orderBy: [{ displayOrder: "asc" }, { criterionId: "asc" }] } } })
+    : await db.observationTemplate.findFirst({ where: { isActive: true, status: "published", archivedAt: null }, orderBy: [{ publishedAt: "desc" }, { templateId: "desc" }], include: { criteria: { orderBy: [{ displayOrder: "asc" }, { criterionId: "asc" }] } } });
+  // An observation pins its template at creation/reassignment time. Archiving
+  // that template must not make the already-assigned form disappear, even when
+  // the observer has not saved the first draft yet. Legacy rows without an
+  // assignment still use the published-only fallback query above.
+  if (!snapshot && !template) return null;
+  const source = snapshot ?? { id: template!.templateId, title: template!.templateName, description: template!.description, revision: template!.revision,
+    criteria: template!.criteria.map(c => ({ id: c.criterionId, prompt: c.criterionText, type: c.questionType, required: c.isRequired, options: c.options })),
+    commentPrompts: template!.commentPrompts, signatureLabels: template!.signatureLabels };
   const section = record.signup.section;
-  const view = assessmentView({ observationId: record.observationId, templateId: template.templateId, title: template.templateName, description: template.description, templateRevision: template.revision, commentPrompts: commentPrompts(template.commentPrompts) as CommentPrompt[], signatureLabels: signatureLabels(template.signatureLabels), timeZone: section.semester.timeZone, course: section.course.courseCode, section: section.sectionCode, scheduledAt: record.scheduledAt, participation: record.observer.userId === user.id ? "observer" : "observee", observer: record.observer.user.fullName, observee: record.signup.professor.user.fullName, locked: saved?.isLocked ?? false, responses: saved?.responses as AssessmentAnswers | null, observerSignedAt: saved?.observerSignedAt ?? null, observeeSignedAt: saved?.observeeSignedAt ?? null, criteria: template.criteria.map(criterion => ({ id: criterion.criterionId, prompt: criterion.criterionText, type: criterion.questionType, min: criterion.minRating, max: criterion.maxRating, required: criterion.isRequired, options: criterion.options as Criterion["options"] })) }, user);
+  const view = assessmentView({ observationId: record.observationId, templateId: source.id, title: source.title, description: source.description, templateRevision: source.revision, commentPrompts: commentPrompts(source.commentPrompts) as CommentPrompt[], signatureLabels: signatureLabels(source.signatureLabels), timeZone: section.semester.timeZone, course: section.course.courseCode, section: section.sectionCode, scheduledAt: record.scheduledAt, participation: record.observer.userId === user.id ? "observer" : "observee", observer: record.observer.user.fullName, observee: record.signup.professor.user.fullName, locked: saved?.isLocked ?? false, responses: saved?.responses as AssessmentAnswers | null, observerSignedAt: saved?.observerSignedAt ?? null, observeeSignedAt: saved?.observeeSignedAt ?? null, criteria: source.criteria.map(criterion => ({ id: criterion.id, prompt: criterion.prompt, type: criterion.type, min: null, max: null, required: criterion.required, options: (criterion.options ?? null) as Criterion["options"] })) }, user);
   // Expired and completed records remain readable; writes still obey deadlines.
   if (record.cycle.observationDeadline <= now || record.completedAt || record.status.toUpperCase() === "COMPLETED") { view.canEdit = false; view.canAcknowledge = false; }
   return view;

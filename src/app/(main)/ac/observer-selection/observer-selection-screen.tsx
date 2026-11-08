@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useAcCycle } from "@/components/ac/cycle-context";
+import { CycleSelector, useAcCycle } from "@/components/ac/cycle-context";
 import { CandidateReviewDialog, ReleaseConfirmationDialog, type ReleaseListSummary } from "@/components/ac/observer-selection-dialogs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/form-fields";
@@ -11,7 +11,7 @@ import {
   acApi, ApiRequestError, userDisplayName,
   type Cycle, type ObservationCandidatesResponse, type ObserverSelectionSignup,
 } from "@/lib/ac-api";
-import { currentSemesterCycle, hasGeneratedList, initialSignupAvailable, matchState, meetingLabel, signupCourseLabel, signupWindow } from "@/lib/observer-selection";
+import { hasGeneratedList, initialSignupAvailable, matchState, meetingLabel, signupCourseLabel, signupWindow } from "@/lib/observer-selection";
 import { deadlineDisplay } from "@/lib/ac-configuration";
 
 type SignupRow = {
@@ -35,30 +35,22 @@ function MatchBadge({ generated, count }: { generated: boolean; count: number })
   return <span className={`inline-flex rounded-ah-8 px-ah-8 py-ah-8 text-caption ${tones[state.tone]}`}>{state.label}</span>;
 }
 
-export default function ObserverSelectionScreen({ canGenerate, canRelease, canRegenerate }: {
-  canGenerate: boolean; canRelease: boolean; canRegenerate: boolean;
+export default function ObserverSelectionScreen({ canGenerate, canRelease, canRegenerate, canDelete }: {
+  canGenerate: boolean; canRelease: boolean; canRegenerate: boolean; canDelete: boolean;
 }) {
-  const { cycles, loading, error, refreshCycles } = useAcCycle();
-  const [now, setNow] = useState<number | null>(null);
-  useEffect(() => {
-    const update = () => setNow(Date.now());
-    const initial = window.setTimeout(update, 0);
-    const interval = window.setInterval(update, 60000);
-    return () => { window.clearTimeout(initial); window.clearInterval(interval); };
-  }, []);
-  const selectedCycle = currentSemesterCycle(cycles, now);
-  if (loading || now === null) return <p role="status" className="text-body text-muted">Loading the current semester…</p>;
+  const { selectedCycle, loading, error, refreshCycles } = useAcCycle();
+  if (loading) return <p role="status" className="text-body text-muted">Loading evaluation cycles…</p>;
   if (error) return <div className="space-y-ah-16"><p role="alert" className="text-danger">{error}</p><Button variant="secondary" onClick={refreshCycles}>Retry</Button></div>;
-  if (!selectedCycle) return <p role="status" className="text-body text-muted">No evaluation cycle could be identified for the current semester. Check the semester dates and evaluation cycle in Semester Settings.</p>;
   return <div className="space-y-ah-24">
-    <p className="text-label text-muted">{selectedCycle.semester?.name}</p>
-    <CycleObserverSelection key={selectedCycle.id} selectedCycle={selectedCycle} canGenerate={canGenerate} canRelease={canRelease} canRegenerate={canRegenerate} />
+    <CycleSelector />
+    {selectedCycle ? <CycleObserverSelection key={selectedCycle.id} selectedCycle={selectedCycle} canGenerate={canGenerate} canRelease={canRelease} canRegenerate={canRegenerate} canDelete={canDelete} />
+      : <p role="status" className="text-body text-muted">Select an evaluation cycle to load its database signups and observations.</p>}
   </div>;
 }
 
 // A cycle change remounts this state, including pending reads, dialogs and selections.
-function CycleObserverSelection({ selectedCycle, canGenerate, canRelease, canRegenerate }: {
-  selectedCycle: Cycle; canGenerate: boolean; canRelease: boolean; canRegenerate: boolean;
+function CycleObserverSelection({ selectedCycle, canGenerate, canRelease, canRegenerate, canDelete }: {
+  selectedCycle: Cycle; canGenerate: boolean; canRelease: boolean; canRegenerate: boolean; canDelete: boolean;
 }) {
   const cycleId = selectedCycle?.id;
   const requestId = useRef(0);
@@ -70,6 +62,7 @@ function CycleObserverSelection({ selectedCycle, canGenerate, canRelease, canReg
   const [action, setAction] = useState<ActionState>("idle");
   const [actionError, setActionError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [deletingSignupId, setDeletingSignupId] = useState<string | null>(null);
   const [reviewObservationId, setReviewObservationId] = useState<string | null>(null);
   const [publication, setPublication] = useState<{rows:ObservationRow[];all:boolean}|null>(null);
   const pendingMutation = useRef<{kind:Exclude<ActionState,"idle">;run:()=>Promise<unknown>;message:string}|null>(null);
@@ -183,6 +176,18 @@ function CycleObserverSelection({ selectedCycle, canGenerate, canRelease, canReg
     }))};
     beginMutation("releasing",()=>acApi.releaseRecommendations(cycleId,body),"Selected recommendation lists published atomically.");
   }
+  async function removeSignup(row: SignupRow) {
+    if (!canDelete || row.signup.revision == null || deletingSignupId) return;
+    const observee = userDisplayName(row.signup.observee), course = signupCourseLabel(row.signup), semester = selectedCycle.semester?.name ?? "the selected semester";
+    const affected = row.signup.observationId ? "its observation, invitations, unfinished assessment draft, feedback, attachments, and queued work" : "the signup";
+    if (!window.confirm(`Delete ${observee}'s signup for ${course} (${semester})?\n\nThis permanently removes ${affected}. Signed or completed evaluations are always retained and will block this request.`)) return;
+    setDeletingSignupId(row.signup.signupId); setActionError(null); setNotice(null);
+    try {
+      await acApi.deleteSignup(row.signup.signupId, { expectedRevision: row.signup.revision, observations: row.signup.observationId && row.revision != null ? [{ id: row.signup.observationId, expectedRevision: row.revision }] : [] });
+      setNotice(`${observee}'s signup was deleted.`); await loadRows();
+    } catch (reason) { setActionError(reason instanceof Error ? reason.message : "The signup could not be deleted."); }
+    finally { setDeletingSignupId(null); }
+  }
 
   const busy = action !== "idle" || pendingKind !== null;
   return <div className="space-y-ah-24">
@@ -278,6 +283,7 @@ function CycleObserverSelection({ selectedCycle, canGenerate, canRelease, canReg
                   ? <TextAction onClick={() => { setActionError(null); setReviewObservationId(row.signup.observationId); }}>{count > 0 ? "Review observers" : "Review issue"}</TextAction>
                   : <span className="inline-flex min-h-9 min-w-[110px] items-center justify-center text-label text-muted">—</span>}
                   {canRelease && publishable(row) && <TextAction disabled={busy || loading} onClick={() => { setActionError(null); setPublication({rows:[row],all:false}); }}>Publish</TextAction>}
+                  {canDelete && <TextAction disabled={busy || loading || deletingSignupId === row.signup.signupId || row.signup.revision == null || (!!row.signup.observationId && row.revision == null)} onClick={() => void removeSignup(row)}>{deletingSignupId === row.signup.signupId ? "Deleting…" : "Delete signup"}</TextAction>}
                 </TableCell>
               </tr>;
             })}

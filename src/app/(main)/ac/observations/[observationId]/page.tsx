@@ -6,5 +6,7 @@ export default async function ObservationDetailsPage({ params, searchParams }: {
   const { observationId } = await params;
   const query = searchParams ? await searchParams : {};
   return <ObservationDetails alertId={query.alertId} observationId={observationId} canReadAssessment={user.permissions.includes("assessments.read")}
+    canDelete={user.permissions.includes("observations.delete")}
+    canReassignTemplate={user.permissions.includes("templates.manage") && user.permissions.includes("observations.read")}
     {...(query.alertId ? { backHref: "/ac", backLabel: "Back to AC Dashboard" } : {})} />;
 }

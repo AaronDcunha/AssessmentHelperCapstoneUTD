@@ -13,7 +13,8 @@ const cache = new Map();
 let selection = "", context, providerMode = false;
 let resource = { data: [], loading: false, error: null };
 const pending = [];
-const react = { ...realReact, useCallback: fn => fn, useEffect: () => {}, useContext: () => context,
+const react = { ...realReact, useCallback: fn => fn, useContext: () => context,
+  useEffect: () => {},
   useState: initial => providerMode ? [selection, value => { selection = value; }] : [initial, () => {}] };
 function load(filename) {
   const path = resolve(root, filename);

@@ -147,6 +147,32 @@ Faculty History page and its shared detail implementation are unchanged. No appl
 data was reset, seeded or deleted. See FACULTY_INTEGRATION_FIXES.md for verification.
 
 ASSESSMENT HELPER IMPLEMENTATION NOTES
+
+November 6, 2026 — AC/Admin safe deletion and template history
+- Added local branch feature/ac-safe-deletion-template-history; no remote push.
+- Added signups.delete and observations.delete permissions for AC/Admin.
+- Signup and observation DELETE routes use Serializable transactions, optimistic
+  revisions and an exact signup observation manifest. Signed/completed/closed/
+  NOT_OCCURRED records are retained. Observation-only deletion preserves the
+  signup and creates a fresh PENDING observation with copied meeting options.
+- Observation creation now pins the latest active published template. Explicit
+  reassignment is limited to unfinished forms and preserves compatible responses.
+- First acknowledgement stores a complete template snapshot. Later live-template
+  edits cannot change partially signed or finalized evaluation history.
+- Incompatible draft answers/comments are never silently dropped: the first write
+  returns a confirmation conflict; confirmed writes append values to responseArchive.
+- Used/published templates archive; only unused drafts delete permanently.
+- Archived templates can be revision-safely restored as inactive drafts by AC/Admin.
+  They must be explicitly published again; unarchiving never reassigns observations
+  or changes partially signed/finalized snapshots.
+- Notification receipts are retained/detached, pending delivery is skipped, active
+  delivery blocks deletion, and attachment files are removed only after commit.
+- Semester deletion now refuses to erase protected historical evaluations.
+- PostgreSQL application data was not reset, migrated or seeded during this work.
+  A disposable PostgreSQL database now verifies safe graph cleanup, fresh PENDING
+  replacement creation, stale-tab conflicts, draft answer preservation/archive,
+  immutable signed snapshots, permissions, rollback and semester retention. The
+  database is dropped after the run; application records remain unchanged.
 November 4, 2026 observation action availability:
 Report Not Completed is disabled on details and appointment pages for completed,
 closed, unscheduled, future or acknowledged observations. The query and write

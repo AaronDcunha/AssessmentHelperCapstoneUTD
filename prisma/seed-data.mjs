@@ -21,6 +21,7 @@ export const facultyPermissions = [
 ];
 export const acPermissions = [
   'cycles.read', 'cycles.manage', 'signups.read', 'observations.read',
+  'signups.delete', 'observations.delete',
   'recommendations.generate', 'recommendations.release', 'recommendations.regenerate',
   'late-acceptance.review', 'templates.read', 'templates.manage',
   'assessments.read', 'reports.read', 'metrics.read', 'notifications.send',

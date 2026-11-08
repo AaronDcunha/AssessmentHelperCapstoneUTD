@@ -48,6 +48,9 @@ new questions/prompts omit server IDs. Successful saves retain returned IDs/revi
 Published templates remain editable in place, with a warning about linked forms.
 Draft publication requires saved changes and confirmation. Referenced-question
 removal/conflicts show the server rejection; no automatic overwrite or replacement.
+Archived templates remain read-only until **Unarchive template** is confirmed. The
+action restores the record as an inactive draft; it can then be edited and explicitly
+published. Unarchiving never reassigns observations or changes frozen history.
 
 Preview uses current unsaved state, ordered questions, custom rating options,
 required indicators, comments and signature labels through shared form/rating/Section

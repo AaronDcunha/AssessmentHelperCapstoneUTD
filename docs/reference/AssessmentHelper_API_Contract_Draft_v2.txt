@@ -618,12 +618,14 @@ POST /api/observation-templates (COMPLETED) -- templates.manage, university-wide
   Keys are unique and bound to the creator/content; mismatch returns 409 CREATION_KEY_REUSED.
   Omitted keys retain legacy behavior without retry protection.
 PATCH /api/observation-templates/{templateId} (COMPLETED) -- templates.manage.
-  B: {expectedRevision,title?,criteria?:Criterion[],commentPrompts?,signatureLabels?}.
+  B: {expectedRevision,title?,criteria?:Criterion[],commentPrompts?,signatureLabels?,confirmImpact?}.
   R: Template. Proposed arrays replace supplied sections; omitted sections unchanged.
   Draft and published templates may be edited per October 18 clarification.
-  In-place question edits affect older linked assessments. Preserve criterion IDs
-  when editing existing questions. Cannot remove criteria once assessments exist;
-  use a new template for major changes. Existing answer JSON is never modified.
+  Preserve criterion IDs when editing existing questions. Unacknowledged forms keep
+  compatible answers. Removed questions, changed types/scales and removed comment
+  prompts return 409 until confirmImpact=true, then incompatible values are archived.
+  Partially signed and finalized forms use their immutable template snapshot and
+  are never changed by this PATCH.
   Types: rating|text. Ratings require 2-20 uniquely valued integer options with labels.
   No separate version model or /versions endpoint is implemented.
 POST /api/observation-templates/{templateId}/publish (COMPLETED) -- templates.manage.
@@ -631,6 +633,11 @@ POST /api/observation-templates/{templateId}/publish (COMPLETED) -- templates.ma
   New templates are inactive drafts. Publication activates them and records time.
   templates.read/manage can read drafts and published templates; assessment.read.own
   may read published templates only. Publication does not reassign old assessments.
+POST /api/observation-templates/{templateId}/unarchive (COMPLETED) -- templates.manage.
+  B: {expectedRevision}. R: draft Template. Only archived templates may transition.
+  Restores an archived record as an inactive editable draft and clears archivedAt.
+  It must be explicitly published before use by new observations. Existing observation
+  assignments and immutable assessment snapshots are not changed.
 GET /api/observations/{observationId}/template
   R: exact assigned Template, not latest. Authorized participants/reviewers only.
 GET /api/observations/{observationId}/assessment
@@ -919,3 +926,62 @@ list) has zero candidates. This is a derived matching alert, not a Faculty messa
 ID; review via Observer Selection. Ungenerated and superseded lists do not qualify.
 
 Faculty Due / Overdue professor search: GET faculty-status supports q (case-insensitive professor name, maximum 200 characters), combined with existing filters. Reminder recipientFilter also accepts q with the same name matching, so reminders respect the searched faculty population.
+
+November 6, 2026 safe deletion and template-history contract (supersedes the
+older template-assignment/edit wording and permanent semester cascade wording):
+
+DELETE /api/evaluation-signups/{signupId}
+  Permission: signups.delete (seeded for AC and Admin). Same-origin JSON.
+  B: {expectedRevision,observations:[{id,expectedRevision}]}. The observation
+  manifest must exactly match the signup at commit time. R: {deleted:true,
+  signupId,deletedObservationIds}. Deletes the unfinished signup and all of its
+  unfinished observations atomically. If any observation is acknowledged,
+  locked, completed, closed or NOT_OCCURRED, return 409 and retain everything.
+  A retry from a stale tab after deletion also returns 409 changed/already deleted.
+
+DELETE /api/observations/{observationId}
+  Permission: observations.delete (seeded for AC and Admin). Same-origin JSON.
+  B: {expectedRevision}. R: {deleted:true,deletedObservationId,
+  replacementObservationId,signupId,revision:0}. Deletes only the unfinished
+  observation graph. The signup remains and receives a new blank PENDING
+  observation with the same proposed meeting options and the latest active
+  published template. Protected historical observations return 409.
+  A retry from a stale tab after deletion returns 409 changed/already deleted.
+
+PATCH /api/observations/{observationId}/template
+  Permissions: templates.manage and observations.read. Same-origin JSON.
+  B: {templateId,expectedRevision,confirmImpact?:boolean}.
+  R: {observationId,templateId,revision,archivedResponseCount}. Only unfinished,
+  unacknowledged observations may be reassigned to an active published template.
+  Answers are mapped by stable criterion key and retained only when question type
+  and rating value remain compatible. Comment answers are retained by prompt ID.
+  Incompatible values return 409 until confirmImpact=true; then they move to the
+  assessment response archive rather than being discarded.
+
+DELETE /api/observation-templates/{templateId}
+  Permission: templates.manage. Same-origin JSON. B: {expectedRevision}.
+  An unused draft is permanently deleted. A published template, or any template
+  assigned to an observation/assessment, is archived instead and remains readable
+  for authorized historical use. R: {deleted,archived,templateId,revision?}.
+
+POST /api/observation-templates/{templateId}/unarchive
+  Permission: templates.manage. Same-origin JSON. B: {expectedRevision}.
+  Restores only an archived template as an inactive draft and increments its revision.
+  The restored draft may be edited and explicitly published. Existing assignments,
+  saved historical snapshots and acknowledgement records remain unchanged.
+
+Template assignment and snapshot rules:
+- Observation creation chooses the latest active published template and stores
+  assignedTemplateId. Publishing a later template never changes existing rows.
+- Editing an assigned template may update only unacknowledged forms. Compatible
+  answers are retained. Removed questions, changed types/scales and removed
+  comment prompts require explicit impact confirmation and are archived.
+- The first participant acknowledgement stores the complete template snapshot.
+  From then on template content, responses and acknowledgements are immutable;
+  the other participant signs the same snapshot. No automatic re-sign workflow.
+- Notifications/delivery receipts remain audit history. Pending email is skipped
+  and detached on deletion; an actively sending email blocks deletion. Feedback
+  attachment metadata is removed transactionally and private files only after
+  commit. Revision/manifest conflicts and serialization races return 409.
+- Permanent semester deletion is blocked when it would remove an acknowledged or
+  completed evaluation. Historical records take priority over destructive cleanup.

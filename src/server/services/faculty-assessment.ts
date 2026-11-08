@@ -1,9 +1,11 @@
 import "server-only";
+import type { Prisma } from "../../generated/prisma/client";
 import type { AccountUser } from "../account-auth";
 import { facultyTransaction, workflowObservation, touchObservation } from "./faculty-invitations";
 import { sendNotification } from "./notification-delivery";
 import { getFacultyAssessment, assessmentView, type AssessmentRow, type AssessmentAnswers, type Criterion, type CommentPrompt } from "../queries/faculty-assessment";
 import { FacultyActionError } from "./faculty-actions";
+import { createTemplateSnapshot } from "../template-snapshot";
 
 export function validateAssessmentAnswers(criteria: readonly Criterion[], value: unknown, complete: boolean, prompts: readonly CommentPrompt[] = []): AssessmentAnswers {
   if (!criteria.length || criteria.some(c => !["RATING", "TEXT"].includes(c.type)
@@ -51,7 +53,11 @@ export async function saveFacultyAssessment(user: AccountUser, body: unknown) {
     const observerSignedAt = input.action === "acknowledge" && form.participation === "observer" ? timestamp : form.observerSignedAt ? new Date(form.observerSignedAt) : null;
     const observeeSignedAt = input.action === "acknowledge" && form.participation === "observee" ? timestamp : form.observeeSignedAt ? new Date(form.observeeSignedAt) : null;
     const locked = !!observerSignedAt && !!observeeSignedAt;
-    const data = { responses, observerSignedAt, observeeSignedAt, isLocked: locked, completedAt: locked ? timestamp : null };
+    const needsSnapshot = input.action === "acknowledge" && !record.signedAssessment?.templateSnapshot;
+    const template = needsSnapshot ? await client.observationTemplate.findUnique({ where: { templateId: form.templateId }, include: { criteria: { orderBy: [{ displayOrder: "asc" }, { criterionId: "asc" }] } } }) : null;
+    if (needsSnapshot && !template) throw new FacultyActionError("The assigned template is unavailable.");
+    const data = { responses, observerSignedAt, observeeSignedAt, isLocked: locked, completedAt: locked ? timestamp : null,
+      ...(template ? { templateSnapshot: createTemplateSnapshot(template) as Prisma.InputJsonValue } : {}) };
     if (record.signedAssessment) {
       const updated = await client.signedAssessment.updateMany({ where: { assessmentId: record.signedAssessment.assessmentId, isLocked: false }, data });
       if (!updated.count) throw new FacultyActionError("The assessment is already locked.");

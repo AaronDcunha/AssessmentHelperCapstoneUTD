@@ -173,6 +173,25 @@ test("observer-selection mutations use the documented paths, methods and bodies"
   ]);
 });
 
+test("safe deletion and template lifecycle calls send revisions and confirmation manifests", async () => {
+  const originalFetch = globalThis.fetch, calls = [];
+  globalThis.fetch = async (input, init) => { calls.push({ input: String(input), method: init?.method, body: JSON.parse(String(init?.body)) }); return Response.json({ deleted: true }); };
+  try {
+    await acApi.deleteSignup("signup 1", { expectedRevision: 2, observations: [{ id: "observation 1", expectedRevision: 4 }] });
+    await acApi.deleteObservation("observation 1", 4);
+    await acApi.reassignObservationTemplate("observation 1", { templateId: "template 2", expectedRevision: 4, confirmImpact: true });
+    await acApi.unarchiveTemplate("template 1", 7);
+    await acApi.deleteTemplate("template 1", 7);
+  } finally { globalThis.fetch = originalFetch; }
+  assert.deepEqual(calls, [
+    { input: "/api/evaluation-signups/signup%201", method: "DELETE", body: { expectedRevision: 2, observations: [{ id: "observation 1", expectedRevision: 4 }] } },
+    { input: "/api/observations/observation%201", method: "DELETE", body: { expectedRevision: 4 } },
+    { input: "/api/observations/observation%201/template", method: "PATCH", body: { templateId: "template 2", expectedRevision: 4, confirmImpact: true } },
+    { input: "/api/observation-templates/template%201/unarchive", method: "POST", body: { expectedRevision: 7 } },
+    { input: "/api/observation-templates/template%201", method: "DELETE", body: { expectedRevision: 7 } },
+  ]);
+});
+
 test("non-success responses reject with a status-aware error", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response(null, { status: 404 });

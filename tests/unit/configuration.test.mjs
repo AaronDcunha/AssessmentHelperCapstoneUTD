@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 const { configurationHandler } = await import('../../src/server/configuration-http.ts');
 const { ConfigurationError, criteria, date, deadlines, pagination, timestamp } = await import('../../src/server/configuration-validation.ts');
-const { createCycle, updateCycle, updateSettings, createTemplate, updateTemplate, publishTemplate } = await import('../../src/server/services/configuration.ts');
+const { createCycle, updateCycle, updateSettings, createTemplate, updateTemplate, publishTemplate, unarchiveTemplate, deleteTemplate } = await import('../../src/server/services/configuration.ts');
 const { getCycles, getSemesters, getTemplates, getTemplate, getCurrentTemplate } = await import('../../src/server/queries/configuration.ts');
 
 const id='00000000-0000-4000-8000-000000000001';
@@ -12,8 +12,8 @@ const user={id,permissions:['cycles.manage','templates.manage']};
 const faculty={id,permissions:['course-sections.read.own','signups.read.own','observations.read.own','assessment.read.own']};
 const origin='http://localhost:3000';
 const operations=['cycles.list','cycles.get','cycles.create','cycles.update','cycles.settings','semesters.list','semesters.create','semesters.delete',
-  'templates.list','templates.get','templates.current','templates.create','templates.update','templates.publish'];
-const writes=new Set(['semesters.create','semesters.delete','cycles.create','cycles.update','cycles.settings','templates.create','templates.update','templates.publish']);
+  'templates.list','templates.get','templates.current','templates.create','templates.update','templates.publish','templates.unarchive','templates.delete'];
+const writes=new Set(['semesters.create','semesters.delete','cycles.create','cycles.update','cycles.settings','templates.create','templates.update','templates.publish','templates.unarchive','templates.delete']);
 function request(operation,headers={},body='{}') {
   return new Request(origin+'/api/configuration',{method:writes.has(operation)?'POST':'GET',
     headers:{'content-type':'application/json',origin,...headers},...(writes.has(operation)?{body}:{})});
@@ -70,7 +70,7 @@ test('services enforce permissions independently of route handlers',async()=>{
   const db=new Proxy({}, {get:()=>assert.fail('Unauthorized Prisma access')});
   const forbidden={id,permissions:[]};
   for(const run of [()=>createCycle(db,forbidden,{}),()=>updateCycle(db,forbidden,id,{}),()=>updateSettings(db,forbidden,id,{}),
-    ()=>createTemplate(db,forbidden,{}),()=>updateTemplate(db,forbidden,id,{}),()=>publishTemplate(db,forbidden,id,{}),
+    ()=>createTemplate(db,forbidden,{}),()=>updateTemplate(db,forbidden,id,{}),()=>publishTemplate(db,forbidden,id,{}),()=>unarchiveTemplate(db,forbidden,id,{}),()=>deleteTemplate(db,forbidden,id,{}),
     ()=>getCycles(db,forbidden,new URL(origin)),()=>getSemesters(db,forbidden,new URL(origin)),
     ()=>getTemplates(db,forbidden,new URL(origin)),()=>getTemplate(db,forbidden,id),()=>getCurrentTemplate(db,forbidden,new URL(origin))]) {
     await assert.rejects(run,error=>error.status===403);

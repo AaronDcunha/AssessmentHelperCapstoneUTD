@@ -26,6 +26,10 @@ const testUrl = new URL(appUrl); testUrl.pathname = `/${databaseName}`;
 assert.notEqual(testUrl.pathname, appUrl.pathname);
 const admin = new pg.Pool({ connectionString: appUrl.toString(), connectionTimeoutMillis: 5000 });
 const pool = new pg.Pool({ connectionString: testUrl.toString(), max: 12, connectionTimeoutMillis: 5000 });
+// The final DROP DATABASE ... WITH (FORCE) intentionally terminates any idle
+// test connections. Keep that expected cleanup event from masking the original
+// assertion error when a check fails.
+pool.on('error', () => {});
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: testUrl.toString() }) });
 const root = fileURLToPath(new URL('../../', import.meta.url)), require = createRequire(import.meta.url), cache = new Map();
 let selectedCycle = null, selectedObservation = null, requestUser = null, sqlPool;
@@ -53,6 +57,7 @@ const invitations = load('src/server/services/faculty-invitations.ts');
 const participation = load('src/server/services/faculty-participation.ts');
 const attachments = load('src/server/services/faculty-attachments.ts');
 const assessments = load('src/server/services/faculty-assessment.ts');
+const lifecycle = load('src/server/services/observation-lifecycle.ts');
 const reads = load('src/server/queries/faculty-workflow.ts');
 const forms = load('src/server/queries/faculty-assessment.ts');
 const dashboards = load('src/server/queries/faculty-dashboard.ts');
@@ -86,6 +91,8 @@ try {
   await prisma.semester.create({ data: { semesterId, termCode: `${String(now.getUTCFullYear()).slice(2)}f`, termName: 'Isolated current term', startsOn: new Date(now.getTime() - 60 * day), endsOn: new Date(now.getTime() + 60 * day), timeZone: 'America/Chicago' } });
   await prisma.evaluationCycle.create({ data: { cycleId, semesterId, cycleName: 'Isolated current cycle', signupDeadline: new Date(now.getTime() + day), observationDeadline: new Date(now.getTime() + 10 * day), feedbackDeadline: new Date(now.getTime() + 20 * day) } });
   await prisma.course.create({ data: { courseId, departmentId, courseCode: 'TEST1000', courseTitle: 'Isolated course', courseLevel: 1000 } });
+  const initialTemplate = await configuration.createTemplate(prisma, committee, { title: 'Initial published form', criteria: [{ key: 'initial-rating', prompt: 'Initial evidence', type: 'rating', required: true, order: 0, options: [{ value: 1, label: 'Needs support' }, { value: 2, label: 'Meets expectations' }] }] });
+  await configuration.publishTemplate(prisma, committee, initialTemplate.id, { expectedRevision: 0 });
   for (let index = 0; index < 6; index++) {
     const id = randomUUID(), professorId = randomUUID(), sectionId = randomUUID();
     const user = { id, name: `Faculty ${index}`, username: `fixture_${index}`, roles: ['Faculty'], permissions: [...facultyPermissions] };
@@ -324,6 +331,105 @@ try {
   assert.ok((await prisma.observation.findUniqueOrThrow({ where: { observationId: paired.observationId } })).scheduledAt > new Date(), 'Assessment workflow is tested before the proposed appointment');
   const template = await configuration.createTemplate(prisma, committee, { title: 'Sparse scale', criteria: [{ key: 'rating', prompt: 'Evidence of learning', type: 'rating', required: true, order: 0, options: [{ value: 0, label: 'Needs support' }, { value: 10, label: 'Excellent' }] }], commentPrompts: [{ prompt: 'Evidence', required: true, order: 0 }] });
   await configuration.publishTemplate(prisma, committee, template.id, { expectedRevision: 0 });
+  assert.equal((await prisma.observation.findUniqueOrThrow({ where: { observationId: paired.observationId } })).assignedTemplateId, initialTemplate.id, 'Publishing a new template does not switch an existing observation');
+  const archivedAssigned = await configuration.deleteTemplate(prisma, committee, initialTemplate.id, { expectedRevision: 1 });
+  assert.equal(archivedAssigned.archived, true);
+  assert.equal((await forms.getFacultyAssessment(observer)).templateId, initialTemplate.id, 'An assigned form remains readable after its live template is archived');
+
+  const unusedDraft = await configuration.createTemplate(prisma, committee, { title: 'Unused draft', criteria: [{ key: 'unused', prompt: 'Unused question', type: 'text', required: false, order: 0 }] });
+  const unusedDeletion = await configuration.deleteTemplate(prisma, committee, unusedDraft.id, { expectedRevision: 0 });
+  assert.equal(unusedDeletion.deleted, true); assert.equal(await prisma.observationTemplate.findUnique({ where: { templateId: unusedDraft.id } }), null);
+  const archivable = await configuration.createTemplate(prisma, committee, { title: 'Archivable form', criteria: [{ key: 'archive', prompt: 'Archived question', type: 'text', required: false, order: 0 }] });
+  const publishedArchivable = await configuration.publishTemplate(prisma, committee, archivable.id, { expectedRevision: 0 });
+  const archival = await configuration.deleteTemplate(prisma, committee, archivable.id, { expectedRevision: publishedArchivable.revision });
+  assert.equal(archival.archived, true);
+  assert.equal((await configurationReads.getTemplate(prisma, committee, archivable.id)).status, 'archived');
+  const restoredArchivable = await configuration.unarchiveTemplate(prisma, committee, archivable.id, { expectedRevision: archival.revision });
+  assert.equal(restoredArchivable.status, 'draft');
+  const republishedArchivable = await configuration.publishTemplate(prisma, committee, archivable.id, { expectedRevision: restoredArchivable.revision });
+  assert.equal(republishedArchivable.status, 'published');
+  checked('unused draft deletion, published archival, archived readability, unarchive and explicit republish');
+
+  // Observation-only deletion keeps the signup and replaces its observation,
+  // while clearing every piece of unfinished workflow data from the old one.
+  const lifecycleObservee = await prisma.professor.findUniqueOrThrow({ where: { userId: faculty[4].id } });
+  const lifecycleObserver = await prisma.professor.findUniqueOrThrow({ where: { userId: faculty[5].id } });
+  const editableTemplate = await configuration.createTemplate(prisma, committee, { title: 'Editable unfinished form', criteria: [{ key: 'rating', prompt: 'Original editable prompt', type: 'rating', required: true, order: 0, options: [{ value: 0, label: 'Needs support' }, { value: 10, label: 'Excellent' }] }] });
+  await configuration.publishTemplate(prisma, committee, editableTemplate.id, { expectedRevision: 0 });
+  const lifecycleSignup = await prisma.evaluationSignup.create({ data: { cycleId, professorId: lifecycleObservee.professorId, sectionId: sections[4] } });
+  const lifecycleObservation = await prisma.observation.create({ data: { cycleId, signupId: lifecycleSignup.signupId, assignedTemplateId: editableTemplate.id,
+    timeOptions: { create: { preferredDate: tomorrow, startsAt: new Date(`${meetingDate}T10:00:00Z`), endsAt: new Date(`${meetingDate}T11:00:00Z`), timeZone: 'America/Chicago', location: 'Lifecycle room' } } }, include: { timeOptions: true } });
+  const lifecycleList = await prisma.recommendationList.create({ data: { observationId: lifecycleObservation.observationId, generationId: randomUUID(), generatedAt: now } });
+  const lifecycleCandidate = await prisma.observationCandidate.create({ data: { observationId: lifecycleObservation.observationId, recommendationListId: lifecycleList.listId, professorId: lifecycleObserver.professorId, status: 'PENDING' } });
+  const lifecycleAttempt = await prisma.invitationAttempt.create({ data: { candidateId: lifecycleCandidate.candidateId, number: 1, invitedAt: now, expiresAt: new Date(now.getTime() + day) } });
+  await prisma.observation.update({ where: { observationId: lifecycleObservation.observationId }, data: { currentDraftListId: lifecycleList.listId } });
+  await prisma.signedAssessment.create({ data: { observationId: lifecycleObservation.observationId, templateId: editableTemplate.id, responses: { answers: { [editableTemplate.criteria[0].id]: 0 }, comments: 'unfinished', promptAnswers: {} } } });
+  const lifecycleFeedback = await prisma.processFeedback.create({ data: { observationId: lifecycleObservation.observationId, professorId: lifecycleObservee.professorId, feedbackRole: 'OBSERVEE', satisfaction: 3 } });
+  const lifecycleAttachment = await prisma.feedbackAttachment.create({ data: { ownerId: faculty[4].id, observationId: lifecycleObservation.observationId, feedbackId: lifecycleFeedback.feedbackId, originalName: 'unfinished.pdf', contentType: 'application/pdf', sizeBytes: 10, storageKey: randomUUID() } });
+  const lifecycleNotification = await prisma.notification.create({ data: { userId: faculty[4].id, title: 'Unfinished workflow', message: 'Will be detached', notificationType: 'TEST', targetKind: 'observation', targetId: lifecycleObservation.observationId, eventKey: `lifecycle:${lifecycleObservation.observationId}` } });
+  const compatibleEdit = await configuration.updateTemplate(prisma, committee, editableTemplate.id, { expectedRevision: 1, criteria: [{ id: editableTemplate.criteria[0].id, key: 'rating', prompt: 'Compatible prompt edit', type: 'rating', required: true, order: 0, options: [{ value: 0, label: 'Needs support' }, { value: 10, label: 'Excellent' }] }] });
+  assert.equal((await prisma.signedAssessment.findUniqueOrThrow({ where: { observationId: lifecycleObservation.observationId } })).responses.answers[editableTemplate.criteria[0].id], 0);
+  const incompatibleEdit = { expectedRevision: compatibleEdit.revision, criteria: [{ id: editableTemplate.criteria[0].id, key: 'rating', prompt: 'Incompatible scale edit', type: 'rating', required: true, order: 0, options: [{ value: 1, label: 'Low' }, { value: 2, label: 'High' }] }] };
+  await assert.rejects(configuration.updateTemplate(prisma, committee, editableTemplate.id, incompatibleEdit), error => error.code === 'TEMPLATE_IMPACT_CONFIRMATION_REQUIRED');
+  await configuration.updateTemplate(prisma, committee, editableTemplate.id, { ...incompatibleEdit, confirmImpact: true });
+  const archivedEditAssessment = await prisma.signedAssessment.findUniqueOrThrow({ where: { observationId: lifecycleObservation.observationId } });
+  assert.deepEqual(archivedEditAssessment.responses.answers, {}); assert.equal(archivedEditAssessment.responseArchive.length, 1);
+  await prisma.signedAssessment.update({ where: { observationId: lifecycleObservation.observationId }, data: { responses: { answers: { [editableTemplate.criteria[0].id]: 1 }, comments: 'unfinished', promptAnswers: {} } } });
+  const compatibleTemplate = await configuration.createTemplate(prisma, committee, { title: 'Compatible reassignment', criteria: [{ key: 'rating', prompt: 'Updated evidence prompt', type: 'rating', required: true, order: 0, options: [{ value: 1, label: 'Low' }, { value: 2, label: 'High' }] }] });
+  await configuration.publishTemplate(prisma, committee, compatibleTemplate.id, { expectedRevision: 0 });
+  const compatibleReassignment = await lifecycle.reassignObservationTemplate(committee, lifecycleObservation.observationId, { templateId: compatibleTemplate.id, expectedRevision: 0 });
+  assert.equal(compatibleReassignment.archivedResponseCount, 0);
+  const compatibleAssessment = await prisma.signedAssessment.findUniqueOrThrow({ where: { observationId: lifecycleObservation.observationId } });
+  assert.equal(compatibleAssessment.responses.answers[compatibleTemplate.criteria[0].id], 1);
+  const incompatibleTemplate = await configuration.createTemplate(prisma, committee, { title: 'Incompatible reassignment', criteria: [{ key: 'rating', prompt: 'Changed scale', type: 'rating', required: true, order: 0, options: [{ value: 3, label: 'Low' }, { value: 4, label: 'High' }] }] });
+  await configuration.publishTemplate(prisma, committee, incompatibleTemplate.id, { expectedRevision: 0 });
+  await assert.rejects(lifecycle.reassignObservationTemplate(committee, lifecycleObservation.observationId, { templateId: incompatibleTemplate.id, expectedRevision: compatibleReassignment.revision }), /Confirm the reassignment/);
+  const incompatibleReassignment = await lifecycle.reassignObservationTemplate(committee, lifecycleObservation.observationId, { templateId: incompatibleTemplate.id, expectedRevision: compatibleReassignment.revision, confirmImpact: true });
+  assert.equal(incompatibleReassignment.archivedResponseCount, 1);
+  const incompatibleAssessment = await prisma.signedAssessment.findUniqueOrThrow({ where: { observationId: lifecycleObservation.observationId } });
+  assert.equal(incompatibleAssessment.responses.answers[compatibleTemplate.criteria[0].id], undefined);
+  assert.equal(incompatibleAssessment.responseArchive.length, 2);
+  await assert.rejects(lifecycle.deleteObservation(faculty[4], lifecycleObservation.observationId, { expectedRevision: 0 }), error => error.status === 403);
+  const deletion = await lifecycle.deleteObservation(committee, lifecycleObservation.observationId, { expectedRevision: incompatibleReassignment.revision });
+  assert.notEqual(deletion.replacementObservationId, lifecycleObservation.observationId);
+  assert.ok(await prisma.evaluationSignup.findUnique({ where: { signupId: lifecycleSignup.signupId } }));
+  const replacement = await prisma.observation.findUniqueOrThrow({ where: { observationId: deletion.replacementObservationId }, include: { timeOptions: true, signedAssessment: true, candidates: true, processFeedback: true } });
+  assert.equal(replacement.status, 'PENDING'); assert.equal(replacement.assignedTemplateId, incompatibleTemplate.id);
+  assert.equal(replacement.timeOptions.length, 1); assert.equal(replacement.signedAssessment, null);
+  assert.equal(replacement.candidates.length, 0); assert.equal(replacement.processFeedback.length, 0);
+  for (const [model, where] of [
+    ['observation', { observationId: lifecycleObservation.observationId }], ['recommendationList', { listId: lifecycleList.listId }],
+    ['observationCandidate', { candidateId: lifecycleCandidate.candidateId }], ['invitationAttempt', { attemptId: lifecycleAttempt.attemptId }],
+    ['signedAssessment', { observationId: lifecycleObservation.observationId }], ['processFeedback', { feedbackId: lifecycleFeedback.feedbackId }],
+    ['feedbackAttachment', { attachmentId: lifecycleAttachment.attachmentId }],
+  ]) assert.equal(await prisma[model].findFirst({ where }), null, model);
+  const detachedNotification = await prisma.notification.findUniqueOrThrow({ where: { notificationId: lifecycleNotification.notificationId }, include: { emailDelivery: true } });
+  assert.equal(detachedNotification.targetId, null); assert.equal(detachedNotification.inAppEnabled, false); assert.equal(detachedNotification.emailDelivery.status, 'skipped');
+  await assert.rejects(lifecycle.deleteObservation(committee, lifecycleObservation.observationId, { expectedRevision: 0 }), error => error.status === 409 && /already deleted/.test(error.message));
+  const refreshedSignup = await prisma.evaluationSignup.findUniqueOrThrow({ where: { signupId: lifecycleSignup.signupId } });
+  await lifecycle.deleteSignup(committee, lifecycleSignup.signupId, { expectedRevision: refreshedSignup.revision, observations: [{ id: replacement.observationId, expectedRevision: replacement.workflowRevision }] });
+  assert.equal(await prisma.evaluationSignup.findUnique({ where: { signupId: lifecycleSignup.signupId } }), null);
+  await assert.rejects(lifecycle.deleteSignup(committee, lifecycleSignup.signupId, { expectedRevision: refreshedSignup.revision, observations: [] }), error => error.status === 409 && /already deleted/.test(error.message));
+
+  // Signed observations block both observation and signup deletion.
+  const protectedSignup = await prisma.evaluationSignup.create({ data: { cycleId, professorId: lifecycleObserver.professorId, sectionId: sections[5] } });
+  const protectedObservation = await prisma.observation.create({ data: { cycleId, signupId: protectedSignup.signupId, assignedTemplateId: template.id } });
+  await prisma.signedAssessment.create({ data: { observationId: protectedObservation.observationId, templateId: template.id, responses: { answers: {}, comments: '', promptAnswers: {} }, observerSignedAt: now } });
+  await assert.rejects(lifecycle.deleteObservation(committee, protectedObservation.observationId, { expectedRevision: 0 }), /must be retained/);
+  await assert.rejects(lifecycle.deleteSignup(committee, protectedSignup.signupId, { expectedRevision: 0, observations: [{ id: protectedObservation.observationId, expectedRevision: 0 }] }), /must be retained/);
+  assert.ok(await prisma.observation.findUnique({ where: { observationId: protectedObservation.observationId } }));
+  requestUser = faculty[4];
+  const observationDeleteRoute = load('src/app/api/observations/[observationId]/route.ts');
+  const signupDeleteRoute = load('src/app/api/evaluation-signups/[signupId]/route.ts');
+  const deleteRequest = body => new Request('http://localhost/api/delete-test', { method: 'DELETE', headers: { origin: 'http://localhost', 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  assert.equal((await observationDeleteRoute.DELETE(deleteRequest({ expectedRevision: 0 }), { params: Promise.resolve({ observationId: protectedObservation.observationId }) })).status, 403);
+  assert.equal((await signupDeleteRoute.DELETE(deleteRequest({ expectedRevision: 0, observations: [{ id: protectedObservation.observationId, expectedRevision: 0 }] }), { params: Promise.resolve({ signupId: protectedSignup.signupId }) })).status, 403);
+  requestUser = null;
+  checked('safe observation/signup deletion, clean replacement, dependency cleanup, stale conflicts, permissions and signed-history retention');
+
+  const pairedBeforeReassignment = await prisma.observation.findUniqueOrThrow({ where: { observationId: paired.observationId } });
+  const reassigned = await lifecycle.reassignObservationTemplate(committee, paired.observationId, { templateId: template.id, expectedRevision: pairedBeforeReassignment.workflowRevision });
+  assert.equal(reassigned.templateId, template.id);
   let form = await forms.getFacultyAssessment(observer), responses = { answers: { [template.criteria[0].id]: 0 }, comments: 'Retained', promptAnswers: { [template.commentPrompts[0].id]: 'Observed evidence' } };
   assert.ok(form);
   assert.ok(new Date(form.scheduledAt) > new Date(), 'A confirmed future appointment can open the form');
@@ -347,6 +453,13 @@ try {
   const assessment = await prisma.signedAssessment.findUnique({ where: { observationId: paired.observationId } });
   assert.ok(assessment.isLocked && assessment.observerSignedAt && assessment.observeeSignedAt);
   assert.equal((await prisma.observation.findUnique({ where: { observationId: paired.observationId } })).status, 'COMPLETED');
+  const frozenBeforeLiveEdit = await forms.getFacultyAssessment(observer);
+  const editedAfterFinalization = await configuration.updateTemplate(prisma, committee, template.id, { expectedRevision: revised.revision, title: 'Changed live template after finalization', criteria: [{ id: template.criteria[0].id, key: 'rating', prompt: 'A different live question', type: 'rating', required: true, order: 0, options: [{ value: 10, label: 'Different low' }, { value: 20, label: 'Different high' }] }], signatureLabels: { observer: 'Changed observer label', observee: 'Changed observee label' } });
+  const archivedAfterFinalization = await configuration.deleteTemplate(prisma, committee, template.id, { expectedRevision: editedAfterFinalization.revision });
+  assert.equal(archivedAfterFinalization.archived, true);
+  const frozenAfterLiveEdit = await forms.getFacultyAssessment(observer);
+  assert.deepEqual({ title: frozenAfterLiveEdit.title, criteria: frozenAfterLiveEdit.criteria, responses: frozenAfterLiveEdit.responses, signatureLabels: frozenAfterLiveEdit.signatureLabels },
+    { title: frozenBeforeLiveEdit.title, criteria: frozenBeforeLiveEdit.criteria, responses: frozenBeforeLiveEdit.responses, signatureLabels: frozenBeforeLiveEdit.signatureLabels });
   checked('real draft persistence, assigned template edits, sparse scales, separate acknowledgements and concurrent finalization');
   for (const participant of [observer, faculty[0]]) {
     const finalizedReview = await forms.getFacultyAssessment(participant);
@@ -416,21 +529,37 @@ try {
   await assert.rejects(semesters.deleteSemester(prisma, faculty[0], semesterId, { expectedRevision: currentSemester.revision, expectedCycleRevision: currentCycle.revision }));
   await assert.rejects(semesters.deleteSemester(prisma, committee, semesterId, { expectedRevision: currentSemester.revision + 1, expectedCycleRevision: currentCycle.revision }));
   assert.ok(await prisma.signedAssessment.findUnique({ where: { observationId: paired.observationId } }));
-  const failedDeleteDb = {};
-  failedDeleteDb.$transaction = (run, options) => prisma.$transaction(db => run(new Proxy(db, { get(target, key) { if (key === 'semester') return { ...target.semester, delete: async () => { throw new Error('injected delete failure'); } }; return target[key]; } })), options);
-  await assert.rejects(semesters.deleteSemester(failedDeleteDb, committee, semesterId, { expectedRevision: currentSemester.revision, expectedCycleRevision: currentCycle.revision }), /injected/);
+
+  // A semester containing acknowledged/completed history is retained in full.
+  await assert.rejects(
+    semesters.deleteSemester(prisma, committee, semesterId, { expectedRevision: currentSemester.revision, expectedCycleRevision: currentCycle.revision }),
+    error => error.code === 'HISTORICAL_RECORDS_RETAINED' && error.status === 409,
+  );
+  assert.ok(await prisma.semester.findUnique({ where: { semesterId } }));
   assert.ok(await prisma.signedAssessment.findUnique({ where: { observationId: paired.observationId } }));
   assert.deepEqual((await attachments.readFacultyAttachment(faculty[0], uploaded.attachmentId)).bytes, file.bytes);
-  await semesters.deleteSemester(prisma, committee, semesterId, { expectedRevision: currentSemester.revision, expectedCycleRevision: currentCycle.revision });
-  assert.equal(await prisma.semester.findUnique({where:{semesterId}}),null);
-  assert.equal(await prisma.evaluationCycle.findUnique({where:{cycleId}}),null);
-  for(const model of ['evaluationSignup','observation']) assert.equal(await prisma[model].count({where:{cycleId}}),0,model);
-  assert.equal(await prisma.courseSection.count({where:{semesterId}}),0);
-  assert.equal(await prisma.recommendationList.count({where:{observationId:{in:[ownRecord.observationId,otherRecord.observationId]}}}),0);
-  assert.equal(await prisma.signedAssessment.findUnique({where:{observationId:paired.observationId}}),null);
-  assert.equal(await prisma.feedbackAttachment.findUnique({where:{attachmentId:uploaded.attachmentId}}),null);
+
+  // Use a separate unprotected semester to prove rollback and complete cleanup
+  // without weakening the historical-record safeguard above.
+  const disposableSemester = await semesters.createSemester(prisma, committee, { year: 2097, season: 'Summer', startsOn: '2097-05-20', endsOn: '2097-08-10', timeZone: 'America/Chicago' });
+  const disposableCycle = await prisma.evaluationCycle.create({ data: { semesterId: disposableSemester.id, cycleName: 'Disposable cycle', signupDeadline: new Date('2097-06-01T12:00:00Z'), observationDeadline: new Date('2097-07-01T12:00:00Z'), feedbackDeadline: new Date('2097-07-15T12:00:00Z') } });
+  const disposableSection = await prisma.courseSection.create({ data: { semesterId: disposableSemester.id, courseId, sectionCode: 'delete-fixture', teaches: { create: { professorId: sourceProfile.professorId } } } });
+  const disposableSignup = await prisma.evaluationSignup.create({ data: { cycleId: disposableCycle.cycleId, professorId: sourceProfile.professorId, sectionId: disposableSection.sectionId } });
+  const disposableObservation = await prisma.observation.create({ data: { cycleId: disposableCycle.cycleId, signupId: disposableSignup.signupId, assignedTemplateId: template.id } });
+  const failedDeleteDb = {};
+  failedDeleteDb.$transaction = (run, options) => prisma.$transaction(db => run(new Proxy(db, { get(target, key) { if (key === 'semester') return { ...target.semester, delete: async () => { throw new Error('injected delete failure'); } }; return target[key]; } })), options);
+  await assert.rejects(semesters.deleteSemester(failedDeleteDb, committee, disposableSemester.id, { expectedRevision: 0, expectedCycleRevision: 0 }), /injected/);
+  assert.ok(await prisma.observation.findUnique({ where: { observationId: disposableObservation.observationId } }));
+  await semesters.deleteSemester(prisma, committee, disposableSemester.id, { expectedRevision: 0, expectedCycleRevision: 0 });
+  assert.equal(await prisma.semester.findUnique({where:{semesterId:disposableSemester.id}}),null);
+  assert.equal(await prisma.evaluationCycle.findUnique({where:{cycleId:disposableCycle.cycleId}}),null);
+  for(const model of ['evaluationSignup','observation']) assert.equal(await prisma[model].count({where:{cycleId:disposableCycle.cycleId}}),0,model);
+  assert.equal(await prisma.courseSection.count({where:{semesterId:disposableSemester.id}}),0);
+  assert.ok(await prisma.semester.findUnique({where:{semesterId}}));
+  assert.ok(await prisma.signedAssessment.findUnique({where:{observationId:paired.observationId}}));
+  assert.ok(await prisma.feedbackAttachment.findUnique({where:{attachmentId:uploaded.attachmentId}}));
   assert.ok(await prisma.observationTemplate.count()); assert.ok(await prisma.professor.count() >= faculty.length);
-  checked('semester creation, authorization, stale-delete rejection, rollback with retained files and full populated dependency deletion');
+  checked('semester creation, authorization, stale-delete rejection, historical retention, rollback and unprotected dependency deletion');
   console.log(`Completed ${checks} populated PostgreSQL check groups in disposable database ${databaseName}. Application records unchanged.`);
 } finally {
   await prisma.$disconnect(); await pool.end();

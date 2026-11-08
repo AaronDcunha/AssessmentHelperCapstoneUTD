@@ -2,6 +2,8 @@ import type { Prisma } from "../../generated/prisma/client";
 import { ConfigurationError, invalid, pagination, uuid, type ConfigurationUser } from "../configuration-validation";
 import { facultyEligibility } from "../services/faculty-evaluation";
 import { cycleSignups, cycleMetrics, completedObservation, pendingStage, pendingActionOverdue, unmatchedStage } from "./ac-metrics";
+import { protectedObservation } from "../observation-protection";
+import { readTemplateSnapshot } from "../template-snapshot";
 
 export type ReportView = "reports" | "attention" | "faculty-status" | "observations" | "metrics";
 export type ObservationView = "details" | "template" | "assessment";
@@ -13,7 +15,7 @@ const observationInclude = {
   signup: { include: { professor: { include: { user: { select: personSelect } } },
     section: { include: { course: true, semester: true, classMeetings: { orderBy: { meetingId: "asc" as const } } } } } },
   observer: { include: { user: { select: personSelect } } },
-  signedAssessment: { select: { assessmentId: true, templateId: true, isLocked: true } },
+  signedAssessment: { select: { assessmentId: true, templateId: true, isLocked: true, templateSnapshot: true } },
   currentDraftList: { select: { candidates: { select: { candidateId: true }, take: 1 } } },
   currentReleasedList: { select: { publishedAt: true, candidates: { select: { candidateId: true }, take: 1 } } },
 };
@@ -82,7 +84,7 @@ function observationResponse(o: Observation, user: ConfigurationUser) {
     section: { id: s.sectionId, sectionNumber: s.sectionCode, semester: { id: s.semester.semesterId, name: s.semester.termName },
       course: { id: s.course.courseId, code: s.course.courseCode, title: s.course.courseTitle, departmentId: s.course.departmentId, level: s.course.courseLevel } },
     observee: person(o.signup.professor), observer: o.observer ? person(o.observer) : null,
-    status: o.status, scheduledAt: o.scheduledAt, completedAt: o.completedAt,
+    status: o.status, scheduledAt: o.scheduledAt, completedAt: o.completedAt, revision: o.workflowRevision,
     assessmentStatus: !assessment ? "NOT_STARTED" : assessment.isLocked ? "COMPLETED" : "IN_PROGRESS",
     participation: [o.signup.professor.userId === user.id ? "observee" : null, o.observer?.userId === user.id ? "observer" : null].filter(Boolean),
     allowedActions: ["view"],
@@ -239,6 +241,7 @@ export async function getObservation(db: Connection, user: ConfigurationUser, ob
   const o = await db.observation.findFirst({ where: { observationId: uuid(observationId),
     ...(broad ? {} : { OR: [{ signup: { professor: { userId: user.id } } }, { observer: { userId: user.id } }] }) },
     include: { ...observationInclude, timeOptions: { orderBy: { preferredDate: "asc" } },
+      assignedTemplate: { include: { criteria: { orderBy: { displayOrder: "asc" } } } },
       facultyIssues: { where: { kind: "ALERT" }, select: { issueId: true }, orderBy: { createdAt: "desc" }, take: 1 },
       signedAssessment: { include: { template: { include: { criteria: { orderBy: { displayOrder: "asc" } } } } } } } });
   if (!o) throw new ConfigurationError(404, "NOT_FOUND", "Observation not found.");
@@ -246,19 +249,21 @@ export async function getObservation(db: Connection, user: ConfigurationUser, ob
   if (view === "details") {
     const proposed = meetings(o, o.timeOptions);
     const scheduled = o.scheduledAt ? proposed.find(m => m.startsAt === o.scheduledAt!.toISOString()) ?? null : null;
-    return { observation: { ...observationResponse(o, user), scheduledMeeting: scheduled }, proposedMeetings: proposed,
+    return { observation: { ...observationResponse(o, user), scheduledMeeting: scheduled }, proposedMeetings: proposed, protectedForHistory: protectedObservation(o),
       pendingAlert: (broad || o.signup.professor.userId === user.id) && o.facultyIssues.length ? { id: o.facultyIssues[0].issueId } : null,
       progress: [{ key: "signup", label: "Signed up", state: "completed", completedAt: o.signup.signupDate },
         { key: "observer", label: "Observer selected", state: o.observerId ? "completed" : "pending", completedAt: null },
         { key: "scheduled", label: "Observation scheduled", state: o.scheduledAt ? "completed" : "pending", completedAt: null },
         { key: "observation", label: "Observation completed", state: o.completedAt ? "completed" : "pending", completedAt: o.completedAt },
         { key: "assessment", label: "Assessment locked", state: a?.isLocked ? "completed" : "pending", completedAt: a?.isLocked ? a.completedAt : null }],
-      templateVersionId: a?.templateId ?? null,
+      templateVersionId: o.assignedTemplateId ?? a?.templateId ?? null,
       ...(o.scheduledAt && !scheduled ? { unavailableReason: "The stored appointment cannot be matched to a proposed class meeting." } : {}) };
   }
   if (view === "template") {
-    if (!a) throw new ConfigurationError(404, "NOT_FOUND", "No template is assigned to this observation.");
-    const t = a.template;
+    const frozen = a ? readTemplateSnapshot(a.templateSnapshot) : null;
+    if (frozen) return { id: frozen.id, title: frozen.title, revision: frozen.revision, criteria: frozen.criteria.map(c => ({ ...c, type: c.type.toLowerCase() })), commentPrompts: frozen.commentPrompts, signatureLabels: frozen.signatureLabels };
+    const t = a?.template ?? o.assignedTemplate;
+    if (!t) throw new ConfigurationError(404, "NOT_FOUND", "No template is assigned to this observation.");
     return { id: t.templateId, title: t.templateName, revision: t.revision, criteria: t.criteria.map(c => ({ id: c.criterionId, key: c.criterionKey,
       prompt: c.criterionText, type: c.questionType.toLowerCase(), required: c.isRequired, order: c.displayOrder, weight: c.weight,
       ...(c.options === null ? {} : { options: c.options }) })), commentPrompts: t.commentPrompts, signatureLabels: t.signatureLabels };
@@ -276,10 +281,12 @@ export async function getObservation(db: Connection, user: ConfigurationUser, ob
     answers: Object.entries(stored.answers as Record<string, unknown>).map(([criterionId, value]) => ({ criterionId, value })),
     comments: Object.entries(stored.promptAnswers ?? {}).map(([promptId, text]) => ({ promptId, text })),
   } : stored) as { answers?: { criterionId: string; value: number | string | null }[]; comments?: { promptId: string; text: string }[] };
+  const frozen = readTemplateSnapshot(a.templateSnapshot);
+  const allowedCriterionIds = new Set(frozen?.criteria.map(c => c.id) ?? a.template.criteria.map(c => c.criterionId));
   const answers = responses?.answers ?? [], comments = responses?.comments ?? [];
   if (!responses || Array.isArray(responses) || typeof responses !== "object" || Object.keys(responses).some(k => !["answers", "comments"].includes(k)) ||
     !Array.isArray(answers) || !Array.isArray(comments) ||
-    answers.some(x => !x || typeof x.criterionId !== "string" || !a.template.criteria.some(c => c.criterionId === x.criterionId) || (x.value !== null && !["number", "string"].includes(typeof x.value))) ||
+    answers.some(x => !x || typeof x.criterionId !== "string" || !allowedCriterionIds.has(x.criterionId) || (x.value !== null && !["number", "string"].includes(typeof x.value))) ||
     comments.some(x => !x || typeof x.promptId !== "string" || typeof x.text !== "string") ||
     new Set(answers.map(x => x.criterionId)).size !== answers.length || new Set(comments.map(x => x.promptId)).size !== comments.length) {
     throw new ConfigurationError(409, "ASSESSMENT_FORMAT", "Stored assessment answers do not match the agreed response contract.");

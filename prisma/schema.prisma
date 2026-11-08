@@ -280,6 +280,7 @@ model EvaluationSignup {
   professorId String   @map("professor_id") @db.Uuid
   sectionId   String   @map("section_id") @db.Uuid
   signupDate  DateTime @default(now()) @map("signup_date")
+  revision    Int      @default(0)
 
   // Foreign key relationships.
   cycle        EvaluationCycle @relation(fields: [cycleId], references: [cycleId])
@@ -311,6 +312,7 @@ model Observation {
   scheduledEndsAt DateTime? @map("scheduled_ends_at") @db.Timestamptz(6)
   observerSelectedAt DateTime? @map("observer_selected_at") @db.Timestamptz(6)
   observerSelectedById String? @map("observer_selected_by_id") @db.Uuid
+  assignedTemplateId String? @map("assigned_template_id") @db.Uuid
   assignmentHistory ObservationAssignmentHistory[]
   currentDraftListId String? @map("current_draft_list_id") @db.Uuid
   currentReleasedListId String? @map("current_released_list_id") @db.Uuid
@@ -322,6 +324,7 @@ model Observation {
   signup   EvaluationSignup @relation(fields: [signupId, cycleId], references: [signupId, cycleId])
   cycle    EvaluationCycle  @relation(fields: [cycleId], references: [cycleId])
   observer Professor?       @relation("SelectedObserver", fields: [observerId], references: [professorId])
+  assignedTemplate ObservationTemplate? @relation("AssignedObservationTemplate", fields: [assignedTemplateId], references: [templateId], onDelete: Restrict)
 
   // Observer matching and scheduling.
   candidates  ObservationCandidate[]
@@ -335,6 +338,7 @@ model Observation {
 
   @@unique([currentDraftListId, observationId])
   @@unique([currentReleasedListId, observationId])
+  @@index([assignedTemplateId])
   @@map("observation")
 }
 
@@ -511,10 +515,12 @@ model ObservationTemplate {
   description  String?
   isActive     Boolean  @default(true) @map("is_active")
   createdAt    DateTime @default(now()) @map("created_at")
+  archivedAt   DateTime? @map("archived_at") @db.Timestamptz(6)
 
   // A template contains multiple assessment criteria.
   criteria    TemplateCriterion[]
   assessments SignedAssessment[]
+  assignedObservations Observation[] @relation("AssignedObservationTemplate")
 
   @@map("observation_template")
 }
@@ -553,6 +559,8 @@ model SignedAssessment {
   observeeSignedAt DateTime? @map("observee_signed_at")
   isLocked         Boolean   @default(false) @map("is_locked")
   completedAt      DateTime? @map("completed_at")
+  templateSnapshot Json?     @map("template_snapshot")
+  responseArchive  Json      @default("[]") @map("response_archive")
 
   // Relationships.
   observation Observation         @relation(fields: [observationId], references: [observationId])

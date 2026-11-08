@@ -35,8 +35,14 @@ export async function submitFacultySignup(user: AccountUser, body: unknown) {
     // All eligibility, assignment, schedule and configuration reads share this
     // Serializable transaction. The unique signup key also protects duplicate submissions.
     const signupId = randomUUID(), observationId = randomUUID();
+    const template = await client.observationTemplate.findFirst({
+      where: { status: "published", isActive: true, archivedAt: null },
+      orderBy: [{ publishedAt: "desc" }, { templateId: "desc" }],
+      select: { templateId: true },
+    });
+    if (!template) throw new FacultyActionError("A published observation template is required before faculty can sign up.");
     await client.evaluationSignup.create({ data: { signupId, cycleId: cycle.id, professorId: profile.professorId, sectionId: section.id, signupDate: now } });
-    await client.observation.create({ data: { observationId, signupId, cycleId: cycle.id, status: "PENDING" } });
+    await client.observation.create({ data: { observationId, signupId, cycleId: cycle.id, status: "PENDING", assignedTemplateId: template.templateId } });
     for (const date of input.dates) {
       const occurrence = meetingOccurrence(date, section.meetings, cycle.timeZone);
       if (!occurrence) throw new FacultyActionError("The proposed meeting cannot be resolved in its configured time zone.");

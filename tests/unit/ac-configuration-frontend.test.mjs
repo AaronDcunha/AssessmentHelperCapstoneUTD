@@ -73,11 +73,13 @@ test('configuration helpers send documented paths, revisions and supported paylo
     await acApi.createTemplate({ ...templatePayload(templateDraft(template)), creationKey: '00000000-0000-4000-8000-000000000001' });
     await acApi.updateTemplate('template', { ...templatePayload(templateDraft(template)), expectedRevision: 7 });
     await acApi.publishTemplate('template', 8);
-    assert.deepEqual(calls.map(item => [item.path, item.method ?? 'GET']), [['/api/semesters', 'GET'], ['/api/observation-templates', 'GET'], ['/api/observation-templates/draft%20id', 'GET'], ['/api/evaluation-cycles/cycle', 'PATCH'], ['/api/evaluation-cycles/cycle/settings', 'PUT'], ['/api/observation-templates', 'POST'], ['/api/observation-templates/template', 'PATCH'], ['/api/observation-templates/template/publish', 'POST']]);
+    await acApi.unarchiveTemplate('template', 9);
+    assert.deepEqual(calls.map(item => [item.path, item.method ?? 'GET']), [['/api/semesters', 'GET'], ['/api/observation-templates', 'GET'], ['/api/observation-templates/draft%20id', 'GET'], ['/api/evaluation-cycles/cycle', 'PATCH'], ['/api/evaluation-cycles/cycle/settings', 'PUT'], ['/api/observation-templates', 'POST'], ['/api/observation-templates/template', 'PATCH'], ['/api/observation-templates/template/publish', 'POST'], ['/api/observation-templates/template/unarchive', 'POST']]);
     assert.equal('semesterId' in calls[3].body, false);
     assert.equal(calls[4].body.expectedSemesterRevision, 4);
     assert.equal(calls[5].body.creationKey, '00000000-0000-4000-8000-000000000001');
-    assert.deepEqual(calls.at(-1).body, { expectedRevision: 8 });
+    assert.deepEqual(calls.at(-2).body, { expectedRevision: 8 });
+    assert.deepEqual(calls.at(-1).body, { expectedRevision: 9 });
     assert(calls.every(item => item.cache === 'no-store'));
   } finally { globalThis.fetch = originalFetch; }
 });
