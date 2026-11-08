@@ -19,9 +19,10 @@ export function ObservationDetails({ observationId, canReadAssessment, canDelete
   const [busy, setBusy] = useState(false);
   const result = useApiResource(useCallback(() => { void attempt; return acApi.getObservation(observationId); }, [observationId, attempt]), EMPTY_DETAIL);
   const observation = result.data.observation;
-  useEffect(() => { if (canReassignTemplate) void acApi.getTemplates().then(rows => setTemplates(rows.filter(row => row.status === "published"))).catch(() => setTemplates([])); }, [canReassignTemplate]);
+  const protectedForHistory = result.data.protectedForHistory;
+  useEffect(() => { if (canReassignTemplate && protectedForHistory === false) void acApi.getTemplates().then(rows => setTemplates(rows.filter(row => row.status === "published"))).catch(() => setTemplates([])); }, [canReassignTemplate, protectedForHistory]);
   async function deleteCurrent() {
-    if (!canDelete || observation.revision == null) return;
+    if (!canDelete || protectedForHistory !== false || observation.revision == null) return;
     const section = result.data.observation.section as {semester?:{name?:string};course?:{code?:string}}|undefined;
     if (!window.confirm(`Delete this unfinished observation for ${userDisplayName(observation.observee)} · ${section?.course?.code ?? "course unavailable"} · ${section?.semester?.name ?? "semester unavailable"}?\n\nInvitations, draft answers, feedback, attachments, and queued work will be removed. The signup remains and receives a fresh blank observation. Signed or completed evaluations cannot be deleted.`)) return;
     setBusy(true); setMutationError(null);
@@ -29,7 +30,7 @@ export function ObservationDetails({ observationId, canReadAssessment, canDelete
     catch (reason) { setMutationError(reason instanceof Error ? reason.message : "The observation could not be deleted."); setBusy(false); }
   }
   async function reassign() {
-    if (!templateId || observation.revision == null) return;
+    if (!canReassignTemplate || protectedForHistory !== false || !templateId || observation.revision == null) return;
     if (!window.confirm("Reassign this unfinished observation to the selected published template? Compatible saved answers will be preserved. Removed questions or changed scales will require a second confirmation and will be archived.")) return;
     setBusy(true); setMutationError(null);
     try { await acApi.reassignObservationTemplate(observationId, {templateId,expectedRevision:observation.revision}); setAttempt(n=>n+1); }
@@ -62,8 +63,9 @@ export function ObservationDetails({ observationId, canReadAssessment, canDelete
     {!result.loading && !result.error && children}
     {!result.loading && !result.error && (canDelete || canReassignTemplate) && <Section title="Administrative actions" description="Only unfinished observations can be changed. Signed and completed history is protected.">
       <div className="space-y-ah-16">
-        {canReassignTemplate && <div className="flex flex-wrap items-end gap-ah-12"><label className="grid gap-ah-4 text-label">Published template<select className="min-h-11 rounded-ah-8 border border-border bg-surface px-ah-12" value={templateId} onChange={event=>setTemplateId(event.target.value)}><option value="">Select a template</option>{templates.map(template=><option key={template.id} value={template.id}>{template.title}</option>)}</select></label><Button variant="secondary" disabled={busy||!templateId} onClick={()=>void reassign()}>Reassign unfinished form</Button></div>}
-        {canDelete && <Button variant="danger" disabled={busy||observation.revision==null} onClick={()=>void deleteCurrent()}>{busy?"Working…":"Delete unfinished observation"}</Button>}
+        {protectedForHistory === true && <p className="text-body text-muted">This observation is protected for history. Deletion and template reassignment are unavailable.</p>}
+        {protectedForHistory === false && canReassignTemplate && <div className="flex flex-wrap items-end gap-ah-12"><label className="grid gap-ah-4 text-label">Published template<select className="min-h-11 rounded-ah-8 border border-border bg-surface px-ah-12" value={templateId} onChange={event=>setTemplateId(event.target.value)}><option value="">Select a template</option>{templates.map(template=><option key={template.id} value={template.id}>{template.title}</option>)}</select></label><Button variant="secondary" disabled={busy||!templateId} onClick={()=>void reassign()}>Reassign unfinished form</Button></div>}
+        {protectedForHistory === false && canDelete && <Button variant="danger" disabled={busy||observation.revision==null} onClick={()=>void deleteCurrent()}>{busy?"Working…":"Delete unfinished observation"}</Button>}
         {mutationError && <p role="alert" className="text-body text-danger">{mutationError}</p>}
       </div>
     </Section>}

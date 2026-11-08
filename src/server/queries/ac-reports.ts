@@ -2,6 +2,7 @@ import type { Prisma } from "../../generated/prisma/client";
 import { ConfigurationError, invalid, pagination, uuid, type ConfigurationUser } from "../configuration-validation";
 import { facultyEligibility } from "../services/faculty-evaluation";
 import { cycleSignups, cycleMetrics, completedObservation, pendingStage, pendingActionOverdue, unmatchedStage } from "./ac-metrics";
+import { protectedObservation } from "../observation-protection";
 import { readTemplateSnapshot } from "../template-snapshot";
 
 export type ReportView = "reports" | "attention" | "faculty-status" | "observations" | "metrics";
@@ -248,7 +249,7 @@ export async function getObservation(db: Connection, user: ConfigurationUser, ob
   if (view === "details") {
     const proposed = meetings(o, o.timeOptions);
     const scheduled = o.scheduledAt ? proposed.find(m => m.startsAt === o.scheduledAt!.toISOString()) ?? null : null;
-    return { observation: { ...observationResponse(o, user), scheduledMeeting: scheduled }, proposedMeetings: proposed,
+    return { observation: { ...observationResponse(o, user), scheduledMeeting: scheduled }, proposedMeetings: proposed, protectedForHistory: protectedObservation(o),
       pendingAlert: (broad || o.signup.professor.userId === user.id) && o.facultyIssues.length ? { id: o.facultyIssues[0].issueId } : null,
       progress: [{ key: "signup", label: "Signed up", state: "completed", completedAt: o.signup.signupDate },
         { key: "observer", label: "Observer selected", state: o.observerId ? "completed" : "pending", completedAt: null },

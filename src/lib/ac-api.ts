@@ -87,7 +87,7 @@ export type ObservationDetail = {
   observation: ObservationItem;
   proposedMeetings?: ObservationMeeting[];
   progress?: Array<{ key: string; label: string; state: string; completedAt?: string | null }>;
-  pendingAlert?: { id: string } | null; templateVersionId?: string | null;
+  pendingAlert?: { id: string } | null; templateVersionId?: string | null; protectedForHistory?: boolean;
 };
 export type AssignedObservationTemplate = {
   id: string; title: string;
