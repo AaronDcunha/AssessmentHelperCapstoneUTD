@@ -59,6 +59,17 @@ test("Unavailable History is denied by the same filter as a working destination"
 });
 
 const props = { expandedSections: { faculty: true }, onExpandedChange() {}, activeItemId: "faculty.dashboard" };
+
+test("Collapsed navigation keeps its controlled panel mounted but unavailable to keyboard and assistive technology", () => {
+  const html = renderToStaticMarkup(createElement(Sidebar, { ...props, expandedSections: {}, authorizedSections: config }));
+  const panelId = html.match(/aria-controls="([^"]+)"/)[1];
+  assert.ok(html.includes(`id="${panelId}"`));
+  assert.match(html, /aria-expanded="false"/);
+  assert.match(html, /aria-hidden="true" inert=""/);
+  const expanded = renderToStaticMarkup(createElement(Sidebar, { ...props, authorizedSections: config }));
+  assert.match(expanded, /aria-expanded="true"/);
+  assert.doesNotMatch(expanded, /inert=""/);
+});
 test("Authorized History renders as an accessible unavailable item with no broken URL", () => {
   const html = renderToStaticMarkup(createElement(Sidebar, { ...props, authorizedSections: config }));
   assert.match(html, /role="link" aria-disabled="true"/);

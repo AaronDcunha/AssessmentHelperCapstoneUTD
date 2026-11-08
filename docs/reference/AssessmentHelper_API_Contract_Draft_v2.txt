@@ -3,6 +3,25 @@ October 18, 2026 | Reviewed against Faculty, AC, Admin and Shared Figma screens.
 
 STATUS
 ======
+November 6, 2026 Issue #94 implemented Faculty invitation behavior:
+Existing POST /api/me/dashboard/requests/decline requires {candidateId,attemptId}.
+It validates the current own pending invitation/window, records candidate and
+attempt DECLINED, and prompts the observee to review remaining observer options.
+The current recommendations read already includes declined statuses; the Faculty
+table now displays readable labels. Existing Accept and late-approval routes remain.
+POST /api/me/dashboard/selected-observer retains {candidateId}. Before cancellation,
+closure recipients are invited, non-cancelled current-list PENDING/ACCEPTED members,
+excluding the selected observer. Use recorded status: an elapsed PENDING window
+still qualifies until the scheduler updates it. DECLINED/EXPIRED/ELIGIBLE,
+never-invited, historical and previously cancelled members are not notified.
+Broader cancellation, accepted-response/audit history, deadline checks and separate
+selected-observer confirmation remain. sendNotification uses account IDs,
+observationId, email:true and the existing Serializable transaction with stable
+invitation-declined:attemptId and invitation-closed:selectedCandidateId event keys.
+Notification uniqueness and the transactional email outbox prevent duplicate
+records on retries. Repeated decline remains 409; repeated selection of the same
+confirmed observer can return its existing success response. No new API or schema.
+
 October 25 #55 monitoring reads: the five cycle reporting routes and three
 observation/detail/template/assessment GET routes are implemented using Prisma.
 This is read-only integration, not completion of the evaluation/assessment workflow.
@@ -498,12 +517,55 @@ POST /api/observation-candidates/{candidateId}/expired-acceptance-requests -- NE
   B: {attemptId,reason?}. R: Approval with pending status. Invited professor only;
   expired, not already resent/superseded; no direct acceptance or duplicate request.
 GET /api/evaluation-cycles/{cycleId}/expired-acceptance-requests -- scoped AC/Admin.
-  Q: status?,departmentId?. R: List<Approval plus requester:User,reason,allowedActions>.
+  IMPLEMENTED November 5: late-acceptance.review required (not a role-name check).
+  cycleId: UUID for explicit-cycle compatible reads; literal "current" resolves the
+  unique configured semester containing today, inclusively in its own time zone.
+  No current or overlapping semesters: 200 {cycle:null,items:[],summary:zeroes,
+  pageInfo:{hasMore:false,nextCursor:null}}. No fallback to newest or saved selection.
+  Q: search? (trimmed observer/requester name only, case-insensitive substring,
+  max 200 characters, no controls); status?:all|pending|approved|rejected|notActionable;
+  limit?:1..100 (default 20); cursor?:approval UUID; requestId?:approval UUID.
+  requestId looks up the exact request in the resolved cycle, independently of
+  list search/status/cursor. Missing or out-of-cycle request: 404. This is the
+  direct-review lookup; the AC page always uses cycleId=current.
+  Stable order: requestedAt descending, approvalId descending. Filtering precedes
+  pagination. A cursor absent from the filtered set returns 409; refresh the list.
+  R: {cycle:{id,name,timeZone}|null,items:ApprovalContext[],summary:{pending,approved,
+  notActionable,total},pageInfo:{hasMore,nextCursor}}. Summary covers the entire
+  cycle, independently of search/status/page: pending counts actionable PENDING;
+  notActionable counts blocked PENDING; approved counts persisted APPROVED.
+  Rejected is retained in total and has its own filter, not counted as blocked.
+  ApprovalContext retains approvalId,attemptId,status,reason,requestedAt,decidedAt,
+  decidedBy and the associated original attempt/candidate/professor shape. Adds:
+    id (=approvalId), persistedStatus (=status), displayStatus, actionable,
+    reasonCode, actionReason, requester:{id,name}, observee:{id,name}, observationId,
+    course (course code), section (section code), originalInvitationExpiresAt,
+    observationDeadline, timeZone, proposedMeetings:Meeting[].
+  reason is saved requester text; actionReason is a separate derived explanation.
+  Proposed dates use saved meeting snapshots or the linked class schedule.
+  Original expiry comes from the associated attempt, never a reopened attempt.
+  Persisted APPROVED/REJECTED always retain their status. Blocked PENDING rows use
+  displayStatus/reasonCode: OBSERVER_CONFIRMED, DEADLINE_PASSED, OBSERVATION_CLOSED,
+  SUPERSEDED (newer attempt/list or cancellation), ANSWERED, NOT_EXPIRED.
+  Decisions have reasonCode DECIDED. Actionable rows have null reasonCode/actionReason.
+  Read transaction: RepeatableRead. Invalid query: 400/422; 401 unauthenticated,
+  403 forbidden, 503 unavailable (never converted to an empty success). Private/no-store.
 PATCH /api/expired-acceptance-requests/{requestId} -- scoped AC/Admin.
-  B: {decision:'approved'|'rejected',comment?,expectedRevision}.
-  R: {request:Approval,reopenedAttempt:Attempt|null}.
-  Approval enables ordinary acceptance, not final assignment. Reopen duration,
-  deadline cutoff and races with resends require agreement.
+  IMPLEMENTED November 5: late-acceptance.review, same-origin JSON required.
+  B: {decision:'approved'|'rejected'} ONLY; no comment or expectedRevision.
+  R: {request:{id,status:'APPROVED'|'REJECTED',decidedAt},message} after commit.
+  Shared actionability checks run in a Serializable transaction against the current
+  configured cycle. Require pending approval, latest expired unanswered attempt,
+  current published recommendation list, no cancellation, no confirmed observer,
+  no assessment work/closed observation, and a future observation deadline.
+  Touch observation revision and conditionally update approval WHERE status=PENDING.
+  Concurrent/stale decisions and out-of-current-cycle writes return 409; client
+  reloads exact current-cycle request and shows saved outcome or derived restriction.
+  Approval creates a NEW attempt, expiresAt=min(now+48h,observationDeadline), and
+  preserves the request's original attempt. It does not accept a meeting or select
+  an observer. Observer uses normal acceptance, then observee confirms normally.
+  Rejection records the decision and does not reopen acceptance or assign anyone.
+  Existing invitation notification/email behavior is retained; no matching changes.
 
 Automatic expiry/resend is a backend job, NOT a public browser endpoint. Preserve
 attempts, prioritize uncontacted candidates under agreed policy, create new windows

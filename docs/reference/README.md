@@ -14,6 +14,10 @@ The original documents are preserved as supplied. They contain outdated requirem
 
 ## Files
 
+Late acceptance review: see [LATE_ACCEPTANCE_REQUESTS.md](LATE_ACCEPTANCE_REQUESTS.md)
+for the current-cycle AC list/review, GET context/filter/lookup contract, transactional
+decision guards and verification scope.
+
 Faculty dashboard backend: see `FACULTY_DASHBOARD_BACKEND.md` for the live own-data query, private aggregate API, temporary cycle/eligibility assumptions, and focused checks.
 
 Authentication backend: see `AUTH_BACKEND.md` for database-backed login, development-only mock fixtures, current grants, and the frontend integration contract.

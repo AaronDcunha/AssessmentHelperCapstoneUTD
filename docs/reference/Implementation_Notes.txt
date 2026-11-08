@@ -1,3 +1,52 @@
+November 6, 2026 Issue #94 invitation declines and closure notifications:
+The existing Faculty Accept/Decline routes and decline service are retained.
+Recommendations show readable invitation statuses, including Declined. Request
+controls use response grants and separate Accept/Decline/AC-approval busy labels;
+late approval retains its independent permission. Decline notifications explicitly
+ask the observee to review remaining observer options, using the existing attempt
+event key and Serializable transaction.
+Final selection snapshots closure recipients before cancellation: only invited,
+non-cancelled PENDING/ACCEPTED members of the current published list, excluding the
+selected observer. Recorded PENDING qualifies even if its window elapsed before
+the expiry scheduler ran; response-time deadline checks remain enforced. DECLINED,
+EXPIRED, ELIGIBLE, never-invited and previously cancelled members receive no closure
+notification. Broader cancellation still closes expired/uncontacted memberships,
+preserving attempt responses, accepted meetings, cancellation times and approvals.
+sendNotification receives account UUIDs, observation context, email:true and the
+existing transaction. Stable keys, notification uniqueness and the insert-only
+email outbox preserve deduplication and rollback. Selected-observer confirmation
+remains separate. No schema, route, resend-policy or application data changes.
+See FACULTY_DASHBOARD_BACKEND.md for focused verification commands.
+
+November 5, 2026 Late Acceptance Requests (November 1 board task):
+Implemented /ac/late-acceptance-requests and /[requestId] with late-acceptance.review
+navigation/page/API guards, current-semester resolution, observer-only search,
+independent status filter, full-cycle summary, cursor pages, exact direct review,
+pending/approved/rejected/blocked states, error/retry, skeletons and narrow layout.
+No selector or previously saved AC cycle is used. Server reuses the unique inclusive
+semester-date/time-zone rule from Observer Selection. Missing/overlapping current
+cycles show configuration guidance; no historical fallback. Dashboard currently
+marks expiredApproval unavailable and supplies no request ID; no dashboard changes.
+GET retains approval/attempt fields and adds linked observee/course/meetings,
+saved reason, original attempt expiry, deadline/time zone and derived actionability.
+cycleId=current and requestId query provide the authorized exact current-cycle read.
+Counts cover the whole cycle, unaffected by filters/pages. Saved decisions stay
+distinct from blocked pending states; blocked does not always mean superseded.
+PATCH keeps decision-only JSON. Shared service guards plus Serializable observation
+revision and conditional pending update reject races, superseded/cancelled/answered
+attempts, confirmed observers, started assessments, closed/deadline-expired and
+out-of-current-cycle requests. Approval opens a fresh attempt for up to 48 hours,
+capped by observation deadline; it never accepts a meeting or assigns an observer.
+Rejection does not reopen. Original attempt and decision history are retained.
+No new dependencies, schema/migration files, matching or notification/email changes.
+Existing local migrations 20261028040000_recommendation_lists and
+20261030000000_recommendation_publication were reviewed/deployed to verified local
+assessment_helper.public after an explicit-cycle GET returned 503. All eleven are
+now applied. Existing records retained; no reset/reseed, demo requests or SMTP work.
+Live database has no configured current semester: current GET is 200 cycle:null;
+explicit-cycle GET succeeds. Mutation checks use a disposable PostgreSQL schema.
+See LATE_ACCEPTANCE_REQUESTS.md for full contract, checks and local review URL.
+
 November 2, 2026 assessment revision correction:
 Assessment revisions recursively sort object keys before hashing, preserving
 array order. PostgreSQL jsonb field reordering no longer produces a false stale

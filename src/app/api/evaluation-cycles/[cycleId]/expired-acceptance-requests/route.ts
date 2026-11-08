@@ -1,17 +1,20 @@
 import { getCurrentUser } from "@/server/permissions";
 import { getPrisma } from "@/server/prisma";
-import { workflowId } from "@/server/services/faculty-invitations";
-import { currentReleasedCandidates } from "@/server/recommendation-scope";
+import { getLateAcceptanceRequests } from "@/server/queries/late-acceptance";
+import { FacultyActionError } from "@/server/services/faculty-errors";
+import { ConfigurationError } from "@/server/configuration-validation";
 export const dynamic = "force-dynamic";
-export async function GET(_request: Request, context: { params: Promise<{ cycleId: string }> }) {
+export async function GET(request: Request, context: { params: Promise<{ cycleId: string }> }) {
   const headers = { "Cache-Control": "private, no-store" };
   try {
     const user = await getCurrentUser();
     if (!user) return Response.json({ error: "Unauthenticated" }, { status: 401, headers });
     if (!user.permissions.includes("late-acceptance.review")) return Response.json({ error: "Forbidden" }, { status: 403, headers });
-    const { cycleId } = await context.params; workflowId(cycleId);
-    const items = await getPrisma().lateAcceptanceApproval.findMany({ where: { attempt: { candidate: { ...currentReleasedCandidates, observation: { cycleId } } } },
-      include: { attempt: { include: { candidate: { include: { professor: { include: { user: { select: { fullName: true } } } } } } } } }, orderBy: { requestedAt: "desc" }, take: 100 });
-    return Response.json({ items }, { headers });
-  } catch { return Response.json({ error: "Approval requests are unavailable." }, { status: 503, headers }); }
+    const { cycleId } = await context.params;
+    const result = await getPrisma().$transaction(db => getLateAcceptanceRequests(db, user, cycleId, new URL(request.url)), { isolationLevel: "RepeatableRead" });
+    return Response.json(result, { headers });
+  } catch (error) {
+    const known = error instanceof FacultyActionError || error instanceof ConfigurationError;
+    return Response.json({ error: known ? error.message : "Approval requests are unavailable." }, { status: known ? error.status : 503, headers });
+  }
 }
