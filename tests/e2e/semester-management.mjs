@@ -97,9 +97,8 @@ try{
   await send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});
   assert.equal(await evaluate(`document.querySelector('main').scrollWidth<=document.querySelector('main').clientWidth+1`),true,'No horizontal content overflow at '+width);
  }
- await value('main select',uuid(1));await click('Delete Semester');await textIncludes('This permanently deletes');assert.equal(writes.filter(w=>w.method==='DELETE').length,0);
- await click('Keep Semester');assert.equal(writes.filter(w=>w.method==='DELETE').length,0);
- await click('Delete Semester');await click('Permanently Delete Semester');await textIncludes('Semester removed.');assert.equal(await evaluate(`document.querySelector('main select').value`),'');
- assert.equal(writes.filter(w=>w.method==='DELETE').length,1);if(failure)throw failure;
- console.log('Passed browser Semester Settings: exact zone input, two revision-aware saves, New Semester, desktop/mobile overflow, delete cancel/confirmation and cycle removal. All business writes intercepted.');
+ await value('main select',uuid(1));await textIncludes('Save Settings');
+ assert.equal(await evaluate(`[...document.querySelectorAll('main button')].some(button=>button.textContent==='Delete Semester')`),false);
+ if(failure)throw failure;
+ console.log('Passed browser Semester Settings: exact zone input, two revision-aware saves, New Semester, desktop/mobile overflow, no semester deletion control. All business writes intercepted.');
 }finally{await send('Fetch.disable').catch(()=>{});socket.close();await fetch(`${debug}/json/close/${target.id}`).catch(()=>{});}

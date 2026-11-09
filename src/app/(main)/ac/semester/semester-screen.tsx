@@ -6,13 +6,14 @@ import { Input, Select } from "@/components/ui/form-fields";
 import { Section } from "@/components/ui/section";
 import { acApi, ApiRequestError, type Cycle, type Semester } from "@/lib/ac-api";
 import { configurationError, defaultSemesterDeadlines, cycleDeadlines, deadlineKeys, deadlinePayload, validDateOnly, type Deadlines } from "@/lib/ac-configuration";
+import { currentSemester } from "@/lib/observer-selection";
 import { guardUnsavedNavigation } from "@/lib/unsaved-navigation";
 import { useAcCycle } from "@/components/ac/cycle-context";
 import { useApiResource } from "@/components/ac/use-api-resource";
 
 type Settings = Deadlines & { year: string; season: string; startsOn: string; endsOn: string; timeZone: string };
 type Loaded = { semesters: Semester[]; cycles: Cycle[] };
-const EMPTY: Loaded = { semesters: [], cycles: [] };
+const EMPTY: Loaded & { initialSemesterId?: string } = { semesters: [], cycles: [] };
 function settingsFor(semester?: Semester, cycle?: Cycle): Settings {
   return { year: String(semester?.year ?? new Date().getFullYear()), season: semester?.season ?? "Spring", startsOn: semester?.startsOn ?? "", endsOn: semester?.endsOn ?? "", timeZone: semester?.timeZone ?? "America/Chicago", ...(cycle ? cycleDeadlines(cycle) : defaultSemesterDeadlines(semester?.startsOn ?? "", semester?.endsOn ?? "")) };
 }
@@ -23,7 +24,7 @@ function SemesterForm({ semester, cycle, canManage, leaveRef, onSaved, onDeleted
   const [baseline, setBaseline] = useState({ semester, cycle });
   const [settings, setSettings] = useState(() => settingsFor(semester, cycle));
   const [saving, setSaving] = useState(false), [uncertain, setUncertain] = useState(false);
-  const [message, setMessage] = useState(""), [conflict, setConflict] = useState(false), [confirmDelete, setConfirmDelete] = useState(false);
+  const [message, setMessage] = useState(""), [conflict, setConflict] = useState(false);
   const busy = useRef(false), request = useRef<null | (() => Promise<{ semester: Semester; cycle: Cycle }>)>(null);
   const dirty = JSON.stringify(settings) !== JSON.stringify(settingsFor(baseline.semester, baseline.cycle));
   const allowed = canManage && (!baseline.cycle || !!baseline.cycle.allowedActions?.includes("updateSettings"));
@@ -99,13 +100,6 @@ function SemesterForm({ semester, cycle, canManage, leaveRef, onSaved, onDeleted
     } catch (error) { setMessage(configurationError(error)); }
     finally { busy.current = false; setSaving(false); }
   }
-  async function remove() {
-    if (busy.current || !baseline.semester || !allowed) return;
-    busy.current = true; setSaving(true);
-    try { await acApi.deleteSemester(baseline.semester.id, { expectedRevision: baseline.semester.revision, expectedCycleRevision: baseline.cycle?.revision ?? null }); onDeleted(); }
-    catch (error) { setMessage(configurationError(error)); setConflict(error instanceof ApiRequestError && [404, 409].includes(error.status ?? 0)); setConfirmDelete(false); }
-    finally { busy.current = false; setSaving(false); }
-  }
   return <form onSubmit={submit} className="space-y-ah-24" aria-busy={saving}>
     <Section title={baseline.semester ? baseline.semester.name : "New Semester"} description="Semester dates and evaluation deadlines" contentClassName="space-y-ah-16">
       {!baseline.cycle && <p className="text-muted">Saving creates an evaluation cycle with this semester. Suggested deadlines are editable: signup at noon on the start date, observation at noon on the end date, feedback at noon seven days later.</p>}
@@ -124,21 +118,18 @@ function SemesterForm({ semester, cycle, canManage, leaveRef, onSaved, onDeleted
     {conflict && <Button variant="secondary" disabled={saving} onClick={reload}>Reload latest settings</Button>}
     <div className="flex flex-wrap gap-ah-16">
       <Button type="submit" disabled={saving || !allowed}>{saving ? "Saving?" : uncertain ? "Retry creation" : baseline.semester ? baseline.cycle ? "Save Settings" : "Save and Create Cycle" : "Create Semester"}</Button>
-      <Button variant="secondary" disabled={saving || uncertain} onClick={() => { if (!baseline.semester) onCancel(); else { setSettings(settingsFor(baseline.semester, baseline.cycle)); setMessage(""); setConflict(false); setConfirmDelete(false); } }}>Cancel</Button>
+      <Button variant="secondary" disabled={saving || uncertain} onClick={() => { if (!baseline.semester) onCancel(); else { setSettings(settingsFor(baseline.semester, baseline.cycle)); setMessage(""); setConflict(false); } }}>Cancel</Button>
     </div>
-    {baseline.semester && canManage && <div className="border-t border-border pt-ah-24">
-      <Button variant="danger" disabled={saving || uncertain || !allowed} onClick={() => setConfirmDelete(true)}>Delete Semester</Button>
-      {confirmDelete && <div role="alert" className="mt-ah-16 space-y-ah-12 rounded-ah-8 border border-danger p-ah-16"><p>Delete {baseline.semester.name}? This permanently deletes its evaluation cycle and dependent course sections, teaching assignments, signups, observations, recommendation lists, invitation attempts and approvals, assessments, reports, feedback and supporting files. Acknowledged or completed evaluations are protected and will prevent deletion.</p><div className="flex flex-wrap gap-ah-16"><Button variant="danger" disabled={saving} onClick={remove}>Permanently Delete Semester</Button><Button variant="secondary" disabled={saving} onClick={() => setConfirmDelete(false)}>Keep Semester</Button></div></div>}
-    </div>}
   </form>;
 }
 export default function SemesterSettingsPage({ canManage = false }: { canManage?: boolean }) {
   const { refreshCycles, selectCycle, selectedCycle } = useAcCycle();
-  const [retry, setRetry] = useState(0), [selection, setSelection] = useState(""), [rows, setRows] = useState<Loaded | null>(null);
+  const [retry, setRetry] = useState(0), [chosenSemester, setSelection] = useState<string | null>(null), [rows, setRows] = useState<Loaded | null>(null);
   const leaveRef = useRef<() => boolean>(() => true);
   const [notice, setNotice] = useState("");
-  const resource = useApiResource(useCallback(async () => { void retry; const [semesters, cycles] = await Promise.all([acApi.getSemesters(), acApi.getEvaluationCycles()]); return { semesters, cycles }; }, [retry]), EMPTY);
+  const resource = useApiResource(useCallback(async () => { void retry; const [semesters, cycles] = await Promise.all([acApi.getSemesters(), acApi.getEvaluationCycles()]); return { semesters, cycles, initialSemesterId: currentSemester(semesters, item => item, Date.now())?.id }; }, [retry]), EMPTY);
   const data = rows ?? resource.data;
+  const selection = chosenSemester ?? resource.data.initialSemesterId ?? "";
   const semester = data.semesters.find(item => item.id === selection);
   const cycle = data.cycles.find(item => item.semester?.id === selection);
   function switchTo(id: string) { if (id !== selection && leaveRef.current()) { setSelection(id); setNotice(""); } }
@@ -151,6 +142,6 @@ export default function SemesterSettingsPage({ canManage = false }: { canManage?
     {resource.loading && <p role="status">Loading semesters and settings?</p>}
     {resource.error && <div className="space-y-ah-16"><p role="alert" className="text-danger">{configurationError(new Error(resource.error))}</p><Button variant="secondary" onClick={() => { setRows(null); setRetry(value => value + 1); }}>Retry semesters</Button></div>}
     {!resource.loading && !resource.error && !data.semesters.length && selection !== "new" && <p>No semesters yet. Create a semester to configure its evaluation cycle.</p>}
-    {(selection === "new" || semester) && <SemesterForm key={selection} semester={semester} cycle={cycle} canManage={canManage} leaveRef={leaveRef} onCancel={() => setSelection("")} onDeleted={() => { setNotice("Semester removed. Select another semester or create a new one."); setRows({ semesters: data.semesters.filter(item => item.id !== selection), cycles: data.cycles.filter(item => item.semester?.id !== selection) }); setSelection(""); if (selectedCycle?.semester?.id === selection) selectCycle(""); refreshCycles(); }} onSaved={(saved, savedCycle) => { setRows({ semesters: [...data.semesters.filter(item => item.id !== saved.id), saved], cycles: [...data.cycles.filter(item => item.semester?.id !== saved.id), savedCycle] }); setSelection(saved.id); selectCycle(savedCycle.id); refreshCycles(); }} />}
+    {(selection === "new" || semester) && <SemesterForm key={selection} semester={semester} cycle={cycle} canManage={canManage} leaveRef={leaveRef} onCancel={() => setSelection("")} onDeleted={() => { setNotice("Semester removed. Select another semester or create a new one."); setRows({ semesters: data.semesters.filter(item => item.id !== selection), cycles: data.cycles.filter(item => item.semester?.id !== selection) }); setSelection(""); if (selectedCycle?.semester?.id === selection) selectCycle(""); refreshCycles(); }} onSaved={(saved, savedCycle) => { if (selection === "new") setNotice(saved.name + " created."); setRows({ semesters: [...data.semesters.filter(item => item.id !== saved.id), saved], cycles: [...data.cycles.filter(item => item.semester?.id !== saved.id), savedCycle] }); setSelection(saved.id); selectCycle(savedCycle.id); refreshCycles(); }} />}
   </div>;
 }
