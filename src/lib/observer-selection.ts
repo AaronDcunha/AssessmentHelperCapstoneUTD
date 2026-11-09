@@ -1,9 +1,13 @@
 import type { Cycle, ObservationCandidate, ObservationCandidatesResponse, ObservationMeeting, ObserverSelectionSignup } from "@/lib/ac-api";
 
 export function currentSemesterCycle(cycles: readonly Cycle[], now: number | null) {
+  return currentSemester(cycles, cycle => cycle.semester, now);
+}
+
+export function currentSemester<T>(items: readonly T[], semesterFor: (item: T) => Cycle["semester"], now: number | null) {
   if (now === null) return null;
-  const current = cycles.filter(cycle => {
-    const semester = cycle.semester;
+  const current = items.filter(item => {
+    const semester = semesterFor(item);
     if (!semester?.startsOn || !semester.endsOn || !semester.timeZone) return false;
     try {
       const parts = new Intl.DateTimeFormat("en-US", { timeZone: semester.timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(now));

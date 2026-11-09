@@ -54,13 +54,9 @@ test('a semester without a cycle saves dates and creates its cycle without navig
   assert.ok(button(app.render(), 'Save and Create Cycle')); await app.submit();
   assert.equal(payload.semesterId, semester.id); assert.equal(payload.expectedSemesterRevision, 4); assert.equal(payload.semester.timeZone, 'America/Chicago'); assert.equal(app.saved.length, 1);
 });
-test('deletion requires confirmation and sends the saved semester/cycle revisions', async () => {
-  const calls = [];
-  const app = harness({ deleteSemester: async (...args) => calls.push(args) }, { semester, cycle });
-  assert.equal(calls.length, 0); button(app.render(), 'Delete Semester').props.onClick();
-  button(app.render(), 'Keep Semester').props.onClick(); assert.equal(calls.length, 0);
-  button(app.render(), 'Delete Semester').props.onClick(); await button(app.render(), 'Permanently Delete Semester').props.onClick();
-  assert.deepEqual(calls, [[semester.id, { expectedRevision: 4, expectedCycleRevision: 7 }]]); assert.equal(app.removed.length, 1);
+test('semester settings omit the deletion action', () => {
+  const app = harness({}, { semester, cycle });
+  assert.equal(button(app.render(), 'Delete Semester'), undefined);
 });
 test('new semester Cancel exits creation; read-only users cannot save', async () => {
   const app = harness({}, { canManage: false, semester, cycle }); assert.equal(button(app.render(), 'Save Settings').props.disabled, true); await app.submit(); assert.equal(app.saved.length, 0);
