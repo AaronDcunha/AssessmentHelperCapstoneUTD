@@ -45,14 +45,18 @@ test('destinations allow only existing authorized internal observation routes', 
   for(const target of [null,{kind:'url',id:'https://evil.test'},{kind:'observation',id:'../admin'},{kind:'cycle',id}]) assert.equal(notificationDestination(target,['observations.read.own']),null);
   assert.equal(notificationDestination(item().target,[]),null);
 });
-test('changing filters cancels stale results; loading more preserves rows on failure',async()=>{
+test('changing filters cancels stale results; failed pages clear old rows and can be retried',async()=>{
   const first=deferred();let calls=0;
   const store=createNotificationsController({list:async filter=>{calls++; if(calls===1)return first.promise;if(filter==='unread')return page([item('new')],1,'next');throw new Error('Offline');}});
   const old=store.load(); await store.load('unread'); first.resolve(page([item('old')])); await old;
   assert.equal(store.getSnapshot().items[0].id,id+'new');
-  // Failure on continuation must keep the successfully loaded first page.
-  const store2=createNotificationsController({list:async(_f,c)=>{if(c)throw new Error('Offline');return page([item()],1,'next');}});
-  await store2.load();await store2.loadMore();assert.equal(store2.getSnapshot().items.length,1);assert.equal(store2.getSnapshot().error,'Offline');
+  let offline=true;
+  const store2=createNotificationsController({list:async(_f,c)=>{
+    if(c && offline)throw new Error('Offline');
+    return c ? page([item('second')]) : page([item()],1,'next');
+  }});
+  await store2.load();await store2.movePage(1);assert.deepEqual(store2.getSnapshot().items,[]);assert.equal(store2.getSnapshot().error,'Offline');
+  offline=false;await store2.retry();assert.equal(store2.getSnapshot().items[0].id,id+'second');
 });
 test('individual read/unread actions use the server response and update the unread view/count',async()=>{
   let read=false;
@@ -73,12 +77,31 @@ test('uncertain writes block repeats until explicit reload; denied responses cle
   await denied.load();await denied.setRead(id,true);assert.equal(denied.getSnapshot().state,'denied');assert.deepEqual(denied.getSnapshot().items,[]);
 });
 
-test('selection covers loaded rows only and is cleared by filter changes',async()=>{
- const store=createNotificationsController({list:async(_filter,cursor)=>cursor?page([item('later')],2):page([item()],2,'next')});
+test('cursor navigation replaces rows, resets selection and sends the selected size',async()=>{
+ const calls=[];
+ const store=createNotificationsController({list:async(filter,cursor,_signal,limit)=>{
+  calls.push([filter,cursor,limit]);
+  return cursor?page([item('later')],2):page([item()],2,'next');
+ }});
  await store.load();store.selectLoaded(true);assert.deepEqual(store.getSnapshot().selectedIds,[id]);
- await store.loadMore();assert.deepEqual(store.getSnapshot().selectedIds,[id]);
- store.select(id+'later',true);assert.equal(store.getSnapshot().selectedIds.length,2);
- await store.load('unread');assert.deepEqual(store.getSnapshot().selectedIds,[]);
+ await store.movePage(1);assert.deepEqual(store.getSnapshot().selectedIds,[]);
+ assert.deepEqual(store.getSnapshot().items.map(x=>x.id),[id+'later']);
+ await store.movePage(-1);assert.equal(store.getSnapshot().page,1);
+ await store.movePage(1);await store.load('all',25);
+ await store.movePage(1);await store.load('unread');
+ assert.deepEqual(calls,[['all',undefined,10],['all','next',10],['all',undefined,10],
+  ['all','next',10],['all',undefined,25],['all','next',25],['unread',undefined,25]]);
+});
+
+test('deleting the last item on the final page returns to the previous page',async()=>{
+ let deleted=false;
+ const store=createNotificationsController({list:async(_filter,cursor)=>
+  cursor?page(deleted?[]:[item('later')],deleted?1:2):page([item()],deleted?1:2,deleted?null:'next'),
+  delete:async()=>{deleted=true;return {deletedCount:1,unreadCount:1};}});
+ await store.load();await store.movePage(1);await store.remove([id+'later']);
+ assert.equal(store.getSnapshot().page,1);
+ assert.deepEqual(store.getSnapshot().items.map(x=>x.id),[id]);
+ assert.equal(store.getSnapshot().nextCursor,null);
 });
 test('mark selected serializes PATCHes, skips already-read rows and leaves unselected rows unchanged',async()=>{
  const calls=[];const read={...item('read'),readAt:'2026-10-28T09:00:00Z'};

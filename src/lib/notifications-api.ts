@@ -75,8 +75,8 @@ export const notificationsApi = {
   delete: (notificationIds: string[]) => request("/api/notifications", value => {
     const data = record(value); return { deletedCount: count(data.deletedCount), unreadCount: count(data.unreadCount) };
   }, { method: "DELETE", body: JSON.stringify({ notificationIds }) }),
-  list: (read: ReadFilter, afterCursor?: string, signal?: AbortSignal) => {
-    const params = new URLSearchParams({ read, limit: "20" });
+  list: (read: ReadFilter, afterCursor?: string, signal?: AbortSignal, limit = 20) => {
+    const params = new URLSearchParams({ read, limit: String(limit) });
     if (afterCursor) params.set("cursor", afterCursor);
     return request(`/api/notifications?${params}`, parseNotificationPage, { signal });
   },

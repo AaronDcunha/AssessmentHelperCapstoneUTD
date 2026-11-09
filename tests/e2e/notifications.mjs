@@ -68,8 +68,9 @@ async function value(name, next) {
   await evaluate(`(() => { const e = document.querySelector('[name="${name}"]'); const setter = Object.getOwnPropertyDescriptor(e instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype, 'value').set; setter.call(e, ${JSON.stringify(next)}); e.dispatchEvent(new Event(e instanceof HTMLSelectElement ? 'change' : 'input', {bubbles:true})); })()`);
 }
 async function click(text) {
-  await wait(`[...document.querySelectorAll('button')].some(e=>e.textContent===${JSON.stringify(text)}&&!e.disabled)`);
-  await evaluate(`[...document.querySelectorAll('button')].find(e=>e.textContent===${JSON.stringify(text)}).click()`);
+  const match = `e => !e.disabled && (e.getAttribute('aria-label') ?? e.textContent) === ${JSON.stringify(text)}`;
+  await wait(`[...document.querySelectorAll('button')].some(${match})`);
+  await evaluate(`[...document.querySelectorAll('button')].find(${match}).click()`);
 }
 
 const observationId='11111111-1111-4111-8111-111111111111';
@@ -88,8 +89,11 @@ handlers.set('Fetch.requestPaused',async event=>{
   else if(method==='GET'){
    const items=mode==='empty'?[]:records.filter(n=>url.searchParams.get('read')!=='unread'||n.readAt===null);
    const start=url.searchParams.has('cursor')?Number(url.searchParams.get('cursor')):0;
-   const next=start+3<items.length?String(start+3):null;
-   body={items:items.slice(start,start+3),pageInfo:{hasMore:next!==null,nextCursor:next},unreadCount:mode==='empty'?0:unread(),latestCursor:'latest'};
+   const limit=Number(url.searchParams.get('limit'));
+   assert.ok([10,25,50].includes(limit));
+   const end=start+(limit===10?3:limit);
+   const next=end<items.length?String(end):null;
+   body={items:items.slice(start,end),pageInfo:{hasMore:next!==null,nextCursor:next},unreadCount:mode==='empty'?0:unread(),latestCursor:'latest'};
   } else if(method==='PATCH'){
    const input=JSON.parse(event.request.postData);assert.equal(typeof input.read,'boolean');writes.push({method,input});
    const item=records.find(n=>n.id===decodeURIComponent(path.split('/').at(-1)));assert.ok(item);item.readAt=input.read?'2026-10-28T12:00:00Z':null;body=item;
@@ -110,12 +114,15 @@ try{
  await navigate('/notifications');await wait('document.querySelectorAll("tbody tr").length===3');
  assert.equal(await evaluate('document.querySelector("h1").textContent'),'Notifications');
  await wait(`[...document.querySelectorAll('a')].some(e=>e.getAttribute('aria-label')==='Notifications (5 unread)')`);
- await click('Load more');await wait('document.querySelectorAll("tbody tr").length===5');
+ await click('Next');await wait('document.querySelectorAll("tbody tr").length===2');
  assert.deepEqual(await evaluate('[...document.querySelectorAll("th")].map(x=>x.textContent)'),['','Notification','Details','Action']);
  const geometry=await evaluate('(()=>{const s=document.querySelector("select").getBoundingClientRect(),t=document.querySelector("table").getBoundingClientRect();return {selectWidth:s.width,tableWidth:t.width,overflow:document.documentElement.scrollWidth>innerWidth}})()');
  assert.equal(geometry.selectWidth,480);assert.equal(geometry.tableWidth,1094);assert.equal(geometry.overflow,false);
- assert.equal(await evaluate(`(()=>{const p=document.querySelectorAll('tbody tr')[4].querySelector('td:nth-last-child(2) p');return p.scrollHeight>p.clientHeight&&getComputedStyle(p).webkitLineClamp==='2';})()`),true);
+ assert.equal(await evaluate(`(()=>{const p=document.querySelectorAll('tbody tr')[1].querySelector('td:nth-last-child(2) p');return p.scrollHeight>p.clientHeight&&getComputedStyle(p).webkitLineClamp==='2';})()`),true);
  await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:true}).then(r=>writeFileSync(join(tmpdir(),'assessment-notifications-desktop.png'),Buffer.from(r.data,'base64')));
+ await click('Previous');await wait('document.querySelectorAll("tbody tr").length===3');
+ await click('25');await wait('document.querySelectorAll("tbody tr").length===5');
+ await click('10');await wait('document.querySelectorAll("tbody tr").length===3');
  await evaluate(`document.querySelectorAll('tbody input[type=checkbox]')[0].click()`);
  assert.equal(await evaluate(`document.querySelector('thead input').indeterminate`),true);
  await evaluate(`document.querySelectorAll('tbody input[type=checkbox]')[1].click()`);
@@ -143,7 +150,7 @@ try{
  assert.equal(await evaluate('document.activeElement.id'),'notifications-heading');
  await wait(`![...document.querySelectorAll('button')].some(e=>e.getAttribute('aria-busy')==='true')`);
  await value('read','all');await wait('document.querySelectorAll("tbody tr").length===3');
- await click('Load more');await wait('document.querySelectorAll("tbody tr").length===5');
+ await click('Next');await wait('document.querySelectorAll("tbody tr").length===2');
  await evaluate(`[...document.querySelectorAll('button')].find(e=>e.getAttribute('aria-label')==='View: Evaluation cycle opened').click()`);
  await wait(`document.querySelector('dialog').open&&document.querySelector('dialog [role=status]')?.textContent==='Read'`);
  assert.equal(await evaluate(`document.querySelector('dialog').textContent.includes('Full message ends here.')`),true);
