@@ -52,8 +52,10 @@ async function seed() {
       await upsert(table,rows,keys[table],updates);
     }
     await upsert('role',['Faculty','Admin','AC'].map(name=>({role_id:stableId(`role:${name}`),role_name:name})),['role_id']);
-    await upsert('permission',[...new Set(Object.values(rolePermissions).flat())].map(name=>({permission_id:stableId(`permission:${name}`),permission_name:name})),['permission_id']);
-    await upsert('role_permission',Object.entries(rolePermissions).flatMap(([role,permissions])=>permissions.map(name=>({role_id:stableId(`role:${role}`),permission_id:stableId(`permission:${name}`)}))),['role_id','permission_id'],[]);
+    await upsert('permission',[...new Set(Object.values(rolePermissions).flat())].map(name=>({permission_id:stableId(`permission:${name}`),permission_name:name})),['permission_name'],[]);
+    const { rows: permissions } = await client.query('SELECT permission_name, permission_id FROM permission');
+    const permissionIds = new Map(permissions.map(row => [row.permission_name, row.permission_id]));
+    await upsert('role_permission',Object.entries(rolePermissions).flatMap(([role,permissions])=>permissions.map(name=>({role_id:stableId(`role:${role}`),permission_id:permissionIds.get(name)}))),['role_id','permission_id'],[]);
     const credentials = accounts.map(a => {
       const salt = randomBytes(16).toString('hex');
       const hash = scryptSync('123',salt,64).toString('hex');
