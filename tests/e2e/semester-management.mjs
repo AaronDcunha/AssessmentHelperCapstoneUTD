@@ -52,6 +52,7 @@ async function textIncludes(text) { await wait(`document.querySelector('main')?.
 const uuid = n => `00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 let semesters = [{ id: uuid(1), name: 'Fall 2026', startsOn: '2026-08-31', endsOn: '2026-12-16', timeZone: 'America/Chicago', revision: 0 }];
 let cycle = { id: uuid(2), semester: semesters[0], revision: 0, signupDeadline: '2026-10-31T22:30:00.000Z', observationDeadline: '2026-11-30T23:00:00.000Z', feedbackDeadline: '2026-12-20T23:00:00.000Z', allowedActions: ['update','updateSettings'] };
+let newCycle = null;
 const writes = []; let failure;
 async function fulfill(event, body, status=200) { await send('Fetch.fulfillRequest',{requestId:event.requestId,responseCode:status,responseHeaders:[{name:'Content-Type',value:'application/json'}],body:Buffer.from(JSON.stringify(body)).toString('base64')}); }
 handlers.set('Fetch.requestPaused',async event => {
@@ -61,7 +62,7 @@ handlers.set('Fetch.requestPaused',async event => {
   if(method==='GET'){
    const list=items=>({items,pageInfo:{hasMore:false,nextCursor:null}});
    if(path==='/api/semesters')await fulfill(event,list(semesters));
-   else if(path==='/api/evaluation-cycles')await fulfill(event,list(cycle?[cycle]:[]));
+   else if(path==='/api/evaluation-cycles'){const id=new URL(event.request.url).searchParams.get('semesterId');await fulfill(event,list([cycle,newCycle].filter(c=>c&&(!id||c.semester.id===id))));}
    else if(path===`/api/evaluation-cycles/${uuid(2)}`)await fulfill(event,cycle);
    else await fulfill(event,list([]));
    return;
@@ -69,7 +70,8 @@ handlers.set('Fetch.requestPaused',async event => {
   const body=JSON.parse(event.request.postData??'{}'); writes.push({path,method,body});
   if(method==='POST'&&path==='/api/semesters'){
    assert.equal(body.year,2027);assert.equal(body.season,'Spring');
-   const semester={id:uuid(3),name:'Spring 2027',startsOn:body.startsOn,endsOn:body.endsOn,timeZone:body.timeZone,revision:0};semesters.push(semester);await fulfill(event,semester,201);
+   assert.ok(body.creationId);assert.equal(body.deadlines.signupDeadline,'2027-01-11T18:00:00.000Z');
+   const semester={id:body.creationId,name:'Spring 2027',startsOn:body.startsOn,endsOn:body.endsOn,timeZone:body.timeZone,revision:0};semesters.push(semester);newCycle={...cycle,id:uuid(4),semester,revision:0,...body.deadlines};await fulfill(event,semester,201);
   }else if(method==='PUT'&&path.endsWith('/settings')){
    assert.equal(body.expectedCycleRevision,cycle.revision);assert.equal(body.expectedSemesterRevision,cycle.semester.revision);
    assert.deepEqual(body.deadlines,{signupDeadline:cycle.signupDeadline,observationDeadline:cycle.observationDeadline,feedbackDeadline:cycle.feedbackDeadline});
@@ -83,21 +85,21 @@ try{
  await send('Page.enable');await send('Runtime.enable');await send('Network.enable');
  for(const [name,value]of jar)await send('Network.setCookie',{name,value,url:base,httpOnly:true});
  await send('Fetch.enable',{patterns:[{urlPattern:`${base}/api/*`}]});
- await navigate('/ac/semester');await textIncludes('Save Settings');await textIncludes('Delete Fall 2026');
+ await navigate('/ac/semester');await wait(`document.querySelector('main select option[value="${uuid(1)}"]')`);await value('main select',uuid(1));await textIncludes('Save Settings');
  assert.equal(await evaluate(`document.querySelector('[name="signupDeadline"]').value`),'2026-10-31T17:30');
  await click('Save Settings');await textIncludes('Settings saved.');await wait(`!([...document.querySelectorAll('main button')].find(b=>b.textContent==='Save Settings')?.disabled)`);
  await click('Save Settings');await wait(`document.querySelector('main').textContent.includes('Settings saved.')`);await wait(`!([...document.querySelectorAll('main button')].find(b=>b.textContent==='Save Settings')?.disabled)`);
  assert.equal(writes.filter(w=>w.method==='PUT').length,2);
  await click('New Semester');
  for(const [name,next]of Object.entries({year:'2027',season:'Spring',startsOn:'2027-01-11',endsOn:'2027-05-14'}))await value(`[name="${name}"]`,next);
- await click('Create Semester');await textIncludes('Semester created.');await textIncludes('Delete Spring 2027');
+ await click('Create Semester');await textIncludes('Save Settings');await wait(`document.querySelector('main select').selectedOptions[0]?.textContent==='Spring 2027'`);assert.equal(await evaluate(`!!document.querySelector('main ul')`),false);
  for(const width of [1280,390]){
   await send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});
   assert.equal(await evaluate(`document.querySelector('main').scrollWidth<=document.querySelector('main').clientWidth+1`),true,'No horizontal content overflow at '+width);
  }
- await click('Delete Fall 2026');await textIncludes('This permanently deletes');assert.equal(writes.filter(w=>w.method==='DELETE').length,0);
- await click('Cancel');assert.equal(writes.filter(w=>w.method==='DELETE').length,0);
- await click('Delete Fall 2026');await click('Permanently Delete Semester');await textIncludes('Semester and its evaluation cycle deleted.');
+ await value('main select',uuid(1));await click('Delete Semester');await textIncludes('This permanently deletes');assert.equal(writes.filter(w=>w.method==='DELETE').length,0);
+ await click('Keep Semester');assert.equal(writes.filter(w=>w.method==='DELETE').length,0);
+ await click('Delete Semester');await click('Permanently Delete Semester');await textIncludes('Semester removed.');assert.equal(await evaluate(`document.querySelector('main select').value`),'');
  assert.equal(writes.filter(w=>w.method==='DELETE').length,1);if(failure)throw failure;
  console.log('Passed browser Semester Settings: exact zone input, two revision-aware saves, New Semester, desktop/mobile overflow, delete cancel/confirmation and cycle removal. All business writes intercepted.');
 }finally{await send('Fetch.disable').catch(()=>{});socket.close();await fetch(`${debug}/json/close/${target.id}`).catch(()=>{});}

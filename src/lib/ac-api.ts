@@ -212,7 +212,7 @@ export const acApi = {
   sendReminders: (cycleId:string,body:{kind:string;recipientFilter:Record<string,unknown>;channels:string[];message:string},key:string) => requestJson<{recipientCount:number;notificationCount:number;emailQueuedCount:number;status:string}>(`/api/evaluation-cycles/${encodeURIComponent(cycleId)}/notifications`,{method:"POST",headers:{"Idempotency-Key":key},body:JSON.stringify(body)}),
   getEvaluationCycles: (filters: { semesterId?: string; status?: string } = {}) => requestList<Cycle>(`/api/evaluation-cycles${queryString(filters)}`),
   getEvaluationCycle: (cycleId: string) => requestJson<Cycle>(cyclePath(cycleId)),
-  createSemester: (body: { year: number; season: string; startsOn: string; endsOn: string; timeZone: string }) => requestJson<Semester>("/api/semesters", { method: "POST", body: JSON.stringify(body) }),
+  createSemester: (body: { year: number; season: string; startsOn: string; endsOn: string; timeZone: string; creationId?: string; deadlines?: Omit<CycleWrite, "semesterId"> }) => requestJson<Semester>("/api/semesters", { method: "POST", body: JSON.stringify(body) }),
   deleteSemester: (id: string, body: { expectedRevision: number; expectedCycleRevision: number | null }) => requestJson<{ deleted: boolean }>(`/api/semesters/${encodeURIComponent(id)}`, { method: "DELETE", body: JSON.stringify(body) }),
   getSemesters: () => requestList<Semester>("/api/semesters"),
   getReports: (cycleId: string, filters: { departmentId?: string; hiringLevelId?: string } = {}) => requestJson<ReportsResponse>(`${cyclePath(cycleId)}/reports${queryString(filters)}`),
@@ -238,7 +238,7 @@ export const acApi = {
   getObservationTemplate: (observationId: string) => requestJson<AssignedObservationTemplate>(`/api/observations/${encodeURIComponent(observationId)}/template`),
   getObservationAssessment: (observationId: string) => requestJson<ObservationAssessmentResponse>(`/api/observations/${encodeURIComponent(observationId)}/assessment`),
   getHiringLevels: () => requestList<HiringLevel>("/api/hiring-levels", false),
-  createCycle: (body: CycleWrite) => requestJson<Cycle>("/api/evaluation-cycles", { method: "POST", body: JSON.stringify(body) }),
+  createCycle: (body: CycleWrite & { creationId?: string; expectedSemesterRevision?: number; semester?: { startsOn: string; endsOn: string; timeZone: string } }) => requestJson<Cycle>("/api/evaluation-cycles", { method: "POST", body: JSON.stringify(body) }),
   updateCycle: (cycleId: string, body: Partial<Omit<CycleWrite, "semesterId">> & { expectedRevision: number }) => requestJson<Cycle>(cyclePath(cycleId), { method: "PATCH", body: JSON.stringify(body) }),
   updateCycleSettings: (cycleId: string, body: {
     expectedCycleRevision: number; expectedSemesterRevision: number;

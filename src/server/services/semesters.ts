@@ -1,16 +1,32 @@
 import type { PrismaClient } from "../../generated/prisma/client";
-import { ConfigurationError, date, fields, invalid, object, revision, timeZone, uuid, type ConfigurationUser } from "../configuration-validation";
+import { ConfigurationError, date, deadlines, fields, invalid, object, revision, timeZone, uuid, type ConfigurationUser } from "../configuration-validation";
 import { authorize, semesterResponse } from "../queries/configuration";
 import { removeFacultyAttachmentFile } from "./faculty-attachments";
 
 export async function createSemester(prisma: PrismaClient, user: ConfigurationUser, value: unknown) {
   authorize(user, ["cycles.manage"]);
-  const body = object(value); fields(body, ["year", "season", "startsOn", "endsOn", "timeZone"]);
+  const body = object(value); fields(body, ["year", "season", "startsOn", "endsOn", "timeZone", "creationId", "deadlines"]);
   if (!Number.isInteger(body.year) || Number(body.year) < 2000 || Number(body.year) > 2099 || !["Spring", "Summer", "Fall"].includes(String(body.season))) invalid("Choose Spring, Summer or Fall and a year from 2000 to 2099.");
   const startsOn = date(body.startsOn), endsOn = date(body.endsOn), zone = timeZone(body.timeZone);
   if (startsOn > endsOn) invalid("Semester start must be on or before its end.");
   const suffix = { Spring: "s", Summer: "u", Fall: "f" }[body.season as "Spring" | "Summer" | "Fall"];
-  return semesterResponse(await prisma.semester.create({ data: { termCode: `${String(body.year).slice(2)}${suffix}`, termName: `${body.season} ${body.year}`, startsOn: new Date(startsOn), endsOn: new Date(endsOn), timeZone: zone } }));
+  const semesterId = body.creationId === undefined ? undefined : uuid(body.creationId);
+  const d = body.deadlines === undefined ? undefined : deadlines(object(body.deadlines));
+  const data = { termCode: `${String(body.year).slice(2)}${suffix}`, termName: `${body.season} ${body.year}`, startsOn: new Date(startsOn), endsOn: new Date(endsOn), timeZone: zone };
+  return prisma.$transaction(async db => {
+    if (semesterId) {
+      const existing = await db.semester.findUnique({ where: { semesterId }, include: { evaluationCycles: true } });
+      if (existing) {
+        const cycle = existing.evaluationCycles[0];
+        if (existing.termCode !== data.termCode || existing.startsOn?.getTime() !== data.startsOn.getTime() || existing.endsOn?.getTime() !== data.endsOn.getTime() || existing.timeZone !== zone || (d ? !cycle || cycle.signupDeadline.getTime() !== Date.parse(d.signupDeadline) || cycle.observationDeadline.getTime() !== Date.parse(d.observationDeadline) || cycle.feedbackDeadline.getTime() !== Date.parse(d.feedbackDeadline) : !!cycle))
+          throw new ConfigurationError(409, "CREATION_KEY_REUSED", "Creation ID belongs to different settings. Reload semesters before continuing.");
+        return semesterResponse(existing);
+      }
+    }
+    const saved = await db.semester.create({ data: { ...data, ...(semesterId ? { semesterId } : {}) } });
+    if (d) await db.evaluationCycle.create({ data: { semesterId: saved.semesterId, cycleName: saved.termName, signupDeadline: new Date(d.signupDeadline), observationDeadline: new Date(d.observationDeadline), feedbackDeadline: new Date(d.feedbackDeadline) } });
+    return semesterResponse(saved);
+  }, { isolationLevel: "Serializable" });
 }
 
 export async function deleteSemester(prisma: PrismaClient, user: ConfigurationUser, id: string, value: unknown) {

@@ -1,3 +1,29 @@
+
+November 8, 2026 ? Unified Semester Settings (November 1 Task 4)
+- /ac/semester uses one newest-first semester dropdown, including semesters without
+  cycles. New Semester, editing, cycle setup and confirmed Delete share one form;
+  the separate management list/component is removed. Cancel resets saved values
+  or exits creation. Switching records/new mode protects unsaved edits.
+- New Semester creates its evaluation cycle by default in one transaction. Confirmed
+  editable suggestions: signup noon on startsOn, observation noon on endsOn, feedback
+  noon seven calendar days later, all in the entered IANA zone. Ordered-deadline and
+  DST validation remain authoritative; same-day boundaries require editing defaults.
+- POST /api/semesters accepts optional creationId (UUID) and deadlines containing
+  signupDeadline/observationDeadline/feedbackDeadline UTC instants. With deadlines,
+  semester and cycle insert atomically; response remains Semester. Existing clients
+  omitting deadlines retain semester-only creation. UI always supplies deadlines.
+- POST /api/evaluation-cycles additionally accepts optional creationId (UUID),
+  semester:{startsOn,endsOn,timeZone}, expectedSemesterRevision. Supplying semester
+  atomically saves dates/zone (revision checked) and creates the unique cycle.
+- creationId uses the resource primary UUID; retries with the same ID/settings
+  recover the resource. Changed payload/ID reuse is 409; term and cycle unique
+  constraints prevent duplicates. Concurrent conflicts may require explicit retry.
+  UI retains the exact creation request and locks changes after uncertain results.
+  Retry recovery requires the current stored creation settings still match; later
+  independent edits can produce 409 and require an explicit reload.
+- Existing settings PUT and revision-aware DELETE are reused. Protected historical
+  evaluations still block deletion. No schema/migration or application-data changes.
+
 November 6, 2026 Issue #94 invitation declines and closure notifications:
 The existing Faculty Accept/Decline routes and decline service are retained.
 Recommendations show readable invitation statuses, including Declined. Request
