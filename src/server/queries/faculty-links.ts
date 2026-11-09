@@ -6,17 +6,7 @@ import { availableOption, observerAvailable, workflowObservation } from "../serv
 import { FacultyActionError } from "../services/faculty-errors";
 import { currentReleasedCandidates } from "../recommendation-scope";
 
-export async function getFacultyLinks(user: AccountUser, cycleId: string, now = new Date(), db: Prisma.TransactionClient = getPrisma()) {
-  const own = user.permissions.includes("recommendations.read.released.own") ? await db.observation.findMany({
-    where: { cycleId, signup: { professor: { userId: user.id } }, observerId: null, completedAt: null, status: "PENDING" },
-    include: { currentReleasedList: { include: { candidates: { include: { professor: { include: { user: true } }, acceptedOption: true }, orderBy: { candidateId: "asc" } } } }, timeOptions: true },
-  }) : [];
-  const recommendations = own.flatMap(record => !record.currentReleasedList?.publishedAt ? [] : record.currentReleasedList.candidates.map(candidate => ({
-    id: candidate.candidateId, observationId: record.observationId, name: candidate.professor.user.fullName, status: candidate.status,
-    acceptedDate: candidate.acceptedOption?.preferredDate.toISOString().slice(0, 10) ?? null,
-    acceptedMeeting: candidate.acceptedOption?.startsAt && candidate.acceptedOption.endsAt && candidate.acceptedOption.timeZone ? { startsAt: candidate.acceptedOption.startsAt.toISOString(), endsAt: candidate.acceptedOption.endsAt.toISOString(), timeZone: candidate.acceptedOption.timeZone } : null,
-    dates: record.timeOptions.map(option => option.preferredDate.toISOString().slice(0, 10)),
-  })));
+export async function getFacultyRequests(user: AccountUser, cycleId: string, now: Date, db: Prisma.TransactionClient) {
   const received = user.permissions.includes("observations.read.own") ? await db.observationCandidate.findMany({
     where: { ...currentReleasedCandidates, professor: { userId: user.id }, invitedAt: { not: null }, status: { in: ["PENDING", "EXPIRED", "ACCEPTED"] },
       observation: { cycleId, observerId: null, completedAt: null, status: "PENDING", cycle: { observationDeadline: { gt: now } } } },
@@ -42,7 +32,21 @@ export async function getFacultyLinks(user: AccountUser, cycleId: string, now = 
       observee: record.signup.professor.user.fullName, course: section.course.courseCode, section: section.sectionCode,
       expiresAt: attempt.expiresAt.toISOString(), options }];
   }));
-  const requests = requestGroups.flat();
+  return requestGroups.flat();
+}
+
+export async function getFacultyLinks(user: AccountUser, cycleId: string, now = new Date(), db: Prisma.TransactionClient = getPrisma()) {
+  const own = user.permissions.includes("recommendations.read.released.own") ? await db.observation.findMany({
+    where: { cycleId, signup: { professor: { userId: user.id } }, observerId: null, completedAt: null, status: "PENDING" },
+    include: { currentReleasedList: { include: { candidates: { include: { professor: { include: { user: true } }, acceptedOption: true }, orderBy: { candidateId: "asc" } } } }, timeOptions: true },
+  }) : [];
+  const recommendations = own.flatMap(record => !record.currentReleasedList?.publishedAt ? [] : record.currentReleasedList.candidates.map(candidate => ({
+    id: candidate.candidateId, observationId: record.observationId, name: candidate.professor.user.fullName, status: candidate.status,
+    acceptedDate: candidate.acceptedOption?.preferredDate.toISOString().slice(0, 10) ?? null,
+    acceptedMeeting: candidate.acceptedOption?.startsAt && candidate.acceptedOption.endsAt && candidate.acceptedOption.timeZone ? { startsAt: candidate.acceptedOption.startsAt.toISOString(), endsAt: candidate.acceptedOption.endsAt.toISOString(), timeZone: candidate.acceptedOption.timeZone } : null,
+    dates: record.timeOptions.map(option => option.preferredDate.toISOString().slice(0, 10)),
+  })));
+  const requests = await getFacultyRequests(user, cycleId, now, db);
   const feedback = user.permissions.includes("feedback.read.own") || user.permissions.includes("feedback.submit.own") ? await db.observation.findMany({
     where: { cycleId, OR: [{ signup: { professor: { userId: user.id } } }, { observer: { userId: user.id } }] },
     include: { signup: { include: { professor: true, section: { include: { course: true } } } }, processFeedback: { where: { professor: { userId: user.id } }, include: { attachments: { where: { ownerId: user.id } } } }, cycle: true },
