@@ -5,7 +5,9 @@ import { Select } from "@/components/ui/form-fields";
 import { postFacultyAction } from "./faculty-api";
 import type { FacultyDashboard } from "@/server/queries/faculty-dashboard";
 
-export function FacultyCycleSelector({ dashboard }: { dashboard?: FacultyDashboard | null }) {
+type CycleSelection = Pick<FacultyDashboard, "availableCycles"> & { cycle: { id: string } | null };
+
+export function FacultyCycleSelector({ dashboard }: { dashboard?: CycleSelection | null }) {
   const router = useRouter(), [pending, setPending] = useState(false), [error, setError] = useState("");
   if (!dashboard?.availableCycles || dashboard.availableCycles.length < 2) return null;
   return <div className="space-y-ah-8"><Select label="Evaluation cycle" value={dashboard.cycle?.id ?? ""} disabled={pending} wrapperClassName="max-w-[480px]" onChange={async event => {

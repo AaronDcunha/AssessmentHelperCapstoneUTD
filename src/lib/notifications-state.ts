@@ -4,15 +4,17 @@ type Snapshot = {
   selectedIds: string[]; opened: NotificationItem | null;
   filter: ReadFilter; state: "loading" | "ready" | "error" | "denied" | "signedOut";
   items: NotificationItem[]; unreadCount: number | null; nextCursor: string | null;
-  loadingMore: boolean; pending: string | null; error: string | null; notice: string | null; writeBlocked: boolean;
+  page: number; pageSize: number;
+  pending: string | null; error: string | null; notice: string | null; writeBlocked: boolean;
 };
 const initial: Snapshot = { selectedIds: [], opened: null, filter: "all", state: "loading", items: [], unreadCount: null, nextCursor: null,
-  loadingMore: false, pending: null, error: null, notice: null, writeBlocked: false };
+  page: 1, pageSize: 10, pending: null, error: null, notice: null, writeBlocked: false };
 
 export function createNotificationsController(api = notificationsApi) {
   let snapshot = initial, generation = 0;
   let controller: AbortController | null = null;
-  const listeners = new Set<() => void>(), cursors = new Set<string>();
+  const listeners = new Set<() => void>();
+  let cursors: (string | undefined)[] = [undefined];
   const update = (patch: Partial<Snapshot>) => { snapshot = { ...snapshot, ...patch }; listeners.forEach(listener => listener()); };
   function errorState(error: unknown) {
     const status = error instanceof NotificationRequestError ? error.status : undefined;
@@ -22,29 +24,48 @@ export function createNotificationsController(api = notificationsApi) {
       notifyNotificationChange();
     } else update({ error: errorMessage });
   }
-  async function load(filter = snapshot.filter, more = false) {
-    if (snapshot.pending || more && (snapshot.loadingMore || !snapshot.nextCursor)) return;
+  async function fetchPage(filter: ReadFilter, pageSize: number, pageNumber: number, preserveDetail = false) {
     controller?.abort(); controller = new AbortController();
-    const active = ++generation, signal = controller.signal, cursor = more ? snapshot.nextCursor! : undefined;
-    if (more) update({ loadingMore: true, error: null, notice: null });
-    else { cursors.clear(); update({ ...initial, filter }); }
+    const active = ++generation, signal = controller.signal, cursor = cursors[pageNumber - 1];
+    const { opened, notice } = snapshot;
+    update({ ...initial, filter, pageSize, page: pageNumber,
+      opened: preserveDetail ? opened : null, notice: preserveDetail ? notice : null });
     try {
-      const page = await api.list(filter, cursor, signal);
+      const page = await api.list(filter, cursor, signal, pageSize);
       if (signal.aborted || active !== generation) return;
-      if (page.pageInfo.nextCursor && (page.pageInfo.nextCursor === cursor || cursors.has(page.pageInfo.nextCursor))) throw new Error("Notification pagination could not be continued. Refresh notifications.");
-      if (page.pageInfo.nextCursor) cursors.add(page.pageInfo.nextCursor);
-      const combined = more ? [...snapshot.items] : [];
-      for (const item of page.items) { const index = combined.findIndex(existing => existing.id === item.id); if (index < 0) combined.push(item); else combined[index] = item; }
-      update({ state: "ready", items: combined, unreadCount: page.unreadCount, nextCursor: page.pageInfo.nextCursor, loadingMore: false, writeBlocked: false });
+      if (page.pageInfo.nextCursor && cursors.slice(0, pageNumber).includes(page.pageInfo.nextCursor)) {
+        throw new Error("Notification pagination could not be continued. Refresh notifications.");
+      }
+      if (!page.items.length && pageNumber > 1) {
+        return fetchPage(filter, pageSize, pageNumber - 1, preserveDetail);
+      }
+      cursors.length = pageNumber;
+      update({ state: "ready", items: page.items, unreadCount: page.unreadCount, nextCursor: page.pageInfo.nextCursor });
     } catch (error) {
       if (signal.aborted || active !== generation) return;
-      if (!more) update({ state: "error" });
+      update({ state: "error" });
       errorState(error);
-      update({ loadingMore: false });
+    }
+  }
+  function load(filter = snapshot.filter, pageSize = snapshot.pageSize) {
+    if (snapshot.pending) return;
+    cursors = [undefined];
+    return fetchPage(filter, pageSize, 1);
+  }
+  function movePage(direction: -1 | 1) {
+    if (snapshot.pending || snapshot.state !== "ready") return;
+    const { page, filter, pageSize, nextCursor } = snapshot;
+    if (direction === -1 && page === 1 || direction === 1 && !nextCursor) return;
+    if (direction === 1) cursors[page] = nextCursor!;
+    return fetchPage(filter, pageSize, page + direction);
+  }
+  function refillPage() {
+    if (snapshot.state === "ready" && !snapshot.writeBlocked && (snapshot.nextCursor || snapshot.page > 1)) {
+      return fetchPage(snapshot.filter, snapshot.pageSize, snapshot.page, true);
     }
   }
   async function mutate(id: string | null, read = true) {
-    if (snapshot.pending || snapshot.loadingMore || snapshot.state !== "ready" || snapshot.writeBlocked) return;
+    if (snapshot.pending || snapshot.state !== "ready" || snapshot.writeBlocked) return;
     const current = id === null ? null : snapshot.items.find(item => item.id === id);
     if (id !== null && !current) return;
     update({ pending: id ?? "all", error: null, notice: null });
@@ -71,13 +92,19 @@ export function createNotificationsController(api = notificationsApi) {
       }
       errorState(error);
     } finally { update({ pending: null }); }
+    if (snapshot.filter === "unread" && read && snapshot.notice) {
+      if (id === null && snapshot.page > 1 && !snapshot.writeBlocked) {
+        cursors = [undefined];
+        await fetchPage(snapshot.filter, snapshot.pageSize, 1, true);
+      } else await refillPage();
+    }
   }
   function applyItem(item: NotificationItem) {
     update({ items: snapshot.items.flatMap(old => old.id !== item.id ? [old] : snapshot.filter === "unread" && item.readAt !== null ? [] : [item]),
       selectedIds: snapshot.selectedIds.filter(id => id !== item.id), opened: snapshot.opened?.id === item.id ? item : snapshot.opened });
   }
   async function markSelectedRead() {
-    if (snapshot.pending || snapshot.loadingMore || snapshot.state !== "ready" || snapshot.writeBlocked) return;
+    if (snapshot.pending || snapshot.state !== "ready" || snapshot.writeBlocked) return;
     const items = snapshot.items.filter(item => snapshot.selectedIds.includes(item.id) && item.readAt === null);
     if (!items.length) return;
     update({ pending: "selected", error: null, notice: null,
@@ -99,9 +126,10 @@ export function createNotificationsController(api = notificationsApi) {
       }
       notifyNotificationChange(); update({ pending: null });
     }
+    if (changed && snapshot.filter === "unread" && !snapshot.error) await refillPage();
   }
   async function remove(ids: string[]) {
-    if (snapshot.pending || snapshot.loadingMore || snapshot.state !== "ready" || snapshot.writeBlocked) return;
+    if (snapshot.pending || snapshot.state !== "ready" || snapshot.writeBlocked) return;
     const selected = [...new Set(ids)].filter(id => snapshot.items.some(item => item.id === id));
     if (!selected.length || selected.length > 100) return;
     update({pending:"delete",error:null,notice:null});
@@ -118,11 +146,14 @@ export function createNotificationsController(api = notificationsApi) {
       }
       errorState(error);
     } finally { update({pending:null}); }
+    if (snapshot.notice) await refillPage();
   }
   return {
     subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
     getSnapshot: () => snapshot,
-    load, loadMore: () => load(snapshot.filter, true), setRead: (id: string, read: boolean) => mutate(id, read), markAllRead: () => mutate(null),
+    load, movePage,
+    retry: () => fetchPage(snapshot.filter, snapshot.pageSize, snapshot.page, true),
+    setRead: (id: string, read: boolean) => mutate(id, read), markAllRead: () => mutate(null),
     markSelectedRead, remove, deleteSelected: () => remove(snapshot.selectedIds),
     select: (id: string, checked: boolean) => {
       if (snapshot.pending || !snapshot.items.some(item => item.id === id)) return;

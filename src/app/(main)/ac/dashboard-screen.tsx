@@ -5,7 +5,7 @@ import { CycleSelector, useAcCycle } from "@/components/ac/cycle-context";
 import { AttentionTableRow } from "@/components/ac/attention-table-row";
 import { useApiResource } from "@/components/ac/use-api-resource";
 import { MetricCard } from "@/components/shared/metric-card";
-import { TableCell } from "@/components/ui/table";
+import { Table, TableCell } from "@/components/ui/table";
 import { TextAction } from "@/components/ui/text-action";
 import { Button } from "@/components/ui/button";
 import { Section } from "@/components/ui/section";
@@ -33,7 +33,12 @@ export default function AcDashboardPage() {
     try { return cycleId ? await acApi.getCycleAlerts(cycleId) : EMPTY_ALERTS; }
     catch (error) { throw new Error(configurationError(error)); }
   }, [cycleId, alertsAttempt]), EMPTY_ALERTS);
+  const [pageSize, setPageSize] = useState(10);
+  const [position, setPosition] = useState<{ cycleId: string | undefined; page: number }>({ cycleId, page: 1 });
   const rows = mergeAttention(attention.data, alerts.data);
+  const loading = attention.loading || alerts.loading;
+  const page = Math.min(position.cycleId === cycleId ? position.page : 1, Math.max(1, Math.ceil(rows.length / pageSize)));
+  const pageRows = loading ? [] : rows.slice((page - 1) * pageSize, page * pageSize);
 
   return (
     <div className="space-y-ah-48 pt-ah-16">
@@ -54,8 +59,18 @@ export default function AcDashboardPage() {
           {attention.error && <div className="space-y-ah-8"><p role="alert" className="text-danger">Attention items could not be loaded. {attention.error}</p><Button variant="secondary" onClick={() => setAttentionAttempt(n => n + 1)}>Retry attention items</Button></div>}
           {alerts.error && <div className="space-y-ah-8"><p role="alert" className="text-danger">Faculty alerts could not be loaded. {alerts.error}</p><Button variant="secondary" onClick={() => setAlertsAttempt(n => n + 1)}>Retry alerts</Button></div>}
         </>}
-        <div className="overflow-x-auto rounded-ah-8 border border-border bg-surface">
-          <table className="w-full min-w-[760px] border-collapse">
+        <Table className="w-full min-w-[760px] border-collapse"
+          regionProps={{ className: "overflow-x-auto", tabIndex: 0, role: "region", "aria-label": "Needs attention", "aria-busy": loading }}
+          pagination={{
+            page, pageSize,
+            rowsShown: cycleId && !loading ? pageRows.length : null,
+            totalRows: cycleId && !loading && !attention.error && !alerts.error ? rows.length : undefined,
+            itemLabel: { singular: "item", plural: "items" },
+            hasNextPage: page * pageSize < rows.length,
+            disabled: !cycleId || loading,
+            onPageChange: next => setPosition({ cycleId, page: next }),
+            onPageSizeChange: size => { setPageSize(size); setPosition({ cycleId, page: 1 }); },
+          }}>
             <thead><tr className="h-ah-40 bg-canvas">
               <TableCell variant="header" className="h-ah-40! w-[35%]! py-ah-8! pl-ah-24!">Faculty</TableCell>
               <TableCell variant="header" className="h-ah-40! w-[25%]! py-ah-8!">Issue</TableCell>
@@ -63,7 +78,7 @@ export default function AcDashboardPage() {
               <TableCell variant="header" className="h-ah-40! w-[16%]! py-ah-8!"><span className="sr-only">Action</span></TableCell>
             </tr></thead>
             <tbody>
-              {rows.map((item) => (
+              {pageRows.map((item) => (
                 <AttentionTableRow key={item.rowKey} faculty={userDisplayName(item.faculty)}
                   issueStatus={item.issue === "overdue" || item.issue === "unmatched" || item.issue === "incomplete" || item.issue === "alert" ? item.issue : null}
                   observationStatus={item.observationStatus}
@@ -76,8 +91,7 @@ export default function AcDashboardPage() {
                 </td></tr>
               )}
             </tbody>
-          </table>
-        </div>
+        </Table>
       </Section>
     </div>
   );

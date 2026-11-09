@@ -5,7 +5,7 @@ import { CycleSelector, useAcCycle } from "@/components/ac/cycle-context";
 import { CandidateReviewDialog, ReleaseConfirmationDialog, type ReleaseListSummary } from "@/components/ac/observer-selection-dialogs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/form-fields";
-import { TableCell } from "@/components/ui/table";
+import { Table, TableCell } from "@/components/ui/table";
 import { TextAction } from "@/components/ui/text-action";
 import {
   acApi, ApiRequestError, userDisplayName,
@@ -57,6 +57,8 @@ function CycleObserverSelection({ selectedCycle, canGenerate, canRelease, canReg
   const [rows, setRows] = useState<SignupRow[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [loading, setLoading] = useState(!!cycleId);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [action, setAction] = useState<ActionState>("idle");
@@ -87,15 +89,13 @@ function CycleObserverSelection({ selectedCycle, canGenerate, canRelease, canReg
       const signups = await acApi.getObserverSelectionSignups(cycleId);
       const loaded = await Promise.all(signups.map(async (signup): Promise<SignupRow> => {
         if (!signup.observationId) return { signup, candidates: null, candidateError: null, revision: null };
-        const [candidateResult, observationResult] = await Promise.allSettled([
-          acApi.getObservationCandidates(signup.observationId),
-          acApi.getObservation(signup.observationId),
-        ]);
+        const [candidateResult] = await Promise.allSettled([acApi.getObservationCandidates(signup.observationId)]);
         const candidates = candidateResult.status === "fulfilled" ? candidateResult.value : null;
         const candidateError = candidateResult.status === "rejected"
           && (!(candidateResult.reason instanceof ApiRequestError) || candidateResult.reason.status !== 404)
           ? "Candidate data is currently unavailable." : null;
-        const revision = candidates?.observationRevision ?? (observationResult.status === "fulfilled" ? observationResult.value.observation.revision ?? null : null);
+        const revision = candidates?.observationRevision ?? (candidateError ? null : await acApi.getObservation(signup.observationId)
+          .then(detail => detail.observation.revision ?? null, () => null));
         return { signup, candidates, candidateError, revision };
       }));
       if (currentRequest !== requestId.current) return;
@@ -125,8 +125,10 @@ function CycleObserverSelection({ selectedCycle, canGenerate, canRelease, canReg
   const query = search.trim().toLocaleLowerCase();
   const visibleRows = rows.filter(row => !query || [row.signup.observee.name, row.signup.observee.displayName, row.signup.observee.username]
     .some(name => name?.toLocaleLowerCase().includes(query)));
-  const visibleSelectableRows = visibleRows.filter(hasObservation).filter(row => canGenerate && initialRow(row) || canRelease && publishable(row));
-  const hiddenSelectedCount = rows.filter(hasObservation).filter(row => selected.has(row.signup.observationId) && !visibleRows.includes(row)).length;
+  const currentPage = Math.min(page, Math.max(1, Math.ceil(visibleRows.length / pageSize)));
+  const pageRows = visibleRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const visibleSelectableRows = pageRows.filter(hasObservation).filter(row => canGenerate && initialRow(row) || canRelease && publishable(row));
+  const hiddenSelectedCount = rows.filter(hasObservation).filter(row => selected.has(row.signup.observationId) && !pageRows.includes(row)).length;
   const selectedSignups = rows.filter(initialRow).filter(row => selected.has(row.signup.observationId));
   const publishableRows = rows.filter(publishable);
   const selectedRows = publishableRows.filter(row => selected.has(row.signup.observationId));
@@ -214,19 +216,30 @@ function CycleObserverSelection({ selectedCycle, canGenerate, canRelease, canReg
       {notice && <p role="status" className="rounded-ah-8 bg-neutral-bg p-ah-12 text-body text-ink">{notice}</p>}
       {actionError && <p role="alert" className="rounded-ah-8 bg-danger-bg p-ah-12 text-body text-danger">{actionError}</p>}
       {action === "idle" && pendingKind && <div className="space-y-ah-8"><p className="text-caption text-warning">The result is uncertain. Retry the exact pending operation before starting another action.</p><Button onClick={() => void executePending()}>Retry pending operation</Button></div>}
-      {loadError && <p role="alert" className="rounded-ah-8 bg-danger-bg p-ah-12 text-body text-danger">Observer-selection data is currently unavailable. {loadError}</p>}
+      {loadError && <div className="space-y-ah-8"><p role="alert" className="rounded-ah-8 bg-danger-bg p-ah-12 text-body text-danger">Observer-selection data is currently unavailable. {loadError}</p><Button variant="secondary" onClick={() => void loadRows()}>Retry signups</Button></div>}
 
       <Input type="search" label="Search by observee name" placeholder="Search observee name…"
-        value={search} onChange={event => setSearch(event.target.value)} wrapperClassName="max-w-[480px]"
+        value={search} onChange={event => { setSearch(event.target.value); setPage(1); }} wrapperClassName="max-w-[480px]"
         hint="Find signups by the name of the professor being observed." />
-      {query && <p role="status" className="text-caption text-muted">Showing {visibleRows.length} of {rows.length} signups.</p>}
-      {hiddenSelectedCount > 0 && <p className="text-caption text-warning">{hiddenSelectedCount} selected {hiddenSelectedCount === 1 ? "signup is" : "signups are"} hidden by your search and will still be included in selected actions.</p>}
+      {query && !loading && !loadError && <p role="status" className="text-caption text-muted">Showing {visibleRows.length} of {rows.length} signups.</p>}
+      {!loading && !loadError && hiddenSelectedCount > 0 && <p className="text-caption text-warning">{hiddenSelectedCount} selected {hiddenSelectedCount === 1 ? "signup is" : "signups are"} outside this page and will still be included in selected actions.</p>}
 
-      <div className="overflow-x-auto rounded-ah-8 border border-border bg-surface">
-        <table className="w-full min-w-[1096px] border-collapse">
+      <Table className="w-full min-w-[1096px] border-collapse"
+        regionProps={{ className: "overflow-x-auto", tabIndex: 0, role: "region", "aria-label": "Faculty signups", "aria-busy": loading }}
+        pagination={{
+          page: currentPage,
+          pageSize,
+          pageSizes: [20, 50, 100],
+          rowsShown: loading || loadError ? null : pageRows.length,
+          totalRows: loading || loadError ? undefined : visibleRows.length,
+          itemLabel: { singular: "signup", plural: "signups" },
+          disabled: loading || !!loadError || busy,
+          onPageChange: setPage,
+          onPageSizeChange: size => { setPageSize(size); setPage(1); },
+        }}>
           <thead><tr>
             <TableCell variant="header" className="w-11!">
-              <input type="checkbox" className="size-5 accent-sidebar" aria-label="Select all visible available signups"
+              <input type="checkbox" className="size-5 accent-sidebar" aria-label="Select all available signups on this page"
                 disabled={loading || busy || visibleSelectableRows.length === 0}
                 checked={visibleSelectableRows.length > 0 && visibleSelectableRows.every(row => selected.has(row.signup.observationId))}
                 onChange={event => {
@@ -247,7 +260,7 @@ function CycleObserverSelection({ selectedCycle, canGenerate, canRelease, canReg
             <TableCell variant="header" className="w-[216px]!">Action</TableCell>
           </tr></thead>
           <tbody>
-            {visibleRows.map((row) => {
+            {!loading && !loadError && pageRows.map((row) => {
               const count = row.candidates?.items.length ?? 0;
               const released = isReleased(row);
               const selectable = !loading && !busy && (canGenerate && initialRow(row) || canRelease && publishable(row));
@@ -291,8 +304,7 @@ function CycleObserverSelection({ selectedCycle, canGenerate, canRelease, canReg
             {!loading && !loadError && rows.length > 0 && visibleRows.length === 0 && <tr><td colSpan={6} className="p-ah-24 text-body text-muted">No signups match your search.</td></tr>}
             {loading && <tr><td colSpan={6} className="p-ah-24 text-body text-muted">Loading faculty signups…</td></tr>}
           </tbody>
-        </table>
-      </div>
+      </Table>
     </section>
 
     <CandidateReviewDialog open={!!reviewRow} signup={reviewRow?.signup ?? null} candidates={reviewRow?.candidates ?? null}

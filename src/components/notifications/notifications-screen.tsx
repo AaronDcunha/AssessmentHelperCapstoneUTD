@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Select } from "@/components/ui/form-fields";
-import { TableCell } from "@/components/ui/table";
+import { Table, TableCell } from "@/components/ui/table";
 import { TextAction } from "@/components/ui/text-action";
 import { createNotificationsController } from "@/lib/notifications-state";
 import { notificationDestination, type ReadFilter } from "@/lib/notifications-api";
@@ -16,7 +16,7 @@ export function NotificationsScreen({ permissions }: { permissions: readonly str
   useEffect(() => { void store.load(); return store.dispose; }, [store]);
   const canUpdate = permissions.includes("notifications.update.own");
   const busy = state.pending !== null;
-  const updatesDisabled = busy || state.writeBlocked || state.state !== "ready" || state.loadingMore;
+  const updatesDisabled = busy || state.writeBlocked || state.state !== "ready";
   const selectedUnread = state.items.filter(item => state.selectedIds.includes(item.id) && item.readAt === null).length;
   const selectAll = useRef<HTMLInputElement>(null), dialog = useRef<HTMLDialogElement>(null), heading = useRef<HTMLHeadingElement>(null);
   const opener = useRef<HTMLElement | null>(null);
@@ -34,7 +34,9 @@ export function NotificationsScreen({ permissions }: { permissions: readonly str
     <p role="alert" className="text-body text-danger">{state.error}</p>
     {state.writeBlocked && state.state === "ready" && <p className="text-body text-muted">Refresh notifications to confirm their current state before making another change.</p>}
     {state.state === "signedOut" && <Link className="text-label text-sidebar underline" href="/login">Sign in</Link>}
-    {state.state !== "denied" && state.state !== "signedOut" && <TextAction disabled={busy} onClick={() => { void store.load(); }}>Refresh notifications</TextAction>}
+    {state.state !== "denied" && state.state !== "signedOut" && <TextAction disabled={busy} onClick={() => {
+      void (state.state === "error" ? store.retry() : store.load());
+    }}>{state.state === "error" ? "Retry page" : "Refresh notifications"}</TextAction>}
   </div>;
   return <div className="space-y-ah-24">
     <Select name="read" label="All / Unread" value={state.filter} wrapperClassName="max-w-[480px]" className={`min-h-control-56 ${styles.filter}`}
@@ -55,19 +57,29 @@ export function NotificationsScreen({ permissions }: { permissions: readonly str
       <TextAction disabled={busy} onClick={() => { void store.load(); }}>Refresh</TextAction>
     </div>
     {canUpdate && <p id="notification-selection-help" className="text-caption text-muted" role="status">
-      {state.selectedIds.length} selected. Select up to 100 loaded notifications at a time.
+      {state.selectedIds.length} selected on this page.
     </p>}
     {state.notice && !state.opened && <p role="status" className="text-body text-sidebar">{state.notice}</p>}
     {!state.opened && errorPanel}
     <section aria-labelledby="notifications-heading" className="space-y-ah-16">
       <h2 ref={heading} tabIndex={-1} id="notifications-heading" className="text-section">Recent notifications</h2>
-      <div className="overflow-x-auto rounded-ah-8 border border-border bg-surface" tabIndex={0} role="region" aria-label="Recent notifications" aria-busy={state.state === "loading" || state.loadingMore}>
-        <table className={styles.table}>
+      <Table className={styles.table} regionProps={{
+        className: "overflow-x-auto focus-visible:outline-offset-[-2px]",
+        tabIndex: 0, role: "region", "aria-label": "Recent notifications", "aria-busy": state.state === "loading",
+      }} pagination={{
+        page: state.page, pageSize: state.pageSize,
+        itemLabel: { singular: "notification", plural: "notifications" },
+        summaryDetail: state.state === "ready" && state.unreadCount !== null ? `${state.unreadCount} unread` : undefined,
+        rowsShown: state.state === "ready" ? state.items.length : null,
+        hasNextPage: Boolean(state.nextCursor), disabled: busy || state.state !== "ready",
+        onPageChange: page => { void store.movePage(page < state.page ? -1 : 1); },
+        onPageSizeChange: size => { void store.load(state.filter, size); },
+      }}>
           <caption className="sr-only">Your notifications, message previews and details</caption>
           <colgroup>{canUpdate && <col className="w-ah-48" />}<col className="w-[27.4%]" /><col className="w-[56.2%]" /><col className="w-[16.4%]" /></colgroup>
           <thead><tr>
             {canUpdate && <TableCell variant="header" className={styles.selectionCell}><input ref={selectAll} type="checkbox" className="size-4 accent-sidebar"
-              aria-label="Select all loaded notifications" aria-describedby="notification-selection-help" disabled={updatesDisabled || state.items.length === 0}
+              aria-label="Select all notifications on this page" aria-describedby="notification-selection-help" disabled={updatesDisabled || state.items.length === 0}
               checked={state.items.length > 0 && state.selectedIds.length === Math.min(state.items.length,100)} onChange={event => store.selectLoaded(event.target.checked)} /></TableCell>}
             {["Notification", "Details", "Action"].map(label => <TableCell key={label} variant="header">{label}</TableCell>)}
           </tr></thead>
@@ -95,7 +107,7 @@ export function NotificationsScreen({ permissions }: { permissions: readonly str
                   </div>
                 </TableCell>
                 <TableCell><p className={styles.messagePreview}>{item.message}</p></TableCell>
-                <TableCell><div className={styles.rowActions}><TextAction disabled={busy || state.loadingMore} aria-label={`View: ${item.title}`} onClick={() => {
+                <TableCell><div className={styles.rowActions}><TextAction disabled={busy} aria-label={`View: ${item.title}`} onClick={() => {
                   opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
                   void store.open(item.id, canUpdate);
                 }}>View</TextAction>
@@ -104,12 +116,7 @@ export function NotificationsScreen({ permissions }: { permissions: readonly str
                 </TableCell>
               </tr>)}
           </tbody>
-        </table>
-      </div>
-      <div className="flex flex-wrap items-center justify-between gap-ah-16">
-        <p role="status" className="text-caption text-muted">{state.state === "ready" ? `${state.items.length} shown · ${state.unreadCount === null ? "Unread count unavailable" : `${state.unreadCount} unread`}` : ""}</p>
-        {state.nextCursor && <Button variant="secondary" disabled={busy || state.loadingMore} aria-busy={state.loadingMore} onClick={() => { void store.loadMore(); }}>{state.loadingMore ? "Loading…" : "Load more"}</Button>}
-      </div>
+      </Table>
     </section>
     <dialog ref={dialog} aria-labelledby={dialogTitle} aria-describedby={dialogMessage}
       onClose={() => { store.close(); if (!opener.current?.isConnected) heading.current?.focus(); }}

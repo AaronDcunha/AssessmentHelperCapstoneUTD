@@ -1,4 +1,5 @@
 "use client";
+import type { FacultyRequestsPageData } from "@/server/queries/faculty-page-data";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
@@ -146,7 +147,7 @@ export function ConfirmedObserversScreen() {
   </div>;
 }
 
-export function RequestsScreen({ data }: { data: FacultyWorkflow | null }) {
+export function RequestsScreen({ data }: { data: FacultyRequestsPageData }) {
   const router = useRouter();
   const [feedback, setFeedback] = useState("");
   const [pending, setPending] = useState<{ id: string; action: "accept" | "decline" | "late-acceptance" } | null>(null);

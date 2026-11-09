@@ -27,6 +27,19 @@ export type FacultyDashboard = {
   access: { evaluation: boolean; observations: boolean; activity: boolean };
 };
 
+export async function getFacultyCycleContext(db: Database, user: AccountUser, now: Date, cycleId?: string | null) {
+  const cycles = await getRelevantFacultyCycles(db, user, now);
+  const chosen = cycleId === undefined ? await selectedFacultyCycle() : cycleId;
+  const selected = chosen ? cycles.find(cycle => cycle.cycleId === chosen) ?? null : cycles.length === 1 ? cycles[0] : null;
+  const cycle: CycleRow | null = selected && selected.signupDeadline < selected.observationDeadline && selected.observationDeadline < selected.feedbackDeadline
+    ? { id: selected.cycleId, name: selected.cycleName, semesterId: selected.semesterId,
+      semester: selected.semester.termName, termCode: selected.semester.termCode,
+      startsOn: selected.semester.startsOn?.toISOString().slice(0, 10) ?? null,
+      endsOn: selected.semester.endsOn?.toISOString().slice(0, 10) ?? null, timeZone: selected.semester.timeZone,
+      signupDeadline: selected.signupDeadline, observationDeadline: selected.observationDeadline, feedbackDeadline: selected.feedbackDeadline } : null;
+  return { cycle, chosen, selected, availableCycles: cycles.map(cycle => ({ id: cycle.cycleId, name: cycle.semester.termName })) };
+}
+
 export class DashboardForbidden extends Error {}
 
 /** Only call with the identity freshly resolved by existing Auth.js server helpers. */
@@ -52,19 +65,11 @@ export async function getFacultyDashboard(user: AccountUser, options: { now?: Da
   result.hasFacultyProfile = !!professorId;
 
   if (professorId) {
-    const cycles = await getRelevantFacultyCycles(db, user, now);
-    result.availableCycles = cycles.map(cycle => ({ id: cycle.cycleId, name: cycle.semester.termName }));
-    const chosen = options.cycleId === undefined ? await selectedFacultyCycle() : options.cycleId;
-    const selected = chosen ? cycles.find(cycle => cycle.cycleId === chosen) ?? null : cycles.length === 1 ? cycles[0] : null;
-    const cycle: CycleRow | null = selected && selected.signupDeadline < selected.observationDeadline && selected.observationDeadline < selected.feedbackDeadline
-      ? { id: selected.cycleId, name: selected.cycleName, semesterId: selected.semesterId,
-        semester: selected.semester.termName, termCode: selected.semester.termCode,
-        startsOn: selected.semester.startsOn?.toISOString().slice(0, 10) ?? null,
-        endsOn: selected.semester.endsOn?.toISOString().slice(0, 10) ?? null, timeZone: selected.semester.timeZone,
-        signupDeadline: selected.signupDeadline, observationDeadline: selected.observationDeadline, feedbackDeadline: selected.feedbackDeadline } : null;
-    result.cycleReason = cycle ? null : cycles.length > 1 ? "Choose a relevant evaluation cycle to continue."
+    const { cycle, chosen, selected, availableCycles } = await getFacultyCycleContext(db, user, now, options.cycleId);
+    result.availableCycles = availableCycles;
+    result.cycleReason = cycle ? null : availableCycles.length > 1 ? "Choose a relevant evaluation cycle to continue."
       : "No single valid relevant evaluation cycle is available.";
-    if (!cycle && (cycles.length > 1 || chosen || selected)) result.pendingObserverRequestCount = null;
+    if (!cycle && (availableCycles.length > 1 || chosen || selected)) result.pendingObserverRequestCount = null;
     if (cycle) result.cycle = { ...cycle, signupDeadline: cycle.signupDeadline.toISOString(), observationDeadline: cycle.observationDeadline.toISOString(), feedbackDeadline: cycle.feedbackDeadline.toISOString() };
     if (cycle && user.permissions.includes("signups.read.own")) {
       result.hasCurrentSignup = !!await db.evaluationSignup.findFirst({

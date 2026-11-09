@@ -16,7 +16,7 @@ const acPageHeaders = {
   "/ac": { title: "AC Dashboard", facultyLayout: true },
   "/ac/cycles": { title: "Evaluation Cycles", facultyLayout: true },
   "/ac/cycles/new": { title: "Create Evaluation Cycle", facultyLayout: true },
-  "/ac/observer-selection": { title: "Observer Selection", facultyLayout: true },
+  "/ac/observer-selection": { title: "Faculty Signups", facultyLayout: true },
   "/ac/late-acceptance-requests": { title: "Late acceptance requests", facultyLayout: true },
   "/ac/late-acceptance-requests/[requestId]": { title: "Late acceptance requests", facultyLayout: true },
   "/ac/faculty": { title: "Faculty Due / Overdue", facultyLayout: true },

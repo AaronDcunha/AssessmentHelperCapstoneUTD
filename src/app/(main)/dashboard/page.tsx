@@ -4,8 +4,7 @@ import { requirePermission } from "@/server/permissions";
 import { DashboardForbidden, getFacultyDashboard, type FacultyDashboard } from "@/server/queries/faculty-dashboard";
 import { redirect } from "next/navigation";
 import { FacultyCycleSelector } from "@/components/observations/faculty-cycle-selector";
-import Link from "next/link";
-import { activityPreview } from "@/lib/activity-preview";
+import { RecentActivity } from "./recent-activity";
 import { evaluationProgressLabel } from "@/lib/evaluation-progress-label";
 
 export const dynamic = "force-dynamic";
@@ -84,15 +83,7 @@ export default async function FacultyDashboardPage() {
         <div className="space-y-ah-16 rounded-ah-8 border border-border bg-surface p-ah-24">
           {!dashboard ? <p className="text-body text-muted" role="status">Dashboard data is temporarily unavailable. Please try again later.</p>
             : !dashboard.access.activity ? <p className="text-body text-muted">Recent activity is not available with your current permissions.</p>
-            : dashboard.recentActivity.length === 0 ? <p className="text-body text-muted">No recent activity.</p>
-            : dashboard.recentActivity.map((activity) => <article key={activity.id} className="space-y-ah-4">
-              <p className="break-words text-label text-ink">{activity.title}</p>
-              <p className="line-clamp-2 break-words text-body text-ink">{activityPreview(activity.message)}</p>
-              <Link className="block text-caption text-sidebar underline" href="/notifications">View full message in Notifications</Link>
-              <time dateTime={activity.createdAt} className="text-caption text-muted">
-                {new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "America/Chicago" }).format(new Date(activity.createdAt))}
-              </time>
-            </article>)}
+            : <RecentActivity items={dashboard.recentActivity} />}
         </div>
       </section>
     </div>

@@ -1,3 +1,4 @@
+import { cache } from "react";
 import type { PrismaClient } from "../generated/prisma/client";
 import { getPrisma } from "./prisma";
 import { authenticateAccount, fixturePermissions, publicAccount, type AccountRecord } from "./account-auth";
@@ -27,7 +28,14 @@ export function authenticateDatabase(credentials: Partial<Record<"username" | "p
   return authenticateAccount(credentials, username => findAccount(db, { username }));
 }
 
-export async function resolveDatabaseUser(id: string, db: AuthConnection = getPrisma()) {
+async function lookupDatabaseUser(id: string, db: AuthConnection) {
   if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id)) return null;
   return publicAccount(await findAccount(db, { userId: id }));
+}
+
+// React shares this lookup within a server render. Other requests resolve fresh grants.
+const lookupRenderUser = cache((id: string) => lookupDatabaseUser(id, getPrisma()));
+
+export function resolveDatabaseUser(id: string, db?: AuthConnection) {
+  return db ? lookupDatabaseUser(id, db) : lookupRenderUser(id);
 }
