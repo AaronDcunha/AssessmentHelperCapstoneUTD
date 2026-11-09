@@ -190,7 +190,9 @@ try {
   const approvalRoute = load('src/app/api/evaluation-cycles/[cycleId]/expired-acceptance-requests/route.ts');
   const approvalResponse = await approvalRoute.GET(new Request('http://local/approvals'), { params: Promise.resolve({ cycleId }) });
   assert.equal(approvalResponse.status, 200);
-  assert.ok(!(await approvalResponse.json()).items.some(item => item.approvalId === supersededApproval.approvalId));
+  const supersededItem = (await approvalResponse.json()).items.find(item => item.approvalId === supersededApproval.approvalId);
+  assert.equal(supersededItem?.actionable, false);
+  assert.equal(supersededItem.reasonCode, 'SUPERSEDED');
   requestUser = null;
   await assert.rejects(invitations.releaseRecommendations(committee, cycleId, { generationId: generation.generationId, observationIds: [ownRecord.observationId] }), error => error.status === 409);
   await invitations.processFacultyInvitationExpiry();
@@ -447,14 +449,25 @@ try {
   const submitted = await assessments.saveFacultyAssessment(observer, { action: 'acknowledge', revision: form.revision, responses, acknowledged: true });
   assert.ok(submitted.form.observerSignedAt); assert.equal(submitted.form.locked, false);
   await assert.rejects(assessments.saveFacultyAssessment(observer, { action: 'save', revision: submitted.form.revision, responses }));
+  const beforeSecondSignature = await forms.getFacultyAssessment(faculty[0]);
+  const editedAfterFirstSignature = await configuration.updateTemplate(prisma, committee, template.id, {
+    expectedRevision: revised.revision,
+    title: 'Changed after first acknowledgement',
+    signatureLabels: { observer: 'Updated observer label', observee: 'Updated observee label' },
+  });
   const review = await forms.getFacultyAssessment(faculty[0]);
+  assert.deepEqual(review, beforeSecondSignature, 'A live template edit must leave the partially signed form unchanged');
+  await assert.rejects(lifecycle.reassignObservationTemplate(committee, paired.observationId, {
+    templateId: compatibleTemplate.id,
+    expectedRevision: (await prisma.observation.findUniqueOrThrow({ where: { observationId: paired.observationId } })).workflowRevision,
+  }), /after either participant acknowledges/);
   const finalized = await Promise.allSettled([0, 1].map(() => assessments.saveFacultyAssessment(faculty[0], { action: 'acknowledge', revision: review.revision, acknowledged: true })));
   assert.equal(finalized.filter(result => result.status === 'fulfilled').length, 1);
   const assessment = await prisma.signedAssessment.findUnique({ where: { observationId: paired.observationId } });
   assert.ok(assessment.isLocked && assessment.observerSignedAt && assessment.observeeSignedAt);
   assert.equal((await prisma.observation.findUnique({ where: { observationId: paired.observationId } })).status, 'COMPLETED');
   const frozenBeforeLiveEdit = await forms.getFacultyAssessment(observer);
-  const editedAfterFinalization = await configuration.updateTemplate(prisma, committee, template.id, { expectedRevision: revised.revision, title: 'Changed live template after finalization', criteria: [{ id: template.criteria[0].id, key: 'rating', prompt: 'A different live question', type: 'rating', required: true, order: 0, options: [{ value: 10, label: 'Different low' }, { value: 20, label: 'Different high' }] }], signatureLabels: { observer: 'Changed observer label', observee: 'Changed observee label' } });
+  const editedAfterFinalization = await configuration.updateTemplate(prisma, committee, template.id, { expectedRevision: editedAfterFirstSignature.revision, title: 'Changed live template after finalization', criteria: [{ id: template.criteria[0].id, key: 'rating', prompt: 'A different live question', type: 'rating', required: true, order: 0, options: [{ value: 10, label: 'Different low' }, { value: 20, label: 'Different high' }] }], signatureLabels: { observer: 'Changed observer label', observee: 'Changed observee label' } });
   const archivedAfterFinalization = await configuration.deleteTemplate(prisma, committee, template.id, { expectedRevision: editedAfterFinalization.revision });
   assert.equal(archivedAfterFinalization.archived, true);
   const frozenAfterLiveEdit = await forms.getFacultyAssessment(observer);
