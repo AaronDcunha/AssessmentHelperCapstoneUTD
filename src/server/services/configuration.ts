@@ -27,14 +27,33 @@ async function saveDeadlines(db: Prisma.TransactionClient, id: string, expected:
 export async function createCycle(prisma: PrismaClient, user: ConfigurationUser, input: unknown) {
   authorize(user, ["cycles.manage"]);
   const body = object(input);
-  fields(body, ["semesterId", "signupDeadline", "observationDeadline", "feedbackDeadline"]);
+  fields(body, ["semesterId", "signupDeadline", "observationDeadline", "feedbackDeadline", "semester", "expectedSemesterRevision", "creationId"]);
   const semesterId = uuid(body.semesterId), d = deadlines(body);
+  const creationId = body.creationId === undefined ? undefined : uuid(body.creationId);
+  const settings = body.semester === undefined ? undefined : object(body.semester);
+  if (settings) fields(settings, ["startsOn", "endsOn", "timeZone"]);
+  const startsOn = settings ? date(settings.startsOn) : undefined, endsOn = settings ? date(settings.endsOn) : undefined;
+  if (startsOn && endsOn && startsOn > endsOn) invalid("Semester start must be on or before its end.");
+  const zone = settings ? timeZone(settings.timeZone) : undefined;
+  const expected = settings ? revision(body.expectedSemesterRevision) : undefined;
   return prisma.$transaction(async db => {
-    const semester = await db.semester.findUnique({ where: { semesterId }, select: { termName: true } });
+    const semester = await db.semester.findUnique({ where: { semesterId } });
     if (!semester) missing("Semester not found.");
-    const cycle = await db.evaluationCycle.create({ data: { semesterId, cycleName: semester.termName, ...deadlineData(d) } });
+    if (creationId) {
+      const existing = await db.evaluationCycle.findUnique({ where: { cycleId: creationId } });
+      if (existing) {
+        if (existing.semesterId !== semesterId || existing.signupDeadline.getTime() !== Date.parse(d.signupDeadline) || existing.observationDeadline.getTime() !== Date.parse(d.observationDeadline) || existing.feedbackDeadline.getTime() !== Date.parse(d.feedbackDeadline) || (settings && (semester.startsOn?.toISOString().slice(0, 10) !== startsOn || semester.endsOn?.toISOString().slice(0, 10) !== endsOn || semester.timeZone !== zone)))
+          throw new ConfigurationError(409, "CREATION_KEY_REUSED", "Creation ID belongs to different settings. Reload before continuing.");
+        return getCycle(db, user, existing.cycleId);
+      }
+    }
+    if (settings) {
+      const updated = await db.semester.updateMany({ where: { semesterId, revision: expected }, data: { startsOn: new Date(startsOn!), endsOn: new Date(endsOn!), timeZone: zone, revision: { increment: 1 } } });
+      if (!updated.count) stale();
+    }
+    const cycle = await db.evaluationCycle.create({ data: { ...(creationId ? { cycleId: creationId } : {}), semesterId, cycleName: semester.termName, ...deadlineData(d) } });
     return getCycle(db, user, cycle.cycleId);
-  });
+  }, { isolationLevel: "Serializable" });
 }
 export async function updateCycle(prisma: PrismaClient, user: ConfigurationUser, id: string, input: unknown) {
   authorize(user, ["cycles.manage"]);

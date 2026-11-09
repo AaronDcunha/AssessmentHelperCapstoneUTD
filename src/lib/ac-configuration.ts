@@ -100,3 +100,10 @@ export function templatePayload(draft: TemplateDraft): ObservationTemplateWrite 
   if (new Set(criteria.map(item => item.key)).size !== criteria.length) throw new Error("Question keys must be unique.");
   return { title: draft.title, criteria, commentPrompts: draft.commentPrompts.map((item, order) => ({ ...(item.id ? { id: item.id } : {}), prompt: text(item.prompt, "Comment prompt"), required: item.required, order })), signatureLabels: { observer: text(draft.signatureLabels.observer, "Observer signature label"), observee: text(draft.signatureLabels.observee, "Observee signature label") } };
 }
+
+/** Editable noon defaults in the semester wall clock; conversion happens on save. */
+export function defaultSemesterDeadlines(startsOn: string, endsOn: string): Deadlines {
+  const end = validDateOnly(endsOn) ? new Date(`${endsOn}T12:00:00Z`) : null;
+  end?.setUTCDate(end.getUTCDate() + 7);
+  return { signupDeadline: validDateOnly(startsOn) ? `${startsOn}T12:00` : "", observationDeadline: end ? `${endsOn}T12:00` : "", feedbackDeadline: end ? `${end.toISOString().slice(0, 10)}T12:00` : "" };
+}
