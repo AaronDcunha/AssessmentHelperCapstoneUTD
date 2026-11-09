@@ -4,6 +4,8 @@ import { getPrisma } from '../src/server/prisma.ts';
 import { facultyEligibility } from '../src/server/services/faculty-evaluation.ts';
 import { facultyDate, proposedMeetingOptions } from '../src/server/services/faculty-calendar.ts';
 import { meetingOccurrence } from '../src/server/services/faculty-meetings.ts';
+import { availableOption, observerAvailable, workflowObservation } from '../src/server/services/faculty-invitations.ts';
+import { FacultyActionError } from '../src/server/services/faculty-errors.ts';
 import { stableId } from './seed-data.mjs';
 
 // The same ten existing demo professors on every teammate's database.
@@ -88,13 +90,44 @@ async function seedLateInvitations(db, cycle, now, dryRun) {
       continue;
     }
     if (!dryRun) {
+      const record = await workflowObservation(db, observationId);
+      const options = record.timeOptions.flatMap(option => {
+        try { return [availableOption(record, option.timeOptionId, now)]; }
+        catch (error) {
+          if (error instanceof FacultyActionError) return [];
+          throw error;
+        }
+      });
+      const preferredId = professorId(scenario.observer);
+      const pool = await db.professor.findMany({
+        where: {
+          professorId: { not: record.signup.professorId },
+          user: { isActive: true },
+          departmentId: record.signup.professor.departmentId,
+          teaches: { some: { section: { semesterId: cycle.semesterId, course: { courseLevel: record.signup.section.course.courseLevel } } } },
+        },
+        select: { professorId: true, user: { select: { fullName: true } } },
+        orderBy: { professorId: 'asc' },
+      });
+      const preferred = pool.find(member => member.professorId === preferredId);
+      const ordered = preferred ? [preferred, ...pool.filter(member => member !== preferred)] : pool;
+      let observer;
+      for (const member of ordered) {
+        const availability = await Promise.all(options.map(option => observerAvailable(db, record, member.professorId, option)));
+        if (availability.some(Boolean)) { observer = member; break; }
+      }
+      if (!observer) {
+        results.push({ ...scenario, action: 'skipped because no observer can attend a proposed meeting' });
+        continue;
+      }
+      scenario.observer = observer.user.fullName;
       await db.recommendationList.create({ data: { listId, observationId, publishedAt: invitedAt } });
       await db.observation.update({
         where: { observationId },
         data: { currentReleasedListId: listId, recommendationsReleasedAt: invitedAt },
       });
       const candidate = await db.observationCandidate.create({
-        data: { observationId, recommendationListId: listId, professorId: professorId(scenario.observer), status: 'EXPIRED', invitedAt, expiresAt },
+        data: { observationId, recommendationListId: listId, professorId: observer.professorId, status: 'EXPIRED', invitedAt, expiresAt },
       });
       const attempt = await db.invitationAttempt.create({
         data: { candidateId: candidate.candidateId, number: 1, status: 'EXPIRED', invitedAt, expiresAt },
