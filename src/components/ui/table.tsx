@@ -24,7 +24,7 @@ export function TablePagination({
 }: TablePaginationProps) {
   const hasNext = hasNextPage ?? (totalRows !== undefined && page * pageSize < totalRows);
   const empty = rowsShown === 0;
-  const pageLabel = empty ? "0 / 0" : totalRows === undefined ? `Page ${page}` : `${page} / ${Math.ceil(totalRows / pageSize)}`;
+  const pageLabel = empty && page === 1 ? "0 / 0" : totalRows === undefined ? `Page ${page}` : `${page} / ${Math.ceil(totalRows / pageSize)}`;
   const summary = rowsShown === null ? null :
     `${rowsShown}${totalRows === undefined ? "" : ` of ${totalRows}`} ${(totalRows ?? rowsShown) === 1 ? itemLabel.singular : itemLabel.plural}`;
 
@@ -45,7 +45,7 @@ export function TablePagination({
         </div>
       </div>
       <div className={paginationGroup}>
-        <button type="button" aria-label="Previous" className={paginationControl} disabled={disabled || empty || page <= 1} onClick={() => onPageChange(page - 1)}>
+        <button type="button" aria-label="Previous" className={paginationControl} disabled={disabled || page <= 1} onClick={() => onPageChange(page - 1)}>
           <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="m10 3-5 5 5 5" /></svg>
         </button>
         <span aria-hidden="true" className="inline-flex items-center whitespace-nowrap px-ah-8 tabular-nums">{pageLabel}</span>

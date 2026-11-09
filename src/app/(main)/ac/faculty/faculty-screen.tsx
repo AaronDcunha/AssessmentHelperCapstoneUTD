@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { CycleSelector, useAcCycle } from "@/components/ac/cycle-context";
 import { useApiResource } from "@/components/ac/use-api-resource";
 import { Input, Select } from "@/components/ui/form-fields";
-import { TableCell } from "@/components/ui/table";
+import { Table, TableCell } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { acApi, type FacultyStatusItem, type HiringLevel, type Page, userDisplayName } from "@/lib/ac-api";
 
@@ -53,8 +53,23 @@ export default function FacultyDuePage({canSendReminders=false}:{canSendReminder
       <ReminderControl cycleId={cycleId} canSend={canSendReminders} recipientFilter={{...(search.trim()?{q:search.trim()}:{}),...(hiringLevelId!=="all"?{hiringLevelId}:{}),...(evaluationStatus!=="all"?{evaluationStatus}:{})}} />
       {result.loading && <p role="status" className="text-muted">Loading faculty…</p>}
       {result.error && <div className="space-y-ah-8"><p role="alert" className="text-danger">Faculty status data is currently unavailable.</p><Button variant="secondary" onClick={() => setAttempt(value => value + 1)}>Retry</Button></div>}
-      <div className="overflow-x-auto rounded-ah-8 border border-border bg-surface">
-        <table className="w-full min-w-[760px] table-fixed border-collapse">
+      <Table className="w-full min-w-[760px] table-fixed border-collapse"
+        regionProps={{ className: "overflow-x-auto", tabIndex: 0, role: "region", "aria-label": "Faculty due and overdue", "aria-busy": result.loading }}
+        pagination={{
+          page: cursors.length,
+          pageSize,
+          pageSizes: [20, 50, 100],
+          rowsShown: result.loading || result.error ? null : result.data.items.length,
+          itemLabel: { singular: "faculty member", plural: "faculty members" },
+          hasNextPage: result.data.pageInfo.hasMore && Boolean(result.data.pageInfo.nextCursor),
+          disabled: !cycleId || result.loading || !!result.error,
+          onPageSizeChange: setPageSize,
+          onPageChange: page => {
+            const next = result.data.pageInfo.nextCursor;
+            if (page < cursors.length) setNavigation({ key: filterKey, cursors: cursors.slice(0, -1) });
+            else if (next) setNavigation({ key: filterKey, cursors: [...cursors, next] });
+          },
+        }}>
           <thead><tr className="h-[80px] bg-canvas">
             {["Professor", "Hiring level", "Last evaluation", "Status", "Signed up"].map((heading) => <TableCell key={heading} variant="header" className="h-[80px]! w-1/5!">{heading}</TableCell>)}
           </tr></thead>
@@ -72,19 +87,7 @@ export default function FacultyDuePage({canSendReminders=false}:{canSendReminder
               {result.error ? "Faculty status data is currently unavailable." : "No faculty match these filters."}
             </td></tr>}
           </tbody>
-        </table>
-      </div>
-      <nav aria-label="Faculty table pages" className="flex flex-wrap items-end justify-between gap-ah-16">
-        <Select label="Rows per page" value={pageSize} onChange={event => setPageSize(Number(event.target.value))} wrapperClassName="w-[160px]">
-          {[20, 50, 100].map(size => <option key={size} value={size}>{size}</option>)}
-        </Select>
-        <div className="flex items-center gap-ah-16">
-          <Button variant="secondary" disabled={result.loading || cursors.length === 1} onClick={() => setNavigation({ key: filterKey, cursors: cursors.slice(0, -1) })}>Previous</Button>
-          <span role="status" className="text-label">Page {cursors.length}</span>
-          <Button variant="secondary" disabled={result.loading || !!result.error || !result.data.pageInfo.hasMore || !result.data.pageInfo.nextCursor}
-            onClick={() => { const next = result.data.pageInfo.nextCursor; if (next) setNavigation({ key: filterKey, cursors: [...cursors, next] }); }}>Next</Button>
-        </div>
-      </nav>
+      </Table>
     </div>
   );
 }
