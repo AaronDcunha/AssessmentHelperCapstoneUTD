@@ -366,8 +366,12 @@ GET /api/evaluation-cycles/{cycleId}/signups (COMPLETED -- Issue #67 read only).
     currentDraftListId:string|null,currentReleasedListId:string|null}>.
   Observee id is the AppUser UUID. Proposed meeting id is the persisted time-option
   UUID; metadata is the stored snapshot, including nulls for incomplete old rows.
-  No reconstructed meeting IDs/times, availability flag, match outcome, generated
-  status or candidate count is inferred. Raw generation/release markers are returned.
+  Raw generation/release markers are returned. With observations.read, each item
+  also includes candidateCount (current draft first, otherwise current release;
+  null without a list) and canPublishDraft (current unpublished draft, effective
+  release grant, open publication window and editable observation). The publication
+  endpoint still validates revisions and eligibility. Full candidate details use
+  the observation candidates endpoint.
   Missing observation: null observation fields and empty proposedMeetings. Multiple
   observations for one signup: 409 AMBIGUOUS_OBSERVATION (provisional safeguard;
   schema permits many, current signup creates one). No arbitrary record is chosen.

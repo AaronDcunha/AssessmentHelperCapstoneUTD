@@ -148,3 +148,27 @@ test('HTTP route executes the authorized query for valid, empty, invalid and mis
   const response = await route(missing)();
   assert.equal(response.status, 404); assert.equal(response.headers.get('cache-control'), 'private, no-store');
 });
+
+test('signup summaries prefer draft counts and expose publication eligibility only with observation access', async () => {
+  const signup = row();
+  Object.assign(signup.observations[0], {
+    status: 'PENDING', currentDraftList: { publishedAt: null, _count: { candidates: 2 } },
+    currentReleasedList: { _count: { candidates: 5 } },
+  });
+  const db = database([signup]);
+  db.evaluationCycle.findUnique = async () => ({
+    cycleId, semesterId: signup.section.semesterId,
+    signupDeadline: new Date(0), observationDeadline: new Date('2099-01-01'),
+  });
+  const reader = { ...actor, permissions: [...actor.permissions, 'observations.read'] };
+  const publisher = { ...reader, permissions: [...reader.permissions, 'recommendations.release'] };
+  assert.equal((await getCycleSignups(db, actor, cycleId, url())).items[0].candidateCount, undefined);
+  assert.equal((await getCycleSignups(db, reader, cycleId, url())).items[0].canPublishDraft, false);
+  const [summary] = (await getCycleSignups(db, publisher, cycleId, url())).items;
+  assert.equal(summary.candidateCount, 2);
+  assert.equal(summary.canPublishDraft, true);
+  signup.observations[0].currentDraftList = null;
+  const [released] = (await getCycleSignups(db, publisher, cycleId, url())).items;
+  assert.equal(released.candidateCount, 5);
+  assert.equal(released.canPublishDraft, false);
+});

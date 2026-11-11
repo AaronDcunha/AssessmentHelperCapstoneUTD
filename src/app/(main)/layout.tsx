@@ -38,7 +38,6 @@ export default async function MainLayout({ children }: { children: ReactNode }) 
     ...adminNavigationBindings,
 
     "ac.dashboard": { href: "/ac", permission: "reports.read" },
-    "ac.cycles": { href: "/ac/cycles", permission: "cycles.read" },
     "ac.observerSelection": { href: "/ac/observer-selection", permission: "signups.read" },
     "ac.feedback": { href: "/ac/feedback", permission: "feedback.read" },
     "ac.lateAcceptance": { href: "/ac/late-acceptance-requests", permission: "late-acceptance.review" },

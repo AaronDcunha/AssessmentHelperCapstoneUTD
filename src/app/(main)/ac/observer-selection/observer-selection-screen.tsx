@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useApiResource } from "@/components/ac/use-api-resource";
 import { CycleSelector, useAcCycle } from "@/components/ac/cycle-context";
 import { CandidateReviewDialog, ReleaseConfirmationDialog, type ReleaseListSummary } from "@/components/ac/observer-selection-dialogs";
 import { Button } from "@/components/ui/button";
@@ -11,21 +12,21 @@ import {
   acApi, ApiRequestError, userDisplayName,
   type Cycle, type ObservationCandidatesResponse, type ObserverSelectionSignup,
 } from "@/lib/ac-api";
-import { hasGeneratedList, initialSignupAvailable, matchState, meetingLabel, signupCourseLabel, signupWindow } from "@/lib/observer-selection";
+import { matchState, meetingLabel, signupCourseLabel, signupWindow } from "@/lib/observer-selection";
 import { deadlineDisplay } from "@/lib/ac-configuration";
 
 type SignupRow = {
   signup: ObserverSelectionSignup;
-  candidates: ObservationCandidatesResponse | null;
-  candidateError: string | null;
   revision: number | null;
 };
 
 type ObservationRow = SignupRow & { signup: ObserverSelectionSignup & { observationId: string } };
 function hasObservation(row: SignupRow): row is ObservationRow { return !!row.signup.observationId; }
-function isReleased(row: SignupRow) { return !!(row.signup.currentReleasedListId || row.candidates?.currentReleasedListId || row.candidates?.releasedAt); }
-function initialRow(row: SignupRow): row is ObservationRow { return hasObservation(row) && initialSignupAvailable(row.signup, row.candidates, row.candidateError); }
-function publishable(row: SignupRow): row is ObservationRow { return hasObservation(row) && !row.candidateError && row.candidates?.allowedActions?.publish === true && !!row.candidates.list && row.candidates.observationRevision != null; }
+function isReleased(row: SignupRow) { return !!(row.signup.currentReleasedListId || row.signup.recommendationsReleasedAt); }
+function initialRow(row: SignupRow): row is ObservationRow { return hasObservation(row) && !isReleased(row); }
+function publishable(row: SignupRow): row is ObservationRow {
+  return hasObservation(row) && row.signup.canPublishDraft === true && !!row.signup.currentDraftListId && row.revision != null;
+}
 
 type ActionState = "idle" | "generating" | "releasing" | "regenerating";
 
@@ -87,17 +88,7 @@ function CycleObserverSelection({ selectedCycle, canGenerate, canRelease, canReg
     setLoading(true); setLoadError(null);
     try {
       const signups = await acApi.getObserverSelectionSignups(cycleId);
-      const loaded = await Promise.all(signups.map(async (signup): Promise<SignupRow> => {
-        if (!signup.observationId) return { signup, candidates: null, candidateError: null, revision: null };
-        const [candidateResult] = await Promise.allSettled([acApi.getObservationCandidates(signup.observationId)]);
-        const candidates = candidateResult.status === "fulfilled" ? candidateResult.value : null;
-        const candidateError = candidateResult.status === "rejected"
-          && (!(candidateResult.reason instanceof ApiRequestError) || candidateResult.reason.status !== 404)
-          ? "Candidate data is currently unavailable." : null;
-        const revision = candidates?.observationRevision ?? (candidateError ? null : await acApi.getObservation(signup.observationId)
-          .then(detail => detail.observation.revision ?? null, () => null));
-        return { signup, candidates, candidateError, revision };
-      }));
+      const loaded = signups.map(signup => ({ signup, revision: signup.observationRevision ?? null }));
       if (currentRequest !== requestId.current) return;
       setRows(loaded);
       const selectable = new Set(loaded.filter(hasObservation).filter(row => initialRow(row) || publishable(row))
@@ -121,7 +112,7 @@ function CycleObserverSelection({ selectedCycle, canGenerate, canRelease, canReg
     return () => { window.clearTimeout(handle); ++requests.current; };
   }, [loadRows]);
 
-  const generated = rows.some((row) => hasGeneratedList(row.candidates));
+  const generated = rows.some((row) => row.signup.candidateCount != null);
   const query = search.trim().toLocaleLowerCase();
   const visibleRows = rows.filter(row => !query || [row.signup.observee.name, row.signup.observee.displayName, row.signup.observee.username]
     .some(name => name?.toLocaleLowerCase().includes(query)));
@@ -132,14 +123,20 @@ function CycleObserverSelection({ selectedCycle, canGenerate, canRelease, canReg
   const selectedSignups = rows.filter(initialRow).filter(row => selected.has(row.signup.observationId));
   const publishableRows = rows.filter(publishable);
   const selectedRows = publishableRows.filter(row => selected.has(row.signup.observationId));
-  const insufficientCount = rows.filter((row) => row.candidates && row.candidates.items.length > 0 && row.candidates.items.length < 5).length;
-  const unmatchedCount = rows.filter((row) => hasGeneratedList(row.candidates) && row.candidates?.items.length === 0).length;
-  const reviewRow = rows.find((row) => row.signup.observationId === reviewObservationId) ?? null;
+  const insufficientCount = rows.filter(row => (row.signup.candidateCount ?? 0) > 0 && (row.signup.candidateCount ?? 0) < 5).length;
+  const unmatchedCount = rows.filter(row => row.signup.candidateCount === 0).length;
+  const reviewRow = rows.find(row => row.signup.observationId === reviewObservationId) ?? null;
+  const reviewRevision = reviewRow?.revision;
+  const review = useApiResource<ObservationCandidatesResponse | null>(useCallback(() => {
+    // A successful mutation changes the revision and reloads the open review.
+    void reviewRevision;
+    return reviewObservationId ? acApi.getObservationCandidates(reviewObservationId) : Promise.resolve(null);
+  }, [reviewObservationId, reviewRevision]), null);
 
   const releaseSelected: ReleaseListSummary[] = (publication?.rows ?? selectedRows).map((row) => ({
     observationId: row.signup.observationId,
     observee: userDisplayName(row.signup.observee),
-    candidateCount: row.candidates?.items.length ?? 0,
+    candidateCount: row.signup.candidateCount ?? 0,
     replacesReleasedList: isReleased(row),
   }));
   const releaseUnselected = publishableRows.filter(row => !(publication?.rows ?? selectedRows).some(target => target.signup.observationId === row.signup.observationId))
@@ -167,14 +164,14 @@ function CycleObserverSelection({ selectedCycle, canGenerate, canRelease, canReg
     beginMutation("generating",()=>acApi.generateRecommendations(cycleId,body),"Observer recommendation drafts generated.");
   }
   function regenerateObservation() {
-    if (!canRegenerate || !reviewRow || !hasObservation(reviewRow) || reviewRow.revision == null || !reviewRow.candidates?.allowedActions?.regenerate) return;
-    const id=reviewRow.signup.observationId, body={requestKey:crypto.randomUUID(),expectedRevision:reviewRow.revision};
+    if (!canRegenerate || !reviewRow || !hasObservation(reviewRow) || reviewRow.revision == null || !review.data?.allowedActions?.regenerate) return;
+    const id=reviewRow.signup.observationId, body={requestKey:crypto.randomUUID(),expectedRevision:review.data.observationRevision ?? reviewRow.revision};
     beginMutation("regenerating",()=>acApi.regenerateObservationRecommendations(id,body),"Replacement draft generated. The published list remains active.");
   }
   function release() {
     if (!canRelease || !publication?.rows.length || loading) return;
     const body = {requestKey:crypto.randomUUID(),all:publication.all,targets:publication.rows.map(row=>({
-      observationId:row.signup.observationId,listId:row.candidates!.list!.id,expectedRevision:row.candidates!.observationRevision!,expectedReleasedListId:row.candidates!.currentReleasedListId??null
+      observationId:row.signup.observationId,listId:row.signup.currentDraftListId!,expectedRevision:row.revision!,expectedReleasedListId:row.signup.currentReleasedListId??null
     }))};
     beginMutation("releasing",()=>acApi.releaseRecommendations(cycleId,body),"Selected recommendation lists published atomically.");
   }
@@ -202,7 +199,7 @@ function CycleObserverSelection({ selectedCycle, canGenerate, canRelease, canReg
           </Button>
           {generated && <Button className="w-full sm:w-[280px]" disabled={!canRelease || loading || busy || selectedRows.length === 0}
             onClick={() => { setActionError(null); setPublication({rows:selectedRows,all:false}); }}>Publish {selectedRows.length} {selectedRows.length === 1 ? "List" : "Lists"} &amp; Notify</Button>}
-          {canRelease && <Button variant="secondary" disabled={loading || busy || !publishableRows.length || rows.some(row => row.candidateError)}
+          {canRelease && <Button variant="secondary" disabled={loading || busy || !publishableRows.length}
             onClick={() => { setActionError(null); setPublication({rows:publishableRows,all:true}); }}>Publish All Eligible ({publishableRows.length})</Button>}
         </div>
       </div>
@@ -261,7 +258,7 @@ function CycleObserverSelection({ selectedCycle, canGenerate, canRelease, canReg
           </tr></thead>
           <tbody>
             {!loading && !loadError && pageRows.map((row) => {
-              const count = row.candidates?.items.length ?? 0;
+              const count = row.signup.candidateCount ?? 0;
               const released = isReleased(row);
               const selectable = !loading && !busy && (canGenerate && initialRow(row) || canRelease && publishable(row));
               return <tr key={row.signup.signupId} className="border-t border-border">
@@ -288,11 +285,9 @@ function CycleObserverSelection({ selectedCycle, canGenerate, canRelease, canReg
                   </ul> : <p className="text-label text-ink">No proposed meetings</p>}
                   <p className="text-caption text-muted">{row.signup.proposedMeetings[0]?.timeZone || "Time zone unavailable"}</p>
                 </div></TableCell>
-                <TableCell className="w-[200px]!">{row.candidateError
-                  ? <span className="text-caption text-danger">Unavailable</span>
-                  : <MatchBadge generated={hasGeneratedList(row.candidates)} count={count} />}</TableCell>
-                <TableCell className="w-[160px]!">{row.candidates?.currentDraftListId ? (released ? "Replacement draft; published list active" : "Draft") : released ? "Published" : "Not generated"}</TableCell>
-                <TableCell className="w-[216px]!">{hasGeneratedList(row.candidates)
+                <TableCell className="w-[200px]!"><MatchBadge generated={row.signup.candidateCount != null} count={count} /></TableCell>
+                <TableCell className="w-[160px]!">{row.signup.currentDraftListId ? (released ? "Replacement draft; published list active" : "Draft") : released ? "Published" : "Not generated"}</TableCell>
+                <TableCell className="w-[216px]!">{row.signup.candidateCount != null
                   ? <TextAction onClick={() => { setActionError(null); setReviewObservationId(row.signup.observationId); }}>{count > 0 ? "Review observers" : "Review issue"}</TextAction>
                   : <span className="inline-flex min-h-9 min-w-[110px] items-center justify-center text-label text-muted">—</span>}
                   {canRelease && publishable(row) && <TextAction disabled={busy || loading} onClick={() => { setActionError(null); setPublication({rows:[row],all:false}); }}>Publish</TextAction>}
@@ -307,8 +302,8 @@ function CycleObserverSelection({ selectedCycle, canGenerate, canRelease, canReg
       </Table>
     </section>
 
-    <CandidateReviewDialog open={!!reviewRow} signup={reviewRow?.signup ?? null} candidates={reviewRow?.candidates ?? null}
-      loading={loading} error={reviewRow?.candidateError ?? (action === "regenerating" ? null : actionError)} canRegenerate={canRegenerate && reviewRow?.revision != null && reviewRow?.candidates?.allowedActions?.regenerate === true}
+    <CandidateReviewDialog open={!!reviewRow} signup={reviewRow?.signup ?? null} candidates={review.data}
+      loading={loading || review.loading} error={review.error ?? (action === "regenerating" ? null : actionError)} canRegenerate={canRegenerate && reviewRow?.revision != null && review.data?.allowedActions?.regenerate === true}
       regenerating={action === "regenerating" || pendingKind === "regenerating"} onClose={() => setReviewObservationId(null)} onRegenerate={regenerateObservation} />
     <ReleaseConfirmationDialog open={!!publication} selected={releaseSelected} unselected={releaseUnselected}
       pending={action === "releasing"} error={publication ? actionError : null} onClose={() => { if (action !== "releasing") setPublication(null); }} onConfirm={release} />

@@ -36,6 +36,7 @@ export type ObserverSelectionSignup = {
   signupId: string; observationId: string | null; observee: UserSummary;
   revision?: number;
   observationRevision?: number | null;
+  candidateCount?: number | null; canPublishDraft?: boolean; recommendationsReleasedAt?: string | null;
   currentDraftListId?: string | null; currentReleasedListId?: string | null;
   section: {
     id: string; sectionNumber: string; semesterId?: string;
@@ -221,7 +222,7 @@ export const acApi = {
   getAttention: (cycleId: string, filters: { issue?: string; departmentId?: string } = {}) => requestList<AttentionItem>(`${cyclePath(cycleId)}/attention${queryString(filters)}`),
   getObservations: (cycleId: string, filters: { status?: string; assessmentStatus?: string; q?: string } = {}) => requestList<ObservationItem>(`${cyclePath(cycleId)}/observations${queryString(filters)}`),
   getObservationsPage: (cycleId: string, filters: { status?: string; assessmentStatus?: string; q?: string; cursor?: string; limit?: number } = {}) => requestJson<Page<ObservationItem>>(`${cyclePath(cycleId)}/observations${queryString(filters)}`),
-  getObserverSelectionSignups: (cycleId: string) => requestList<ObserverSelectionSignup>(`${cyclePath(cycleId)}/signups`),
+  getObserverSelectionSignups: (cycleId: string) => requestList<ObserverSelectionSignup>(`${cyclePath(cycleId)}/signups?limit=100`),
   generateRecommendations: (cycleId: string, body: { requestKey?: string; scope?: { departmentId?: string; professorIds?: string[]; observationIds?: string[] } } = {}) =>
     requestJson<RecommendationGenerationResponse>(`${cyclePath(cycleId)}/recommendations/generate`, { method: "POST", body: JSON.stringify(body) }),
   releaseRecommendations: (cycleId: string, body: { generationId: string; observationIds?: string[] } | { requestKey: string; targets: RecommendationPublicationTarget[]; all?: boolean }) =>

@@ -49,7 +49,7 @@ test("AC reads use the documented cycle and observation endpoint paths", async (
     "/api/evaluation-cycles/cycle%201/faculty-status?evaluationStatus=overdue",
     "/api/evaluation-cycles/cycle%201/attention",
     "/api/evaluation-cycles/cycle%201/observations?status=in-progress",
-    "/api/evaluation-cycles/cycle%201/signups",
+    "/api/evaluation-cycles/cycle%201/signups?limit=100",
     "/api/observations/observation%201/candidates",
     "/api/evaluation-cycles/cycle%201/metrics",
     "/api/observations/observation%201",

@@ -38,6 +38,9 @@ const select = {
   observations: { take: 2, orderBy: { observationId: "asc" as const }, select: {
     observationId: true, workflowRevision: true, recommendationGenerationId: true, recommendationsReleasedAt: true,
     currentDraftListId: true, currentReleasedListId: true,
+    status: true, completedAt: true, signedAssessment: { select: { assessmentId: true } },
+    currentDraftList: { select: { publishedAt: true, _count: { select: { candidates: true } } } },
+    currentReleasedList: { select: { _count: { select: { candidates: true } } } },
     timeOptions: { orderBy: [{ preferredDate: "asc" as const }, { timeOptionId: "asc" as const }], select: {
       timeOptionId: true, preferredDate: true, startsAt: true, endsAt: true, timeZone: true, location: true,
     } },
@@ -45,12 +48,17 @@ const select = {
 } satisfies Prisma.EvaluationSignupSelect;
 type SignupRow = Prisma.EvaluationSignupGetPayload<{ select: typeof select }>;
 
-function signupResponse(row: SignupRow) {
+function signupResponse(row: SignupRow, canReadObservations: boolean, canPublish: boolean) {
   if (row.observations.length > 1) {
     throw new ConfigurationError(409, "AMBIGUOUS_OBSERVATION", "A signup has multiple observations and requires review.");
   }
   const observation = row.observations[0], section = row.section, course = section.course;
+  const list = observation?.currentDraftList ?? observation?.currentReleasedList;
   return {
+    ...(canReadObservations ? { candidateCount: list?._count.candidates ?? null,
+      canPublishDraft: !!observation?.currentDraftList && !observation.currentDraftList.publishedAt
+        && !observation.completedAt && !observation.signedAssessment
+        && ["PENDING", "CONFIRMED"].includes(observation.status.toUpperCase()) && canPublish } : {}),
     signupId: row.signupId, revision: row.revision, observationId: observation?.observationId ?? null,
     observee: { id: row.professor.user.userId, name: row.professor.user.fullName, email: row.professor.user.email },
     section: {
@@ -80,7 +88,7 @@ function signupResponse(row: SignupRow) {
 export async function getCycleSignups(db: SignupDatabase, user: ConfigurationUser, cycleId: string, url: URL) {
   if (!user.permissions.includes("signups.read")) throw new ConfigurationError(403, "FORBIDDEN", "Access denied.");
   const id = uuid(cycleId).toLowerCase(), query = filters(url);
-  const cycle = await db.evaluationCycle.findUnique({ where: { cycleId: id }, select: { cycleId: true } });
+  const cycle = await db.evaluationCycle.findUnique({ where: { cycleId: id }, select: { cycleId: true, signupDeadline: true, observationDeadline: true, semesterId: true } });
   if (!cycle) throw new ConfigurationError(404, "NOT_FOUND", "Evaluation cycle not found.");
   const clauses: Prisma.EvaluationSignupWhereInput[] = [{ cycleId: id }];
   if (query.departmentId) clauses.push({ professor: { departmentId: query.departmentId } });
@@ -102,6 +110,11 @@ export async function getCycleSignups(db: SignupDatabase, user: ConfigurationUse
   }
   const rows = await db.evaluationSignup.findMany({ where: { AND: clauses }, select,
     orderBy: { signupId: "asc" }, take: query.limit + 1 });
-  const items = rows.slice(0, query.limit).map(signupResponse), hasMore = rows.length > query.limit;
+  const now = new Date();
+  const canReadObservations = user.permissions.includes("observations.read");
+  const canPublish = user.permissions.includes("recommendations.release") && cycle.signupDeadline < now && now < cycle.observationDeadline;
+  const items = rows.slice(0, query.limit).map(row =>
+    signupResponse(row, canReadObservations, canPublish && row.section.semesterId === cycle.semesterId));
+  const hasMore = rows.length > query.limit;
   return { items, pageInfo: { nextCursor: hasMore ? items.at(-1)!.signupId : null, hasMore } };
 }

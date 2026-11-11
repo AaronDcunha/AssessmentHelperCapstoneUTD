@@ -84,7 +84,7 @@ test("sidebar and server access agree, without requiring AC role names or test p
     const shell = await layout({ children: null });
     const links = shell.props.authorizedSections.flatMap(section => section.items).filter(item => item.id.startsWith("ac."));
     const ids = new Set(links.map(item => item.id));
-    for (const key of ["ac.dashboard", "ac.cycles", "ac.observerSelection", "ac.feedback", "ac.faculty", "ac.progress", "ac.template", "ac.reports", "ac.semester"]) {
+    for (const key of ["ac.dashboard", "ac.observerSelection", "ac.feedback", "ac.faculty", "ac.progress", "ac.template", "ac.reports", "ac.semester"]) {
       assert.equal(ids.has(key), canAccessAcPage(grants, key), key);
     }
   }
