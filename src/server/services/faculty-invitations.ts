@@ -235,7 +235,7 @@ export async function requestLateAcceptance(user: Identity, body: unknown) {
   const input = workflowInput(body, ["candidateId", "attemptId", "reason"]), candidateId = workflowId(input.candidateId), attemptId = workflowId(input.attemptId);
   if (input.reason !== undefined && (typeof input.reason !== "string" || input.reason.length > 2000)) throw new FacultyActionError("Invalid reason.", 400);
   return facultyTransaction(async db => {
-    const candidate = await db.observationCandidate.findUnique({ where: { candidateId }, include: { professor: true } });
+    const candidate = await db.observationCandidate.findUnique({ where: { candidateId }, include: { professor: { include: { user: { select: { fullName: true } } } } } });
     if (!candidate || candidate.professor.userId !== user.id) throw new FacultyActionError("Forbidden", 403);
     const record = await workflowObservation(db, candidate.observationId); requireCurrentReleasedCandidate(record, candidate); await touchObservation(db, record);
     const now = new Date(); open(record, now);
@@ -243,7 +243,9 @@ export async function requestLateAcceptance(user: Identity, body: unknown) {
     if (record.observerId || !latest || latest.attemptId !== attemptId || latest.expiresAt > now || !["PENDING", "EXPIRED"].includes(candidate.status)) throw new FacultyActionError("Only the latest expired, unanswered invitation can request approval.");
     if (latest.approval) return { message: "Your approval request is already recorded." };
     await db.lateAcceptanceApproval.create({ data: { attemptId, reason: input.reason as string | undefined } });
-    await notifyCommittee(db, "Expired invitation approval requested", `Review invitation attempt ${attemptId}.`, { eventKey: `late-acceptance:${attemptId}`, observationId: record.observationId });
+    const { section, professor: observee } = record.signup;
+    await notifyCommittee(db, "Late acceptance requested",
+      `${candidate.professor.user.fullName} requested another chance to accept an invitation to observe ${observee.user.fullName} in ${section.course.courseCode}, section ${section.sectionCode}. Open Late Acceptance Requests to review the request.`, { eventKey: `late-acceptance:${attemptId}`, observationId: record.observationId });
     return { message: "Approval requested. You cannot accept until AC opens a new response window." };
   });
 }
@@ -313,7 +315,12 @@ export async function processFacultyInvitationExpiry({ resendExpired = false, em
         if (compatible) { await invite(db, candidate.candidateId, record, now); sent++; }
       }
     }
-    if (sent) await notifyCommittee(db, "Observation invitations automatically sent", `${sent} invitations sent for observation ${record.observationId}; no approval is required.`, { eventKey: `automatic-invitations:${record.observationId}:${record.workflowRevision}`, observationId: record.observationId }, emailCommittee);
+    if (sent) {
+      const { section, professor: observee } = record.signup;
+      const recipients = sent === 1 ? "one eligible observer" : `${sent} eligible observers`;
+      await notifyCommittee(db, "Observation invitations sent automatically",
+        `The scheduler invited ${recipients} to observe ${observee.user.fullName} in ${section.course.courseCode}, section ${section.sectionCode}.`, { eventKey: `automatic-invitations:${record.observationId}:${record.workflowRevision}`, observationId: record.observationId }, emailCommittee);
+    }
   });
 }
 export async function releaseRecommendations(user: Identity, cycleId: string, body: unknown) {
