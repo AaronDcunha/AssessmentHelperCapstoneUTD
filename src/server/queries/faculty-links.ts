@@ -1,5 +1,6 @@
 import "server-only";
 import type { Prisma } from "../../generated/prisma/client";
+import { feedbackWindowOpen } from "../services/feedback-window";
 import type { AccountUser } from "../account-auth";
 import { getPrisma } from "../prisma";
 import { availableOption, observerAvailable, workflowObservation } from "../services/faculty-invitations";
@@ -49,11 +50,11 @@ export async function getFacultyLinks(user: AccountUser, cycleId: string, now = 
   const requests = await getFacultyRequests(user, cycleId, now, db);
   const feedback = user.permissions.includes("feedback.read.own") || user.permissions.includes("feedback.submit.own") ? await db.observation.findMany({
     where: { cycleId, OR: [{ signup: { professor: { userId: user.id } } }, { observer: { userId: user.id } }] },
-    include: { signup: { include: { professor: true, section: { include: { course: true } } } }, processFeedback: { where: { professor: { userId: user.id } }, include: { attachments: { where: { ownerId: user.id } } } }, cycle: true },
+    include: { signup: { include: { professor: true, section: { include: { course: true } } } }, signedAssessment: { select: { isLocked: true, observerSignedAt: true, observeeSignedAt: true } }, processFeedback: { where: { professor: { userId: user.id } }, include: { attachments: { where: { ownerId: user.id } } } }, cycle: true },
   }) : [];
   return { allowedActions: { invite: user.permissions.includes("invitations.send.own"), select: user.permissions.includes("observer.select.own"), respond: user.permissions.includes("invitations.respond.own"), lateAcceptance: user.permissions.includes("late-acceptance.request.own"), feedback: user.permissions.includes("feedback.submit.own") }, recommendations, requests, feedback: feedback.map(record => ({ observationId: record.observationId,
     label: `${record.signup.section.course.courseCode}.${record.signup.section.sectionCode}`,
-    submitted: record.processFeedback.length > 0, allowed: record.cycle.observationDeadline < now && record.cycle.feedbackDeadline >= now,
+    submitted: record.processFeedback.length > 0, allowed: feedbackWindowOpen(record, now),
     role: record.signup.professor.userId === user.id ? "observee" : "observer",
     attachments: record.processFeedback.flatMap(feedback => feedback.attachments.map(attachment => ({ id: attachment.attachmentId, name: attachment.originalName }))) })) };
 }

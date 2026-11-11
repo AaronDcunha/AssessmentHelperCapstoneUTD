@@ -3,6 +3,7 @@ export const acPermissions = {
   "ac.dashboard": ["cycles.read", "reports.read", "observations.read"],
   "ac.cycles": ["cycles.read"],
   "ac.observerSelection": ["cycles.read", "signups.read", "observations.read"],
+  "ac.feedback": ["feedback.read"],
   "ac.lateAcceptance": ["late-acceptance.review"],
   "ac.cycleCreate": ["cycles.manage"],
   "ac.cycleEdit": ["cycles.manage"],

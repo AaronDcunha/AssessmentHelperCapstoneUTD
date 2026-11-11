@@ -24,6 +24,7 @@ export const acPermissions = [
   'signups.delete', 'observations.delete',
   'recommendations.generate', 'recommendations.release', 'recommendations.regenerate',
   'late-acceptance.review', 'templates.read', 'templates.manage',
+  'feedback.read',
   'assessments.read', 'reports.read', 'metrics.read', 'notifications.send',
 ];
 export const adminPermissions = [

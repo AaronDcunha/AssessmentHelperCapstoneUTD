@@ -2,6 +2,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { resolve, relative, isAbsolute, sep } from "node:path";
+import { feedbackWindowOpen } from "./feedback-window";
 import type { AccountUser } from "../account-auth";
 import { getPrisma } from "../prisma";
 import { FacultyActionError } from "./faculty-actions";
@@ -29,7 +30,7 @@ export async function uploadFacultyAttachment(user: AccountUser, observationId: 
       const record = await workflowObservation(db, observationId), now = new Date();
       const professor = await db.professor.findUnique({ where: { userId: user.id } });
       if (!professor || ![record.signup.professorId, record.observerId].includes(professor.professorId)) throw new FacultyActionError("Forbidden", 403);
-      if (record.cycle.observationDeadline >= now || record.cycle.feedbackDeadline < now) throw new FacultyActionError("Supporting material can be uploaded only during the feedback window.");
+      if (!feedbackWindowOpen(record, now)) throw new FacultyActionError("Supporting material can be uploaded only during the feedback window.");
       await touchObservation(db, record);
       if (await db.feedbackAttachment.count({ where: { observationId, ownerId: user.id } }) >= 3) throw new FacultyActionError("At most three supporting files are allowed per observation and participant.");
       await mkdir(resolve(target, ".."), { recursive: true });

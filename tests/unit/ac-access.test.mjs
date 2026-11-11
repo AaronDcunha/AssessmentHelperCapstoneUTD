@@ -21,6 +21,7 @@ function load(filename) {
       if (!user) throw new Error("Redirect /login");
       return user;
     } };
+    if (name === "@/server/queries/semester-feedback") return { getSemesterFeedback: async () => ({ semesters: [], selected: null, rows: [], total: 0, page: 1 }) };
     if (name === "@/components/layout/app-shell") return { AppShell: () => null };
     if (name.includes("-screen") || name.includes("cycle-form") || name.includes("template-editor") || name === "./observation-details") {
       return { default: () => null, CycleForm: () => null, ObservationTemplateEditor: () => null, ObservationDetails: () => null };
@@ -40,11 +41,12 @@ const pages = [
   ["", "ac.dashboard"], ["cycles", "ac.cycles"], ["cycles/new", "ac.cycleCreate"],
   ["cycles/[cycleId]/edit", "ac.cycleEdit"], ["faculty", "ac.faculty"],
   ["observer-selection", "ac.observerSelection"],
+  ["feedback", "ac.feedback"],
   ["late-acceptance-requests", "ac.lateAcceptance"], ["late-acceptance-requests/[requestId]", "ac.lateAcceptance"],
   ["observations", "ac.progress"], ["observations/[observationId]", "ac.detail"],
   ["template", "ac.template"], ["reports", "ac.reports"], ["semester", "ac.semester"],
 ].map(([path, key]) => [load(`src/app/(main)/ac/${path ? path + "/" : ""}page.tsx`).default, key]);
-const props = { params: Promise.resolve({ cycleId: "cycle-id", observationId: "observation-id" }) };
+const props = { searchParams: Promise.resolve({}), params: Promise.resolve({ cycleId: "cycle-id", observationId: "observation-id" }) };
 function identity(permissions) { return { id: "user-id", name: "User", roles: ["AC"], permissions }; }
 
 test("all AC pages reject anonymous users and temporary fixture grants on direct requests", async () => {
@@ -82,7 +84,7 @@ test("sidebar and server access agree, without requiring AC role names or test p
     const shell = await layout({ children: null });
     const links = shell.props.authorizedSections.flatMap(section => section.items).filter(item => item.id.startsWith("ac."));
     const ids = new Set(links.map(item => item.id));
-    for (const key of ["ac.dashboard", "ac.cycles", "ac.observerSelection", "ac.faculty", "ac.progress", "ac.template", "ac.reports", "ac.semester"]) {
+    for (const key of ["ac.dashboard", "ac.cycles", "ac.observerSelection", "ac.feedback", "ac.faculty", "ac.progress", "ac.template", "ac.reports", "ac.semester"]) {
       assert.equal(ids.has(key), canAccessAcPage(grants, key), key);
     }
   }

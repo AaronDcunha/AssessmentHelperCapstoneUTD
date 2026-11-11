@@ -1,4 +1,5 @@
 import "server-only";
+import { feedbackWindowOpen } from "./feedback-window";
 import type { AccountUser } from "../account-auth";
 import { facultyTransaction, notifyCommittee, requireFacultyGrants, touchObservation, workflowId, workflowInput, workflowObservation } from "./faculty-invitations";
 import { createObservationAlert } from "./alerts";
@@ -51,7 +52,7 @@ export async function submitFacultyFeedback(user: AccountUser, body: unknown) {
     const record = await workflowObservation(db, id), now = new Date();
     const professor = await db.professor.findUnique({ where: { userId: user.id } });
     if (!professor || ![record.signup.professorId, record.observerId].includes(professor.professorId)) throw new FacultyActionError("Forbidden", 403);
-    if (record.cycle.observationDeadline >= now || record.cycle.feedbackDeadline < now) throw new FacultyActionError("Process feedback is outside its submission window.");
+    if (!feedbackWindowOpen(record, now)) throw new FacultyActionError("Process feedback is outside its submission window.");
     await touchObservation(db, record);
     const feedbackRole = record.signup.professorId === professor.professorId ? "OBSERVEE" : "OBSERVER";
     const existing = await db.processFeedback.findUnique({ where: { observationId_professorId_feedbackRole: { observationId: id, professorId: professor.professorId, feedbackRole } } });

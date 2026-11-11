@@ -1,3 +1,10 @@
+November 11, 2026 AC Semester Feedback:
+AC users with feedback.read can review submitted process feedback at /ac/feedback.
+The page defaults to the unique current semester based on configured dates and
+time zone. It lists both participant roles, course, submission date, satisfaction,
+difficulties and suggestions, newest first, with database-backed pagination.
+Faculty attachment access continues to use the existing owner-only workflow.
+
 
 November 8, 2026 ? Unified Semester Settings (November 1 Task 4)
 - /ac/semester uses one newest-first semester dropdown, including semesters without

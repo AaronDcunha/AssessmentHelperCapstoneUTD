@@ -449,6 +449,7 @@ try {
   const submitted = await assessments.saveFacultyAssessment(observer, { action: 'acknowledge', revision: form.revision, responses, acknowledged: true });
   assert.ok(submitted.form.observerSignedAt); assert.equal(submitted.form.locked, false);
   await assert.rejects(assessments.saveFacultyAssessment(observer, { action: 'save', revision: submitted.form.revision, responses }));
+  await assert.rejects(participation.submitFacultyFeedback(faculty[0], { observationId: paired.observationId, satisfaction: 4, difficulties: '', suggestions: '' }));
   const beforeSecondSignature = await forms.getFacultyAssessment(faculty[0]);
   const editedAfterFirstSignature = await configuration.updateTemplate(prisma, committee, template.id, {
     expectedRevision: revised.revision,
@@ -483,7 +484,7 @@ try {
   }
   checked('both participants reopen finalized assessments with retained answers and enabled read-only navigation');
 
-  await assert.rejects(participation.submitFacultyFeedback(faculty[0], { observationId: paired.observationId, satisfaction: 4, difficulties: '', suggestions: '' }));
+  const originalObservationDeadline = (await prisma.evaluationCycle.findUniqueOrThrow({ where: { cycleId } })).observationDeadline;
   const deadlineRecord = await freshInvitation(1, 0);
   const deadlinePayload = { candidateId: deadlineRecord.candidate.candidateId, attemptId: deadlineRecord.attempt.attemptId, meetingOptionId: deadlineRecord.record.timeOptions[0].timeOptionId };
   await invitations.acceptFacultyInvitation(faculty[0], deadlinePayload);
@@ -497,6 +498,8 @@ try {
   assert.equal(await forms.getFacultyAssessment(faculty[0]), null);
   await assert.rejects(assessments.saveFacultyAssessment(faculty[0], { action: 'save', revision: deadlineForm.revision, responses }));
   checked('observation deadline enforced on direct acceptance, final selection and assessment writes');
+  assert.ok(originalObservationDeadline > new Date());
+  await prisma.evaluationCycle.update({ where: { cycleId }, data: { observationDeadline: originalObservationDeadline } });
   const file = { name: 'evidence.pdf', type: 'application/pdf', bytes: Buffer.from('%PDF-1.7\nIsolated evidence fixture') };
   await assert.rejects(attachments.uploadFacultyAttachment(faculty[3], paired.observationId, file));
   await assert.rejects(attachments.uploadFacultyAttachment(faculty[0], paired.observationId, { ...file, name: '../unsafe.pdf' }));
@@ -511,6 +514,17 @@ try {
   assert.equal(await prisma.processFeedback.count({ where: { observationId: paired.observationId } }), 2);
   await assert.rejects(participation.submitFacultyFeedback(faculty[3], { observationId: paired.observationId, satisfaction: 4, difficulties: '', suggestions: '' }));
   checked('feedback participant ownership, window and duplicate protection');
+
+  const { getSemesterFeedback } = load('src/server/queries/semester-feedback.ts');
+  const firstFeedbackPage = await getSemesterFeedback(semesterId, 1, 1);
+  const secondFeedbackPage = await getSemesterFeedback(semesterId, 2, 1);
+  assert.equal(firstFeedbackPage.total, 2);
+  assert.equal(firstFeedbackPage.rows.length, 1);
+  assert.equal(secondFeedbackPage.rows.length, 1);
+  assert.notEqual(firstFeedbackPage.rows[0].feedbackId, secondFeedbackPage.rows[0].feedbackId);
+  assert.equal((await getSemesterFeedback(semesterId, 99, 1)).page, 2);
+  assert.equal((await getSemesterFeedback(extraSemester.semesterId, 1, 10)).total, 0);
+  checked('semester-scoped feedback totals, distinct pages and empty semester');
   assert.ok((await prisma.feedbackAttachment.findUnique({ where: { attachmentId: uploaded.attachmentId } })).feedbackId);
   checked('private supporting files: actual bytes, type/path checks, owner-only download and transactional feedback attachment');
   // HTTP boundary executes real services with only session identity substituted.
