@@ -42,7 +42,7 @@ docker compose up -d --wait
 | --- | --- | --- |
 | App | `npm run dev` | Website and APIs |
 | Email worker | `npm run jobs:email` | Delivers queued emails to Mailpit every minute |
-| Faculty scheduler | `npm run jobs:faculty` | Processes invitation expiry and automatic resends every five minutes |
+| Faculty scheduler | `npm run jobs:faculty` | Checks invitation expiry every five minutes and can invite eligible uncontacted candidates. Automatic resends and scheduler emails to AC are paused. |
 
 Workers do not start automatically with the app. To process one email batch instead, use `npm run jobs:email:once`.
 

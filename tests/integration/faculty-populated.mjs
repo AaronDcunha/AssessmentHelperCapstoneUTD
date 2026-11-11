@@ -321,14 +321,19 @@ try {
   await invitations.processFacultyInvitationExpiry();
   assert.equal(await prisma.invitationAttempt.count({ where: { candidateId: automatic.candidate.candidateId } }), 1);
   assert.equal(await prisma.invitationAttempt.count({ where: { candidateId: automatic.extra.candidateId } }), 1);
+  const automaticNotices = await prisma.notification.findMany({
+    where: { targetId: automatic.record.observationId, eventKey: { startsWith: 'automatic-invitations:' } },
+  });
+  assert.ok(automaticNotices.length > 0);
+  assert.ok(automaticNotices.every(notice => notice.inAppEnabled && !notice.emailRequested));
   await expire(automatic.extra.candidateId);
   await invitations.processFacultyInvitationExpiry();
-  assert.equal(await prisma.invitationAttempt.count({ where: { candidateId: automatic.candidate.candidateId } }), 2);
-  assert.equal(await prisma.invitationAttempt.count({ where: { candidateId: automatic.extra.candidateId } }), 2);
-  await expire(automatic.candidate.candidateId); await expire(automatic.extra.candidateId);
-  await invitations.processFacultyInvitationExpiry(); await invitations.processFacultyInvitationExpiry();
-  assert.equal(await prisma.invitationAttempt.count({ where: { candidateId: { in: [automatic.candidate.candidateId, automatic.extra.candidateId] } } }), 4);
-  checked('automatic expiry, uncontacted-candidate priority, bounded resends, repeatable jobs and deduplicated committee alerts');
+  await invitations.processFacultyInvitationExpiry();
+  assert.equal(await prisma.invitationAttempt.count({ where: { candidateId: { in: [automatic.candidate.candidateId, automatic.extra.candidateId] } } }), 2);
+  assert.equal(await prisma.invitationAttempt.count({
+    where: { candidateId: { in: [automatic.candidate.candidateId, automatic.extra.candidateId] }, status: 'EXPIRED' },
+  }), 2);
+  checked('automatic expiry and first-time invitations with resends and committee email disabled');
   selectedObservation = paired.observationId;
   assert.ok((await prisma.observation.findUniqueOrThrow({ where: { observationId: paired.observationId } })).scheduledAt > new Date(), 'Assessment workflow is tested before the proposed appointment');
   const template = await configuration.createTemplate(prisma, committee, { title: 'Sparse scale', criteria: [{ key: 'rating', prompt: 'Evidence of learning', type: 'rating', required: true, order: 0, options: [{ value: 0, label: 'Needs support' }, { value: 10, label: 'Excellent' }] }], commentPrompts: [{ prompt: 'Evidence', required: true, order: 0 }] });

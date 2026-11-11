@@ -149,8 +149,8 @@ type NotificationContext = { eventKey: string; observationId: string };
 async function notify(db: Tx, userId: string, title: string, message: string, context: NotificationContext) {
   await sendNotification({ recipients:{userId}, email:true, title, message, type: "FACULTY_WORKFLOW", ...context },db);
 }
-export async function notifyCommittee(db: Tx, title: string, message: string, context: NotificationContext) {
-  await sendNotification({recipients:{permissions:["late-acceptance.review"]},email:true,title,message,type:"FACULTY_WORKFLOW",...context},db);
+export async function notifyCommittee(db: Tx, title: string, message: string, context: NotificationContext, email = true) {
+  await sendNotification({recipients:{permissions:["late-acceptance.review"]},email,title,message,type:"FACULTY_WORKFLOW",...context},db);
 }
 async function invite(db: Tx, candidateId: string, record: ObservationRecord, now: Date) {
   const member = await db.observationCandidate.findUnique({ where: { candidateId } });
@@ -270,7 +270,7 @@ export async function reviewLateAcceptance(user: Identity, approvalId: string, b
 
 /** Explicit scheduler entry point; never runs on a route import. Limit one automatic
  * resend per candidate, after all uncontacted recommendations, with fresh windows. */
-export async function processFacultyInvitationExpiry() {
+export async function processFacultyInvitationExpiry({ resendExpired = false, emailCommittee = false } = {}) {
   const ids = await getPrisma().observation.findMany({ where: { observerId: null, currentReleasedList: { is: { publishedAt: { not: null } } }, cycle: { observationDeadline: { gt: new Date() } }, status: "PENDING" }, select: { observationId: true } });
   for (const id of ids) await facultyTransaction(async db => {
     const record = await workflowObservation(db, id.observationId);
@@ -291,7 +291,7 @@ export async function processFacultyInvitationExpiry() {
     if (!expired && !candidates.some(candidate => candidate.status === "EXPIRED")) return;
     if (candidates.some(candidate => ["ACCEPTED", "SELECTED"].includes(candidate.status) || (candidate.status === "PENDING" && candidate.expiresAt! > now))) return;
     const uncontacted = candidates.filter(candidate => !candidate.invitedAt);
-    const retryable = candidates.filter(candidate => ["EXPIRED", "PENDING"].includes(candidate.status) && candidate.attempts.length && candidate.attempts[0].number < 2);
+    const retryable = resendExpired ? candidates.filter(candidate => ["EXPIRED", "PENDING"].includes(candidate.status) && candidate.attempts.length && candidate.attempts[0].number < 2) : [];
     const targets = uncontacted.length ? uncontacted : retryable;
     let sent = 0;
     for (const candidate of targets) {
@@ -313,7 +313,7 @@ export async function processFacultyInvitationExpiry() {
         if (compatible) { await invite(db, candidate.candidateId, record, now); sent++; }
       }
     }
-    if (sent) await notifyCommittee(db, "Observation invitations automatically sent", `${sent} invitations sent for observation ${record.observationId}; no approval is required.`, { eventKey: `automatic-invitations:${record.observationId}:${record.workflowRevision}`, observationId: record.observationId });
+    if (sent) await notifyCommittee(db, "Observation invitations automatically sent", `${sent} invitations sent for observation ${record.observationId}; no approval is required.`, { eventKey: `automatic-invitations:${record.observationId}:${record.workflowRevision}`, observationId: record.observationId }, emailCommittee);
   });
 }
 export async function releaseRecommendations(user: Identity, cycleId: string, body: unknown) {
