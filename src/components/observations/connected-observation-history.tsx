@@ -8,7 +8,9 @@ import { ObservationHistory, type HistoryPreviewState } from "./observation-hist
 
 export function ConnectedObservationHistory({
   stateOverride,
+  defaultSemester,
 }: {
+  defaultSemester?: string;
   stateOverride?: HistoryPreviewState | "empty";
 }) {
   const [attempt, setAttempt] = useState(0);
@@ -41,6 +43,7 @@ export function ConnectedObservationHistory({
 
   return (
     <ObservationHistory
+      defaultSemester={defaultSemester}
       records={stateOverride === "empty" ? [] : result.records}
       initialState={stateOverride && stateOverride !== "empty" ? stateOverride : result.state}
       errorMessage={result.errorMessage}

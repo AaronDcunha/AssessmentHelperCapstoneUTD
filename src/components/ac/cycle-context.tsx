@@ -1,6 +1,8 @@
 "use client";
 
 import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
+import { currentSemesterCycle } from "@/lib/observer-selection";
 import { acApi, cycleDisplayName, type Cycle } from "@/lib/ac-api";
 import { configurationError } from "@/lib/ac-configuration";
 import { Select } from "@/components/ui/form-fields";
@@ -23,10 +25,13 @@ export function AcCycleProvider({ children, canReadCycles }: { children: ReactNo
     try { return canReadCycles ? await acApi.getEvaluationCycles() : EMPTY_CYCLES; }
     catch (error) { throw new Error(configurationError(error)); }
   }, [canReadCycles, generation]), EMPTY_CYCLES);
-  const [selection, selectCycle] = useState("");
-  // A sole cycle is unambiguous. With multiple cycles, require an explicit choice;
-  // never infer a "current" cycle from dates or list ordering.
-  const effective = selection || (result.data.length === 1 ? result.data[0].id : "");
+  const pathname = usePathname();
+  const [now] = useState(() => Date.now());
+  const [choice, setChoice] = useState<{ pathname: string; selection: string | null }>({ pathname, selection: null });
+  if (choice.pathname !== pathname) setChoice({ pathname, selection: null });
+  const selectCycle = (selection: string) => setChoice({ pathname, selection });
+  const explicit = choice.pathname === pathname ? choice.selection : null;
+  const effective = explicit ?? currentSemesterCycle(result.data, now)?.id ?? "";
   const selectedCycle = result.data.find(cycle => cycle.id === effective) ?? null;
   return <CycleContext.Provider value={{ cycles: result.data, selection: effective, selectCycle, selectedCycle, loading: result.loading, error: result.error, refreshCycles }}>
     {children}

@@ -40,16 +40,18 @@ const columns: { key: HistorySortKey; label: string }[] = [
 /** History content composes shared controls and cells; it owns no shell or auth. */
 export function ObservationHistory({
   records,
+  defaultSemester,
   initialState = "ready",
   onRetry,
   errorMessage,
 }: {
   records: readonly ObservationHistoryRecord[];
+  defaultSemester?: string;
   initialState?: HistoryPreviewState;
   onRetry?: () => void;
   errorMessage?: string;
 }) {
-  const [filters, setFilters] = useState(noFilters);
+  const [filters, setFilters] = useState(() => defaultSemester ? { ...noFilters, semesters: [defaultSemester] } : noFilters);
   const [sort, setSort] = useState<HistorySort>({ key: "semester", direction: "desc" });
   const router = useRouter();
   const toolbar = useHistoryToolbarMotion();
@@ -57,8 +59,9 @@ export function ObservationHistory({
   const disabled = viewState !== "ready";
   const visibleRecords = sortObservationHistory(filterObservationHistory(records, filters), sort);
   const selectedSemesters = filters.semesters ?? [];
-  const years = historySemesterYears(records);
-  const otherSemesters = [...new Set(records.map((record) => record.semester))].filter(
+  const defaultYear = defaultSemester?.match(/^(?:Spring|Summer|Fall) (\d{4})$/)?.[1];
+  const years = [...new Set([...historySemesterYears(records), ...(defaultYear ? [Number(defaultYear)] : [])])].sort((a, b) => b - a);
+  const otherSemesters = [...new Set([...records.map(record => record.semester), ...(defaultSemester ? [defaultSemester] : [])])].filter(
     (semester) => !/^(Spring|Summer|Fall) \d{4}$/.test(semester),
   );
   const statuses = [...new Set(records.map((record) => record.statusLabel))];
