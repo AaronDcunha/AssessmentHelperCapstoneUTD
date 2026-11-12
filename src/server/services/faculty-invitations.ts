@@ -272,7 +272,7 @@ export async function reviewLateAcceptance(user: Identity, approvalId: string, b
 
 /** Explicit scheduler entry point; never runs on a route import. Limit one automatic
  * resend per candidate, after all uncontacted recommendations, with fresh windows. */
-export async function processFacultyInvitationExpiry({ resendExpired = false, emailCommittee = false } = {}) {
+export async function processFacultyInvitationExpiry({ inviteUncontacted = false, resendExpired = false, emailCommittee = false } = {}) {
   const ids = await getPrisma().observation.findMany({ where: { observerId: null, currentReleasedList: { is: { publishedAt: { not: null } } }, cycle: { observationDeadline: { gt: new Date() } }, status: "PENDING" }, select: { observationId: true } });
   for (const id of ids) await facultyTransaction(async db => {
     const record = await workflowObservation(db, id.observationId);
@@ -290,9 +290,10 @@ export async function processFacultyInvitationExpiry({ resendExpired = false, em
         expired = true;
       }
     }
+    if (!inviteUncontacted && !resendExpired) return;
     if (!expired && !candidates.some(candidate => candidate.status === "EXPIRED")) return;
     if (candidates.some(candidate => ["ACCEPTED", "SELECTED"].includes(candidate.status) || (candidate.status === "PENDING" && candidate.expiresAt! > now))) return;
-    const uncontacted = candidates.filter(candidate => !candidate.invitedAt);
+    const uncontacted = inviteUncontacted ? candidates.filter(candidate => !candidate.invitedAt) : [];
     const retryable = resendExpired ? candidates.filter(candidate => ["EXPIRED", "PENDING"].includes(candidate.status) && candidate.attempts.length && candidate.attempts[0].number < 2) : [];
     const targets = uncontacted.length ? uncontacted : retryable;
     let sent = 0;

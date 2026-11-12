@@ -320,20 +320,20 @@ try {
   await expire(automatic.candidate.candidateId);
   await invitations.processFacultyInvitationExpiry();
   assert.equal(await prisma.invitationAttempt.count({ where: { candidateId: automatic.candidate.candidateId } }), 1);
-  assert.equal(await prisma.invitationAttempt.count({ where: { candidateId: automatic.extra.candidateId } }), 1);
-  const automaticNotices = await prisma.notification.findMany({
-    where: { targetId: automatic.record.observationId, eventKey: { startsWith: 'automatic-invitations:' } },
-  });
-  assert.ok(automaticNotices.length > 0);
-  assert.ok(automaticNotices.every(notice => notice.inAppEnabled && !notice.emailRequested));
-  await expire(automatic.extra.candidateId);
+  assert.equal(await prisma.invitationAttempt.count({ where: { candidateId: automatic.extra.candidateId } }), 0);
   await invitations.processFacultyInvitationExpiry();
-  await invitations.processFacultyInvitationExpiry();
-  assert.equal(await prisma.invitationAttempt.count({ where: { candidateId: { in: [automatic.candidate.candidateId, automatic.extra.candidateId] } } }), 2);
   assert.equal(await prisma.invitationAttempt.count({
-    where: { candidateId: { in: [automatic.candidate.candidateId, automatic.extra.candidateId] }, status: 'EXPIRED' },
-  }), 2);
-  checked('automatic expiry and first-time invitations with resends and committee email disabled');
+    where: { candidateId: automatic.candidate.candidateId, status: 'EXPIRED' },
+  }), 1);
+  assert.equal((await prisma.observationCandidate.findUniqueOrThrow({
+    where: { candidateId: automatic.candidate.candidateId },
+  })).status, 'EXPIRED');
+  assert.equal(await prisma.invitationAttempt.count({ where: { candidateId: automatic.candidate.candidateId } }), 1);
+  assert.equal(await prisma.invitationAttempt.count({ where: { candidateId: automatic.extra.candidateId } }), 0);
+  assert.equal(await prisma.notification.count({
+    where: { targetId: automatic.record.observationId, eventKey: { startsWith: 'automatic-invitations:' } },
+  }), 0);
+  checked('scheduler expires invitations without sending new invitations, resends or committee notices');
   selectedObservation = paired.observationId;
   assert.ok((await prisma.observation.findUniqueOrThrow({ where: { observationId: paired.observationId } })).scheduledAt > new Date(), 'Assessment workflow is tested before the proposed appointment');
   const template = await configuration.createTemplate(prisma, committee, { title: 'Sparse scale', criteria: [{ key: 'rating', prompt: 'Evidence of learning', type: 'rating', required: true, order: 0, options: [{ value: 0, label: 'Needs support' }, { value: 10, label: 'Excellent' }] }], commentPrompts: [{ prompt: 'Evidence', required: true, order: 0 }] });
