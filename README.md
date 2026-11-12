@@ -1,120 +1,185 @@
 # Assessment Helper
 
-Faculty observation and assessment coordination using Next.js, PostgreSQL, and Auth.js.
+Assessment Helper helps faculty and the Assessment Committee (AC) at The University of Texas at Dallas coordinate teaching observations. Faculty can sign up for evaluations, invite observers, complete assessments, and submit feedback. AC manages semesters, observer recommendations, templates, and reports. Administrators manage users, roles, permissions, and hiring levels.
 
-## First-time setup
+[GitHub repository](https://github.com/AaronDcunha/AssessmentHelperCapstoneUTD)
 
-Install **Node.js 24.22.1** (see `.nvmrc`) and **Docker Desktop**. Run these commands from this project folder:
+## Table of Contents
 
-```powershell
-npm ci
-Copy-Item .env.example .env
-```
+- [Prerequisites](#prerequisites)
+- [Technology Stack and Dependencies](#technology-stack-and-dependencies)
+- [Environment Configuration](#environment-configuration)
+- [Fresh Local Installation](#fresh-local-installation)
+- [Demo Accounts and Login](#demo-accounts-and-login)
+- [Deployment](#deployment)
+- [Background Jobs](#background-jobs)
+- [Resetting the Local Database](#resetting-the-local-database)
+- [Additional Documentation](#additional-documentation)
 
-Configure `.env`:
+## Prerequisites
 
-- Replace the password placeholder in both `POSTGRES_PASSWORD` and `DATABASE_URL` with the same password. Keep the database name, user, and port consistent too.
-- Replace `AUTH_SECRET` with a secret generated using the command below. Keep it across restarts; changing it signs users out.
-- Keep `AUTH_DEMO_ENABLED=false` for seeded database accounts and `EMAIL_DELIVERY_ENABLED=true` for local email testing.
+- **Node.js 24.22.1 or later within the 24.x series.** The repository pins 24.22.1 in `.nvmrc`.
+- **npm**, bundled with Node.js.
+- **Git**, to clone the repository and check out the version you want to run.
+- **Docker Desktop or Docker Engine with Docker Compose v2**, to run the supplied local PostgreSQL and Mailpit services.
+- **PostgreSQL 18**, the version used by the supplied Compose configuration.
 
-```powershell
+For a self-hosted deployment, the application and workers run on a Node.js host with access to PostgreSQL. Docker is required only if the deployment uses containers for supporting services.
+
+For Hardware, a computer or VM capable of running Node.js and PostgreSQL, with persistent storage for database records and uploaded files, and a modern web browser for accessing the application is required.
+
+## Technology Stack and Dependencies
+
+- **Application:** Next.js 16.4.3, React and React DOM 19.2.9, and TypeScript 5.
+- **Database:** PostgreSQL, Prisma ORM and Prisma Client 7.10.1, `@prisma/adapter-pg`, and the `pg` driver.
+- **Authentication:** Auth.js through `next-auth` 5 beta, with database-backed credentials.
+- **Interface:** Tailwind CSS 4, `@tailwindcss/postcss`, and `@daypicker/react`.
+- **Background jobs:** `node-cron` for the email worker and Faculty invitation expiry scheduler.
+- **Email:** Nodemailer, installed under the `smtp-mailer` alias, and Mailpit for local email testing.
+- **Development tooling:** ESLint, `eslint-config-next`, and type packages for Node.js, PostgreSQL, React, and React DOM.
+
+See [`package.json`](package.json) for dependency declarations and [`package-lock.json`](package-lock.json) for the exact resolved versions. Use `npm ci` to install from the lockfile.
+
+## Environment Configuration
+
+For local development, copy [`.env.example`](.env.example) to `.env` in the repository root. Keep environment files private.
+
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` | PostgreSQL connection URL for the application, Prisma, and workers. The local example uses `127.0.0.1:5432` and the `public` schema. |
+| `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | Database name, user, and password used to initialize the local PostgreSQL container. Match these values in `DATABASE_URL`. |
+| `POSTGRES_PORT` | PostgreSQL host port for local Compose. Defaults to `5432`. |
+| `AUTH_SECRET` | Required Auth.js secret. Generate a unique value for each environment and keep it stable across restarts. |
+| `AUTH_DEMO_ENABLED` | Keep `false` for normal database-backed login, including seeded demo accounts. |
+| `EMAIL_DELIVERY_ENABLED` | Set to `true` to run the email worker. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE` | SMTP host, port, and implicit TLS setting. Local Mailpit uses `127.0.0.1`, `1025`, and `false`. For deployment, use the SMTP provider’s settings. |
+| `SMTP_USER`, `SMTP_PASSWORD` | SMTP credentials. Set both if your SMTP server requires authentication. Leave both empty for local Mailpit. |
+| `MAIL_FROM` | Sender address and display name. Use an address authorized by your SMTP provider in deployment. |
+| `MAILPIT_UI_PORT` | Local Mailpit inbox port. Defaults to `8025`. |
+| `FACULTY_ATTACHMENT_DIR` | Optional private directory for uploaded supporting files. Defaults to `.local/private-faculty-attachments`. In deployment, use a persistent, writable directory outside `public`. |
+
+Generate `AUTH_SECRET` with:
+
+```sh
 node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 ```
 
-Start Docker Desktop, then initialize the database:
+Use a separate password for PostgreSQL. Percent-encode URL-reserved characters in the password when placing it in `DATABASE_URL`. PostgreSQL uses `POSTGRES_PASSWORD` when it initializes a new Docker volume. Changing the environment variable later does not change the password stored in an existing database.
 
-```powershell
-docker compose up -d --wait
-npm run db:setup
-```
+Local setup requires no external API key. For real email delivery, obtain SMTP access and any required credentials from your provider.
 
-`db:setup` applies migrations, checks the schema, and seeds demo accounts/courses plus ten signup fixtures. It does **not** reset existing data or start Docker. Sample logins are written to `prisma/demo-accounts.txt`. Keep environment files and that login file private; they are ignored by Git.
+## Fresh Local Installation
 
-## Start and stop locally
+1. **Clone the repository and install dependencies.**
 
-Start the Docker services, then run the app and each worker in **separate terminals**:
+   ```sh
+   git clone https://github.com/AaronDcunha/AssessmentHelperCapstoneUTD.git
+   cd AssessmentHelperCapstoneUTD
+   npm ci
+   ```
 
-```powershell
-docker compose up -d --wait
-```
+2. **Create and configure `.env`.** Run `Copy-Item .env.example .env` in PowerShell or `cp .env.example .env` in Bash. Set the PostgreSQL password in both `POSTGRES_PASSWORD` and `DATABASE_URL`, then set `AUTH_SECRET`.
 
-| Terminal | Command | Purpose |
-| --- | --- | --- |
-| App | `npm run dev` | Website and APIs |
-| Email worker | `npm run jobs:email` | Delivers queued emails to Mailpit every minute |
-| Faculty scheduler | `npm run jobs:faculty` | Checks invitation expiry every five minutes and can invite eligible uncontacted candidates. Automatic resends and scheduler emails to AC are paused. |
+3. **Start the supporting services and initialize the database.** Start Docker Desktop or Docker Engine before running these commands.
 
-Workers do not start automatically with the app. To process one email batch instead, use `npm run jobs:email:once`.
+   ```sh
+   docker compose up -d --wait
+   npm run db:generate
+   npm run db:setup
+   ```
 
-- [App](http://localhost:3000) — sign in with a seeded account; access follows assigned permissions.
-- [Mailpit inbox](http://localhost:8025) — captures local test emails; it does not send to real inboxes.
-- PostgreSQL: `localhost:5432`; Mailpit SMTP: `localhost:1025` (defaults).
+   `db:setup` applies the checked-in migrations, checks the schema, and loads the demo data. The seed adds demo accounts and course data, then creates ten signup fixtures and attempts to create late-invitation scenarios. The signup fixtures require a configured current semester, a future observation deadline, and enough upcoming class meetings. If that step fails, the basic demo data remains available. Correct the reported configuration and rerun `npm run db:seed`.
 
-To stop, press **Ctrl+C** in each app/worker terminal, then run `docker compose down`. Database and Mailpit data remain in Docker volumes.
+4. **Start the application.**
 
-Optional reserved `faculty`/`ac`/`admin` mock logins require development mode and `AUTH_DEMO_ENABLED=true`; they are separate from seeded business accounts. Restart the app/workers after environment changes. `.env.local` can override `.env` for the app/workers; keep database credentials in `.env` consistent with Docker and database scripts.
+   ```sh
+   npm run dev
+   ```
 
-## Database maintenance
+   Run the background workers as mentioned in [Background Jobs](#background-jobs)
 
-Keep PostgreSQL running for these commands. Each developer has their own local database; Git does not share its contents.
+5. **Open [Assessment Helper](http://localhost:3000)** and sign in with a demo account below. Start the workers in separate terminals if you want to test email delivery or invitation expiry. Local test email appears in [Mailpit](http://localhost:8025).
 
-| Action | Command | Effect |
-| --- | --- | --- |
-| Apply updates and seed additions | `npm run db:setup` | Applies checked-in migrations and reruns the seed without resetting the database |
-| Apply migrations only | `npx prisma migrate deploy` | Updates tables without running the seed |
-| Rerun the seed only | `npm run db:seed` | Seeds basic demo data, then ten signup fixtures; preserves existing signups/progress |
-| Preview basic seed data | `npm run db:seed:preview` | No database reads/writes; generates the local demo-login reference; signup preview is separate |
-| Preview ten demo signups | `npm run db:seed:signups:preview` | Reads the database and lists the proposed signup fixtures; writes nothing |
-| Add ten demo signups | `npm run db:seed:signups` | Adds signups, unassigned observations, and three proposed meetings per new signup |
-| Browse records | `npx prisma studio` | Opens the database editor |
+To stop the local installation, press **Ctrl+C** in the app and worker terminals, then run `docker compose down`. Docker retains the database and Mailpit volumes.
 
-The basic seed preserves existing cycle/template/question edits. It does not recreate manually added signups, matching, or completed assessments. Reseeding is not a reset and may update other seeded records.
+## Demo Accounts and Login
 
-For team workflow testing, `npm run db:seed` runs both seeds in order automatically.
-`npm run db:setup` uses the same sequence after migrations. If the signup step fails,
-the basic seed remains saved; fix the reported configuration issue and rerun.
-The shared script is `prisma/seed-signups.mjs`. It uses the same ten demo professors,
-their real assigned sections, and valid future class dates in the current configured
-semester. Existing signups and any later workflow progress are preserved on reruns.
-It creates no matching, releases, invitations, assessments, or notifications.
-This local-only demo seed can bypass a closed signup deadline without
-changing normal signup rules. It requires configured semester dates and enough future
-meetings before the observation deadline; otherwise the entire batch rolls back.
-To explicitly target a cycle, use `npm run db:seed:signups -- --cycle-id=UUID`.
-After a database reset, `npm run db:seed` restores the basic data and ten signups together.
+After seeding a fresh local database, sign in with one of these accounts:
 
-### Reset the database and restore demo data
+| Workflow | Name | Username | Password |
+| --- | --- | --- | --- |
+| Faculty | Alder Sol | `alder_sol` | `123` |
+| Assessment Committee | Amber Arrow | `amber_arrow` | `123` |
+| Administration | Arden Stone | `arden_stone` | `123` |
 
-**This deletes all data in the database/schema targeted by `.env`**, including added users, signups, observations, assessments, and local test fixtures. Confirm `DATABASE_URL` points to your intended local database first. Stop the app and workers; leave PostgreSQL running.
+These are seeded test accounts for local development and private demonstrations. Some accounts have multiple roles, so the sidebar reflects all permissions assigned to the account. Keep `AUTH_DEMO_ENABLED=false` to sign in with the seeded database accounts. The seed also writes a login reference to `prisma/demo-accounts.txt`.
 
-```powershell
-npx prisma migrate reset
+## Deployment
+
+These instructions describe a self-hosted Node.js deployment on a server or VM.
+
+1. **Prepare the host.** Install the supported Node.js version and provision PostgreSQL. Create the database and configure persistent storage for both PostgreSQL and supporting files. For HTTPS access, configure a reverse proxy and TLS certificate for the deployment hostname.
+
+2. **Check out the release and install dependencies.**
+
+   ```sh
+   git clone https://github.com/AaronDcunha/AssessmentHelperCapstoneUTD.git
+   cd AssessmentHelperCapstoneUTD
+   npm ci
+   ```
+
+   If deploying a specific release tag or commit, check it out before running `npm ci`.
+
+3. **Configure the deployment environment.** Set `DATABASE_URL`, a deployment-specific `AUTH_SECRET`, `AUTH_DEMO_ENABLED=false`, and `FACULTY_ATTACHMENT_DIR`. If using email delivery, configure SMTP credentials, an authorized sender, and `EMAIL_DELIVERY_ENABLED=true`. Make the settings available to the application and its workers.
+
+4. **Apply migrations and build the application.**
+
+   ```sh
+   npm run db:migrate
+   npm run build
+   ```
+
+   `db:migrate` applies pending migrations. The build generates Prisma Client before compiling the application. For an existing deployment, back up PostgreSQL and the private attachment directory before applying an update.
+
+5. **Provision access.** The application requires a database-backed account with the appropriate grants. For a private demonstration, use the local installation steps to initialize and seed a local database on the VM before serving the production build. Restrict access to that environment because it contains demo credentials. For a real deployment, use a database with an authorized Admin already provisioned or arrange a controlled account import with the project team. The repository currently has no standalone production Admin bootstrap command.
+
+6. **Start the production app.** If the reverse proxy runs on the same host, bind Next.js to loopback and route HTTPS traffic to port `3000`.
+
+   ```sh
+   npm start -- --hostname 127.0.0.1 --port 3000
+   ```
+
+   Configure the proxy to forward the original host and protocol. Use a process manager to keep the app running and start it after a reboot. Start the background jobs as separate managed processes when their functions are needed.
+
+7. **Configure the evaluation cycle.** Sign in with an authorized account. Set the semester dates, time zone, and evaluation deadlines, and publish an observation template before opening the cycle for Faculty signups.
+
+## Background Jobs
+
+Start each job from the repository folder in a separate terminal or managed process. The app and workers use the same database configuration.
+
+| Command | Purpose |
+| --- | --- |
+| `npm run jobs:email` | Delivers queued notification emails every minute. Requires `EMAIL_DELIVERY_ENABLED=true` and working SMTP settings. |
+| `npm run jobs:email:once` | Processes one batch of queued emails for local testing. |
+| `npm run jobs:faculty` | Checks unanswered observer invitations every five minutes and marks them **Expired** when their response windows close. |
+
+Observees send invitations from their published recommendation list by selecting candidates and clicking **Send invitations**. For local email testing, use the [Mailpit inbox](http://localhost:8025). Restart the app and workers after changing environment settings.
+
+## Resetting the Local Database
+
+**Resetting permanently deletes all records in the database targeted by `DATABASE_URL`.** Verify that it points to your own local development database. Stop the app and workers, and leave PostgreSQL running.
+
+```sh
+npx prisma migrate reset --config prisma.config.mjs
+npm run db:generate
 npm run db:seed
 ```
 
-Confirm the reset when prompted. The first command recreates the schema from migrations; the second restores the basic demo data, login reference, and ten signup fixtures. Then restart the app and workers.
+Confirm the reset when prompted. Run the commands in order and stop if one fails. The commands reapply migrations and restore the demo data, login reference, and signup fixtures. Restart the app and workers afterward. Mailpit’s captured messages and uploaded files are stored separately from the database.
 
-This does not clear Mailpit's captured messages or private attachment files. Avoid `docker compose down --volumes` unless you also intend to erase the Docker database and Mailpit volumes. Changing `POSTGRES_PASSWORD` in `.env` does not change the password inside an existing database volume.
-
-## Checks and builds
-
-```powershell
-npm run lint
-npx next typegen
-npx tsc --noEmit
-node --import ./scripts/server-loader.mjs --test tests/unit/*.test.mjs
-```
-
-For a production build, run `npm run build`, then `npm start`. Email and Faculty workers still run separately. Integration/browser tests have their own database/server requirements; see the relevant feature reference before running them.
-
-After pulling changes, run `npm ci` when dependencies changed and `npm run db:setup` when migrations/seed data changed. Do not reset to resolve a migration error without checking the cause.
-
-## Further documentation
+## Additional Documentation
 
 - [Project references and feature guides](docs/reference/README.md)
 - [Authentication and permissions](docs/reference/AUTH_BACKEND.md)
-- [Email configuration, retries, and testing](docs/reference/EMAIL_DELIVERY.md)
-- [Shared notification helper](docs/reference/NOTIFICATION_HELPER.md)
-- [Dependency update instructions](docs/reference/DEPENDENCY_UPDATES.md)
-
-Validation currently uses explicit server-side checks. Vitest, React Testing Library, and Playwright are not installed; existing tests use the repository's Node/browser scripts.
+- [Email configuration and delivery](docs/reference/EMAIL_DELIVERY.md)
+- [Shared notification service](docs/reference/NOTIFICATION_HELPER.md)
