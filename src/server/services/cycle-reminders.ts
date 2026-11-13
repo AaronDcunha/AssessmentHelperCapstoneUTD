@@ -4,7 +4,7 @@ import { ConfigurationError,uuid,type ConfigurationUser } from "../configuration
 import { reminderInput,workflowGrant } from "../alert-reminder-validation";
 import { facultyStatuses,observationWhere } from "../queries/ac-reports";
 import { sendNotification } from "./notification-delivery";
-type Database=Pick<Prisma.TransactionClient,"appUser"|"role"|"reminderDispatch"|"notification"|"professor"|"observation"|"evaluationCycle"|"hiringLevel">;
+type Database=Pick<Prisma.TransactionClient,"appUser"|"role"|"permission"|"reminderDispatch"|"notification"|"professor"|"observation"|"evaluationCycle"|"hiringLevel">;
 export async function sendCycleReminders(db:Database,user:ConfigurationUser,cycleId:string,body:unknown,idempotencyKey?:string){
  workflowGrant(user,"notifications.send","cycles.read");uuid(cycleId);const input=reminderInput(body),dispatchId=idempotencyKey?uuid(idempotencyKey):randomUUID();
  if(input.params.has("evaluationStatus"))workflowGrant(user,"reports.read");

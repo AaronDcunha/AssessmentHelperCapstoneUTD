@@ -9,6 +9,12 @@ import { ObservationTrackingDetails } from "@/components/ac/observation-tracking
 import { Button, ButtonLink } from "@/components/ui/button";
 import { acApi, type ObservationDetail, userDisplayName } from "@/lib/ac-api";
 
+const assessmentStatusLabels = new Map([
+  ["NOT_STARTED", "Not Started"],
+  ["IN_PROGRESS", "In Progress"],
+  ["COMPLETED", "Completed"],
+]);
+
 const EMPTY_DETAIL: ObservationDetail = { observation: { id: "" }, progress: [], proposedMeetings: [] };
 
 export function ObservationDetails({ observationId, canReadAssessment, canDelete = false, canReassignTemplate = false, backHref = "/ac/observations", backLabel = "Back to Observation Progress", alertId, children }: { observationId: string; canReadAssessment: boolean; canDelete?: boolean; canReassignTemplate?: boolean; backHref?: string; backLabel?: string; alertId?: string; children?: ReactNode }) {
@@ -19,6 +25,8 @@ export function ObservationDetails({ observationId, canReadAssessment, canDelete
   const [busy, setBusy] = useState(false);
   const result = useApiResource(useCallback(() => { void attempt; return acApi.getObservation(observationId); }, [observationId, attempt]), EMPTY_DETAIL);
   const observation = result.data.observation;
+  const assessmentStatus = observation.assessmentStatus;
+  const assessmentLabel = assessmentStatus ? assessmentStatusLabels.get(assessmentStatus.toUpperCase()) ?? assessmentStatus : "—";
   const protectedForHistory = result.data.protectedForHistory;
   useEffect(() => { if (canReassignTemplate && protectedForHistory === false) void acApi.getTemplates().then(rows => setTemplates(rows.filter(row => row.status === "published"))).catch(() => setTemplates([])); }, [canReassignTemplate, protectedForHistory]);
   async function deleteCurrent() {
@@ -52,7 +60,7 @@ export function ObservationDetails({ observationId, canReadAssessment, canDelete
           <div><dt className="text-label text-muted">Observee</dt><dd className="text-body text-ink">{userDisplayName(observation.observee)}</dd></div>
           <div><dt className="text-label text-muted">Observer</dt><dd className="text-body text-ink">{userDisplayName(observation.observer)}</dd></div>
           <div><dt className="text-label text-muted">Status</dt><dd className="text-body text-ink">{observation.status ?? "—"}</dd></div>
-          <div><dt className="text-label text-muted">Assessment</dt><dd className="text-body text-ink">{observation.assessmentStatus ?? "—"}</dd></div>
+          <div><dt className="text-label text-muted">Assessment</dt><dd className="text-body text-ink">{assessmentLabel}</dd></div>
         </dl>
       )}
     </Section>

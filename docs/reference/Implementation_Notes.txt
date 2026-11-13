@@ -1221,3 +1221,5 @@ shared eligibility/calendar rules, atomic writes and existing-signup preservatio
 make reruns safe without resetting later progress. Local-only test fixtures can
 bypass the signup cutoff; they never create post-signup workflow records. Original
 local fixtures are preserved even though they were created with random record IDs.
+
+Admin automatically receives every permission in the catalog. The permissions matrix shows these grants as read-only, and the role-permissions endpoint rejects changes to the Admin role. AC and Faculty retain their existing assignment and inheritance rules.

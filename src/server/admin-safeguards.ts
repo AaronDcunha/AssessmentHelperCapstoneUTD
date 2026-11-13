@@ -1,11 +1,11 @@
 import { ConfigurationError } from "./configuration-validation";
 import { effectivePermissions } from "./admin-validation";
-import { grantInclude, type Connection } from "./queries/admin";
+import { readRoleGrants, type Connection } from "./queries/admin";
 const management = ["users.read","users.manage","roles.read","permissions.read","roles.assign","role-permissions.manage"];
 export type AdminAccess = { managers: string[]; actorAdmin: boolean; actorPermissions: string[] };
 export async function adminAccess(db: Connection,actorId: string): Promise<AdminAccess> {
   const [roles,accounts]=await Promise.all([
-    db.role.findMany({include:grantInclude}),
+    readRoleGrants(db),
     db.appUser.findMany({where:{isActive:true,userRoles:{some:{role:{roleName:"Admin"}}}},include:{userRoles:true}}),
   ]);
   const permissions=(a: typeof accounts[number])=>effectivePermissions(roles,a.userRoles.map(r=>r.roleId));

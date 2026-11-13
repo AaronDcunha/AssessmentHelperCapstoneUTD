@@ -1,7 +1,7 @@
 import type { Prisma } from "../../generated/prisma/client";
 import { getPrisma } from "../prisma";
 import { effectivePermissions, effectiveRoleNames } from "../admin-validation";
-import { grantInclude } from "../queries/admin";
+import { readRoleGrants } from "../queries/admin";
 import { notificationId } from "../notification-validation";
 import { createWorkflowNotification, validateWorkflowNotification, type WorkflowNotification } from "./notifications";
 
@@ -17,7 +17,7 @@ export type SendNotificationInput = Omit<WorkflowNotification, "userId" | "chann
   /** Defaults to true. Use false with email:true for email-only delivery. */
   inApp?: boolean;
 };
-export type NotificationTransaction = Pick<Prisma.TransactionClient, "notification" | "appUser" | "role">;
+export type NotificationTransaction = Pick<Prisma.TransactionClient, "notification" | "appUser" | "role" | "permission">;
 
 /** Trusted server code only: authorize the workflow and audience before calling.
  * Pass the workflow's transaction, or omit tx for an independent atomic dispatch.
@@ -40,7 +40,7 @@ export async function sendNotification(input: SendNotificationInput, tx?: Notifi
     }else throw new Error("Unsupported notification audience.");
   }
   const deliver = async(db:NotificationTransaction)=>{
-    const roles=roleNames.size||grants.length?await db.role.findMany({include:grantInclude}):[];
+    const roles=roleNames.size||grants.length?await readRoleGrants(db):[];
     const matchingRoles=roles.filter(role=>effectiveRoleNames([role.roleName]).some(name=>roleNames.has(name))).map(role=>role.roleId);
     const candidateRoles=new Set([...matchingRoles,...roles.filter(role=>grants.some(required=>effectivePermissions(roles,[role.roleId]).includes(required[0]))).map(role=>role.roleId)]);
     const predicates:Prisma.AppUserWhereInput[]=[];

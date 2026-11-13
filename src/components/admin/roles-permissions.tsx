@@ -1,5 +1,6 @@
 "use client";
 
+import { permissionLabel } from "./permission-label";
 import { useEffect, useState } from "react";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Section } from "@/components/ui/section";
@@ -52,13 +53,14 @@ export function RolesPermissions({ canManage }: { canManage: boolean }) {
             </tr></thead>
             <tbody>{rows.map(permission => <tr key={permission.key} className="border-t border-border">
               <TableCell variant="header" scope="row" className="break-words bg-surface! text-body! text-ink!">
-                {permission.name}{!known.has(permission.key) && <span className="mt-ah-4 block text-caption text-muted">Retained assignment; unavailable in the catalog.</span>}
+                {permissionLabel(permission.key, permission.name)}{!known.has(permission.key) && <span className="mt-ah-4 block text-caption text-muted">Retained assignment; unavailable in the catalog.</span>}
               </TableCell>
               {state.roles.map(role => {
-                const selected = state.drafts[role.id].includes(permission.key);
-                const label = `${role.name}: ${permission.name}`;
+                const fixed = role.name === "Admin";
+                const selected = fixed ? known.has(permission.key) : state.drafts[role.id].includes(permission.key);
+                const label = `${role.name}: ${permissionLabel(permission.key, permission.name)}`;
                 return <TableCell key={role.id}>{canManage ? <input type="checkbox" aria-label={label} checked={selected}
-                  disabled={disabled || !known.has(permission.key)} className="size-5 accent-sidebar"
+                  disabled={fixed || disabled || !known.has(permission.key)} className="size-5 accent-sidebar"
                   onChange={event => controller.toggle(role.id, permission.key, event.target.checked)} />
                   : <span aria-label={`${label}: ${selected ? "assigned" : "not assigned"}`}>{selected ? "✓" : "—"}</span>}
                 </TableCell>;
@@ -69,6 +71,7 @@ export function RolesPermissions({ canManage }: { canManage: boolean }) {
                 {dirtyCount ? `${dirtyCount} ${dirtyCount === 1 ? "role has" : "roles have"} unsaved changes.` : "No unsaved changes."}
               </p></TableCell>
               {state.roles.map(role => {
+                if (role.name === "Admin") return <TableCell key={role.id}>All permissions</TableCell>;
                 const dirty = !samePermissionKeys(role.permissionKeys, state.drafts[role.id]);
                 return <TableCell key={role.id}><div className="flex flex-wrap gap-ah-8">
                   <Button aria-label={`Save permissions for ${role.name}`} disabled={disabled || !dirty || state.feedback[role.id]?.blocked}
@@ -83,7 +86,7 @@ export function RolesPermissions({ canManage }: { canManage: boolean }) {
         {!rows.length && <p role="status" className="border-t border-border bg-surface p-ah-24 text-muted">No permissions are available.</p>}
       </div>
     </Section>
-    <p className="text-caption text-muted">The matrix shows direct assignments. Inherited access is determined separately. Each Save updates only its role.</p>
+    <p className="text-caption text-muted">Admin automatically has all permissions. The AC and Faculty columns show direct assignments. Each Save updates only its role.</p>
     {unknown.length > 0 && <p role="status" className="text-caption text-warning">Assignments absent from the catalog are retained and cannot be changed here.</p>}
     {!state.permissions.length && <p role="status" className="text-muted">No editable permission definitions were returned.</p>}
     {state.authDenied && <div className="space-y-ah-12">
@@ -100,7 +103,7 @@ export function RolesPermissions({ canManage }: { canManage: boolean }) {
           <Button variant="secondary" disabled={!!state.busyId} onClick={() => void controller.reload(role.id)}>Reload {role.name}</Button>
         </>}
         {feedback.effectiveKeys && <details className="text-caption text-muted"><summary className="cursor-pointer">Effective access returned for {role.name}</summary>
-          <ul className="mt-ah-8 list-disc space-y-ah-4 pl-ah-24">{feedback.effectiveKeys.map(key => <li key={key} className="break-words">{state.permissions.find(item => item.key === key)?.name ?? key}</li>)}</ul>
+          <ul className="mt-ah-8 list-disc space-y-ah-4 pl-ah-24">{feedback.effectiveKeys.map(key => <li key={key} className="break-words">{permissionLabel(key, state.permissions.find(item => item.key === key)?.name)}</li>)}</ul>
           {!feedback.effectiveKeys.length && <p>No effective permissions were returned.</p>}
         </details>}
       </div>;

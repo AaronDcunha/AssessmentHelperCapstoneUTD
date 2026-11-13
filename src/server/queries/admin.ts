@@ -5,6 +5,16 @@ export type Connection = Pick<Prisma.TransactionClient,"appUser"|"role"|"permiss
 export const userInclude = { professor: true, userRoles: { include: {role: true}, orderBy: {roleId: "asc" as const} } };
 type User = Prisma.AppUserGetPayload<{include: typeof userInclude}>;
 export const grantInclude = {rolePermissions: {include: {permission: true}}};
+export async function readRoleGrants(db: Pick<Connection, "role" | "permission">) {
+  const roles = await db.role.findMany({include: grantInclude});
+  const admin = roles.find(role => role.roleName === "Admin");
+  if (admin) {
+    admin.rolePermissions = (await db.permission.findMany()).map(permission => ({
+      roleId: admin.roleId, permissionId: permission.permissionId, permission,
+    }));
+  }
+  return roles;
+}
 export function userResponse(u: User) {
   return {id:u.userId,name:u.fullName,email:u.email,accountStatus:u.isActive,revision:u.revision,
     roleIds:u.userRoles.map(r=>r.roleId),roles:u.userRoles.map(r=>({id:r.roleId,name:r.role.roleName})),
@@ -28,7 +38,10 @@ export async function readAdmin(db: Connection,user: AdminUser,operation: Operat
   if (q && q.length>2000) invalid("Search is too long.");
   if (operation === "roles.list") {
     const rows=await db.role.findMany({where:cursor ? {roleId:{gt:cursor}} : {},include:grantInclude,orderBy:{roleId:"asc"},take:limit+1});
-    return page(rows.map(r=>({id:r.roleId,key:r.roleName,name:r.roleName,permissionKeys:r.rolePermissions.map(p=>p.permission.permissionName).sort(),revision:r.revision})),limit);
+    const adminKeys = rows.slice(0,limit).some(r=>r.roleName==="Admin")
+      ? (await db.permission.findMany({orderBy:{permissionName:"asc"}})).map(p=>p.permissionName)
+      : [];
+    return page(rows.map(r=>({id:r.roleId,key:r.roleName,name:r.roleName,permissionKeys:r.roleName==="Admin" ? adminKeys : r.rolePermissions.map(p=>p.permission.permissionName).sort(),revision:r.revision})),limit);
   }
   if (operation === "departments.list") {
     const rows=await db.department.findMany({where:{...(cursor ? {departmentId:{gt:cursor}} : {}),...(q ? {departmentName:{contains:q,mode:"insensitive"}} : {})},orderBy:{departmentId:"asc"},take:limit+1});

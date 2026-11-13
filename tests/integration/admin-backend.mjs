@@ -57,12 +57,10 @@ try {
  assert.equal((await read('users.get','',{userId:account.id})).professor.hireDate,'2026-10-01');
  assert.equal((await read('users.get','',{userId:account.id})).revision,1);
  const assigned=await mutate('users.roles',{userId:account.id},{expectedRevision:1,roleIds:[admin.roleId]});
- assert.deepEqual(assigned.permissions,['profile.read.own']); assert.equal(assigned.revision,2);
+ assert.deepEqual(assigned.permissions,(await read('permissions.list')).items.map(item=>item.key)); assert.equal(assigned.revision,2);
  await assert.rejects(()=>mutate('users.roles',{userId:account.id},{expectedRevision:1,roleIds:[faculty.roleId]}),e=>e.status===409);
  assert.deepEqual((await read('users.get','',{userId:account.id})).roleIds,[admin.roleId]);
- const saved=await mutate('roles.permissions',{roleId:admin.roleId},{expectedRevision:0,permissionKeys:[]});
- assert.deepEqual(saved.permissionKeys,[]); assert.deepEqual(saved.effectivePermissionKeys,['profile.read.own']);
- await assert.rejects(()=>mutate('roles.permissions',{roleId:admin.roleId},{expectedRevision:1,permissionKeys:['unsupported']}),e=>e.status===422);
+ await assert.rejects(()=>mutate('roles.permissions',{roleId:admin.roleId},{expectedRevision:0,permissionKeys:[]}),e=>e.code==='ADMIN_PERMISSIONS_FIXED');
  await assert.rejects(()=>mutate('levels.delete',{hiringLevelId:level.id}),e=>e.code==='P2003');
  assert.ok(await prisma.hiringLevel.findUnique({where:{hiringLevelId:level.id}}));
  const changed=await mutate('levels.update',{hiringLevelId:level.id},{expectedRevision:0,active:false}); assert.equal(changed.active,false);
@@ -81,7 +79,7 @@ try {
  await assert.rejects(()=>mutateAdmin(prisma,self,'users.update',{userId:account.id},{expectedRevision:2,accountStatus:false}),e=>e.code==='ADMIN_ACCESS_REQUIRED');
  await assert.rejects(()=>mutateAdmin(prisma,self,'users.roles',{userId:account.id},{expectedRevision:2,roleIds:[faculty.roleId]}),e=>e.code==='ADMIN_ACCESS_REQUIRED');
  await assert.rejects(()=>mutate('users.update',{userId:account.id},{expectedRevision:2,accountStatus:false}),e=>e.code==='ADMIN_ACCESS_REQUIRED');
- await assert.rejects(()=>mutate('roles.permissions',{roleId:admin.roleId},{expectedRevision:1,permissionKeys:[]}),e=>e.code==='ADMIN_ACCESS_REQUIRED');
+ assert.deepEqual((await read('roles.list')).items.find(role=>role.id===admin.roleId).permissionKeys,(await read('permissions.list')).items.map(item=>item.key));
  const retained=await read('users.get','',{userId:account.id});
  assert.equal(retained.accountStatus,true); assert.equal(retained.revision,2); assert.deepEqual(retained.roleIds,[admin.roleId]);
  const concurrent=await Promise.allSettled([

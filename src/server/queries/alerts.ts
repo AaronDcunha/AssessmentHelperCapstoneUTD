@@ -1,7 +1,7 @@
 import type { Prisma } from "../../generated/prisma/client";
 import { ConfigurationError,pagination,uuid,type ConfigurationUser } from "../configuration-validation";
 import { workflowGrant,alertFilters } from "../alert-reminder-validation";
-export type AlertDatabase=Pick<Prisma.TransactionClient,"facultyIssue"|"observation"|"evaluationCycle"|"role"|"appUser"|"notification">;
+export type AlertDatabase=Pick<Prisma.TransactionClient,"facultyIssue"|"observation"|"evaluationCycle"|"role"|"permission"|"appUser"|"notification">;
 export const alertInclude={reporter:{select:{userId:true,fullName:true}},observation:{include:{signup:{include:{professor:{include:{user:{select:{userId:true,fullName:true}}}},section:{include:{course:true,semester:true}}}},observer:{include:{user:{select:{userId:true,fullName:true}}}},currentReleasedList:{select:{publishedAt:true}},candidates:{include:{professor:{include:{user:{select:{userId:true,fullName:true}}}}}}}}} as const;
 export type AlertRow=Prisma.FacultyIssueGetPayload<{include:typeof alertInclude}>;
 export function alertResource(a:AlertRow,user:ConfigurationUser){

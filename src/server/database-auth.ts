@@ -3,9 +3,9 @@ import type { PrismaClient } from "../generated/prisma/client";
 import { getPrisma } from "./prisma";
 import { authenticateAccount, fixturePermissions, publicAccount, type AccountRecord } from "./account-auth";
 import { effectivePermissions } from "./admin-validation";
-import { grantInclude } from "./queries/admin";
+import { readRoleGrants } from "./queries/admin";
 
-type AuthConnection = Pick<PrismaClient, "appUser" | "role">;
+type AuthConnection = Pick<PrismaClient, "appUser" | "role" | "permission">;
 
 async function findAccount(db: AuthConnection, where: { username: string } | { userId: string }): Promise<AccountRecord | null> {
   const account = await db.appUser.findUnique({
@@ -13,7 +13,7 @@ async function findAccount(db: AuthConnection, where: { username: string } | { u
   });
   if (!account) return null;
   const roles = account.userRoles.map(link => link.role.roleName).sort();
-  const grants = await db.role.findMany({ include: grantInclude });
+  const grants = await readRoleGrants(db);
   return {
     id: account.userId, username: account.username ?? "", name: account.fullName,
     isActive: account.isActive, passwordHash: account.loginCredential?.passwordHash ?? null,

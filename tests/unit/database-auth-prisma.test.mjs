@@ -12,15 +12,16 @@ test('Prisma authentication verifies credentials and reloads inherited grants an
   loginCredential:{passwordHash},userRoles:[{roleId:'admin',role:{roleName:'Admin'}}]};
  const roles=['Admin','AC','Faculty'].map(roleName=>({roleId:roleName.toLowerCase(),roleName,
   rolePermissions:[{permission:{permissionName:roleName.toLowerCase()+'.read'}}]}));
- const db={appUser:{findUnique:async({where})=>where.username==='jane_smith'||where.userId===id?account:null},role:{findMany:async()=>roles}};
+ const catalog=['admin.read','ac.read','faculty.read','alerts.manage'].map(permissionName=>({permissionId:permissionName,permissionName}));
+ const db={permission:{findMany:async()=>catalog},appUser:{findUnique:async({where})=>where.username==='jane_smith'||where.userId===id?account:null},role:{findMany:async()=>roles}};
  const user=await authenticateDatabase({username:' JANE_SMITH ',password:'123'},db);
  assert.equal(user.id,id); assert.deepEqual(user.roles,['Admin']);
- for(const key of ['admin.read','ac.read','faculty.read','test:admin'])assert.ok(user.permissions.includes(key));
+ for(const key of ['admin.read','ac.read','faculty.read','alerts.manage','test:admin'])assert.ok(user.permissions.includes(key));
  assert.equal('passwordHash' in user,false);
  assert.equal(await authenticateDatabase({username:'jane_smith',password:'wrong'},db),null);
  assert.equal(await authenticateDatabase({username:'missing',password:'123'},db),null);
  roles[1].rolePermissions=[];
- assert.equal((await resolveDatabaseUser(id,db)).permissions.includes('ac.read'),false);
+ assert.equal((await resolveDatabaseUser(id,db)).permissions.includes('ac.read'),true);
  account.isActive=false;
  assert.equal(await resolveDatabaseUser(id,db),null);
  assert.equal(await authenticateDatabase({username:'jane_smith',password:'123'},db),null);

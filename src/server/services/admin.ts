@@ -3,7 +3,7 @@ import { hashPassword, usernameFromName } from "../account-auth";
 import type { PrismaClient } from "../../generated/prisma/client";
 import { ConfigurationError, object, fields, uuid, revision, invalid } from "../configuration-validation";
 import { authorize, required, conflict, strings, userInput, levelInput, effectivePermissions, type AdminUser, type Operation } from "../admin-validation";
-import { grantInclude, userInclude, userResponse, levelResponse, type Connection } from "../queries/admin";
+import { readRoleGrants, userInclude, userResponse, levelResponse, type Connection } from "../queries/admin";
 
 async function validRoles(db: Connection,ids: string[]) {
   if (!ids.length) invalid("Select at least one role.");
@@ -80,20 +80,22 @@ export async function mutateAdmin(prisma: PrismaClient,user: AdminUser,operation
       await db.userRole.deleteMany({where:{userId:id}});
       await db.userRole.createMany({data:ids.map(roleId=>({userId:id,roleId}))});
       await protect();
-      const roles=await db.role.findMany({include:grantInclude});
+      const roles=await readRoleGrants(db);
       return {userId:id,roleIds:ids,permissions:effectivePermissions(roles,ids),revision:expectedRevision+1};
     }
     if (operation === "roles.permissions") {
       const b=object(value); fields(b,["permissionKeys","expectedRevision"]);
       const id=uuid(params.roleId),expectedRevision=revision(b.expectedRevision),keys=strings(b.permissionKeys,false);
+      const role=required(await db.role.findUnique({where:{roleId:id}}));
+      if (role.roleName==="Admin")
+        throw new ConfigurationError(409,"ADMIN_PERMISSIONS_FIXED","The Admin role automatically has all permissions.");
       const permissions=await db.permission.findMany({where:{permissionName:{in:keys}}});
       if (permissions.length!==keys.length) invalid("Unsupported permission key.");
-      required(await db.role.findUnique({where:{roleId:id}}));
-      if (!(await db.role.updateMany({where:{roleId:id,revision:expectedRevision},data:{revision:{increment:1}}})).count) conflict();
+     if (!(await db.role.updateMany({where:{roleId:id,revision:expectedRevision},data:{revision:{increment:1}}})).count) conflict();
       await db.rolePermission.deleteMany({where:{roleId:id}});
       if (permissions.length) await db.rolePermission.createMany({data:permissions.map(p=>({roleId:id,permissionId:p.permissionId}))});
       await protect();
-      return {roleId:id,permissionKeys:[...keys].sort(),effectivePermissionKeys:effectivePermissions(await db.role.findMany({include:grantInclude}),[id]),revision:expectedRevision+1};
+      return {roleId:id,permissionKeys:[...keys].sort(),effectivePermissionKeys:effectivePermissions(await readRoleGrants(db),[id]),revision:expectedRevision+1};
     }
     if (operation === "levels.create") {
       const {data}=levelInput(value,true);
