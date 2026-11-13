@@ -1,0 +1,96 @@
+API_Endpoint_Revised
+Implemented application API. {id} denotes a required path parameter, ? means optional, and page means cursor?/limit? in and {items,pageInfo} out.
+
+Identity
+GET /api/me — Current account | In: session | Out: user ID, name, roles, permissions.
+GET /api/auth/{action} — Read Auth.js state | In: action and Auth.js query/session | Out: session, CSRF token, providers or redirect.
+POST /api/auth/{action} — Run Auth.js action | In: action and Auth.js form fields | Out: sign-in/sign-out response or redirect.
+
+Semesters and cycles
+GET /api/semesters — List semesters | In: year?, season?, page | Out: semester page.
+POST /api/semesters — Create semester and optionally its cycle | In: year, season, startsOn, endsOn, timeZone, creationId?, deadlines? | Out: semester.
+DELETE /api/semesters/{semesterId} — Delete an eligible semester | In: expectedRevision, expectedCycleRevision | Out: deletion result.
+GET /api/evaluation-cycles — List cycles | In: semesterId?, status?, page | Out: cycle page.
+POST /api/evaluation-cycles — Create cycle | In: semesterId, signupDeadline, observationDeadline, feedbackDeadline, creationId?, semester?, expectedSemesterRevision? | Out: cycle.
+GET /api/evaluation-cycles/{cycleId} — Read cycle | In: path only | Out: cycle.
+PATCH /api/evaluation-cycles/{cycleId} — Update deadlines | In: expectedRevision and changed deadline fields | Out: cycle.
+PUT /api/evaluation-cycles/{cycleId}/settings — Save semester and cycle settings | In: expectedCycleRevision, expectedSemesterRevision, semester, deadlines | Out: updated cycle and semester.
+
+Faculty dashboard
+GET /api/me/dashboard — Load dashboard | In: session | Out: eligibility, available cycles and observations, activity and access flags.
+GET /api/me/dashboard/workflow — Load signup and invitation workflow | In: session | Out: sections, dates, signup, observation and requests.
+POST /api/me/dashboard/cycle — Set active cycle | In: cycleId | Out: confirmation message.
+POST /api/me/dashboard/observation — Set active observation | In: observationId | Out: confirmation message.
+POST /api/me/dashboard/signup — Save evaluation signup | In: sectionId, dates[] | Out: signupId, observationId, message.
+POST /api/me/dashboard/invitations — Invite candidates | In: observationId, candidateIds[] | Out: invitation result.
+POST /api/me/dashboard/requests/accept — Accept an invitation for a proposed meeting | In: candidateId, meetingOptionId, attemptId | Out: confirmation message.
+POST /api/me/dashboard/requests/decline — Decline an invitation | In: candidateId, attemptId | Out: confirmation message.
+POST /api/me/dashboard/requests/late-acceptance — Request another chance to accept | In: candidateId, attemptId, reason? | Out: confirmation message.
+POST /api/me/dashboard/selected-observer — Confirm observer | In: candidateId | Out: confirmation message.
+GET /api/me/dashboard/assessment — Load current assessment | In: session | Out: {form} or null.
+POST /api/me/dashboard/assessment — Save or acknowledge assessment | In: action, revision, responses?, acknowledged? | Out: form, message.
+POST /api/me/dashboard/issues — Report non-occurrence or send an alert | In: observationId, kind, reason, details?, creationKey? | Out: message and alert when applicable.
+POST /api/me/dashboard/feedback — Submit process feedback | In: observationId, satisfaction, difficulties?, suggestions?, attachmentIds? | Out: confirmation message.
+POST /api/me/dashboard/feedback/attachments — Upload evidence | In: multipart observationId, file | Out: attachment metadata.
+GET /api/me/dashboard/feedback/attachments/{attachmentId} — Download evidence | In: path only | Out: private file stream.
+GET /api/me/observations — List own observations | In: cycleId?, semesterId?, participation?, status?, assessmentStatus?, page | Out: observation page.
+
+AC monitoring and matching
+GET /api/evaluation-cycles/{cycleId}/signups — List signups | In: departmentId?, hiringLevelId?, q?, page | Out: signup page.
+DELETE /api/evaluation-signups/{signupId} — Delete unfinished signup and observations | In: expectedRevision, observations[{id,expectedRevision}] | Out: deleted signup and observation IDs.
+GET /api/evaluation-cycles/{cycleId}/observations — List observations | In: status?, assessmentStatus?, q?, departmentId?, hiringLevelId?, page | Out: observation page.
+GET /api/observations/{observationId} — Read observation | In: path only | Out: observation, progress and proposed meetings.
+DELETE /api/observations/{observationId} — Replace unfinished observation with a blank one | In: expectedRevision | Out: deleted and replacement observation IDs, signupId, revision.
+GET /api/observations/{observationId}/candidates — Read candidate lists | In: path only | Out: candidate recommendations and list metadata.
+POST /api/evaluation-cycles/{cycleId}/recommendations/generate — Generate draft recommendations | In: scope? {observationIds?,professorIds?,departmentId?}, requestKey? | Out: generation ID and generated count.
+POST /api/evaluation-cycles/{cycleId}/recommendations/release — Release recommendation lists | In: generationId + observationIds?, or requestKey + targets[]/all | Out: release result and observation IDs.
+POST /api/observations/{observationId}/recommendations/regenerate — Rebuild one draft list | In: reason, expectedRevision, requestKey? | Out: new recommendation list metadata.
+GET /api/evaluation-cycles/{cycleId}/expired-acceptance-requests — List late acceptance requests | In: status?, search?, requestId?, page | Out: request page, cycle and summary.
+PATCH /api/expired-acceptance-requests/{requestId} — Approve or reject late acceptance | In: decision | Out: decision result.
+GET /api/evaluation-cycles/{cycleId}/faculty-status — List faculty eligibility | In: departmentId?, hiringLevelId?, evaluationStatus?, signedUp?, q?, page | Out: faculty status page.
+GET /api/evaluation-cycles/{cycleId}/reports — Summarize cycle progress | In: departmentId?, hiringLevelId? | Out: summary, hiring-level breakdown and outstanding work.
+GET /api/evaluation-cycles/{cycleId}/attention — List items needing attention | In: issue?, departmentId?, hiringLevelId?, page | Out: attention page.
+GET /api/evaluation-cycles/{cycleId}/metrics — Calculate live cycle KPIs | In: departmentId?, hiringLevelId? | Out: metric values, counts and formula metadata.
+GET /api/evaluation-cycles/{cycleId}/alerts — List faculty alerts | In: departmentId?, page | Out: alert page.
+GET /api/alerts/{alertId} — Read a faculty alert | In: path only | Out: alert.
+POST /api/observations/{observationId}/alerts — Send a faculty alert | In: reason, details?, creationKey? | Out: alert.
+POST /api/evaluation-cycles/{cycleId}/notifications — Send cycle reminders | In: kind, recipientFilter, channels?, message?, Idempotency-Key? header | Out: dispatch ID and delivery counts.
+
+Templates and assessment reads
+GET /api/observation-templates — List templates | In: status?, page | Out: template page.
+POST /api/observation-templates — Create draft template | In: title, criteria, commentPrompts?, signatureLabels? | Out: template.
+GET /api/observation-templates/current — Read current published template | In: none | Out: current template.
+GET /api/observation-templates/{templateId} — Read template | In: path only | Out: template.
+PATCH /api/observation-templates/{templateId} — Edit template | In: expectedRevision, title?, criteria?, commentPrompts?, signatureLabels?, confirmImpact? | Out: updated template.
+DELETE /api/observation-templates/{templateId} — Delete unused draft or archive template | In: expectedRevision | Out: deleted, archived, templateId, revision?.
+POST /api/observation-templates/{templateId}/publish — Publish template | In: expectedRevision | Out: published template.
+POST /api/observation-templates/{templateId}/unarchive — Restore archived template as draft | In: expectedRevision | Out: restored template.
+GET /api/observations/{observationId}/template — Read assigned template | In: path only | Out: assigned template.
+PATCH /api/observations/{observationId}/template — Reassign unfinished observation template | In: templateId, expectedRevision, confirmImpact? | Out: observationId, templateId, revision, archivedResponseCount.
+GET /api/observations/{observationId}/assessment — Read stored assessment | In: path only | Out: assessment responses and acknowledgement state.
+
+Notifications
+GET /api/notifications — List own notifications | In: read?, after?, page | Out: notification page, unreadCount, latestCursor.
+DELETE /api/notifications — Remove items from own inbox | In: notificationIds[] | Out: deletedCount, unreadCount.
+GET /api/notifications/unread-count — Count unread notifications | In: session | Out: unreadCount, asOf.
+PATCH /api/notifications/{notificationId} — Set read state | In: read | Out: notification.
+POST /api/notifications/mark-all-read — Mark current inbox read | In: empty body or {} | Out: updatedCount, cutoff, unreadCount.
+
+Administration
+GET /api/users — List accounts | In: q?, accountStatus?, roleId?, departmentId?, hiringLevelId?, page | Out: user page.
+POST /api/users — Create account | In: name, email, accountStatus?, roleIds[], professor? | Out: created user.
+GET /api/users/{userId} — Read account | In: path only | Out: user.
+PATCH /api/users/{userId} — Update account | In: expectedRevision, name?, email?, accountStatus?, professor? | Out: updated user.
+DELETE /api/users/{userId} — Delete eligible account | In: path only | Out: 204.
+PUT /api/users/{userId}/roles — Replace assigned roles | In: roleIds[], expectedRevision | Out: userId, roleIds, effective permissions, revision.
+GET /api/roles — List roles | In: page | Out: role page with permission keys, including all catalog keys for Admin.
+GET /api/permissions — Read permission catalog | In: none | Out: {items} with keys, names, descriptions and feature groups.
+PUT /api/roles/{roleId}/permissions — Replace editable role grants | In: permissionKeys[], expectedRevision | Out: roleId, direct/effective keys, revision; Admin returns 409.
+GET /api/hiring-levels — List hiring levels | In: none | Out: {items} of hiring levels.
+POST /api/hiring-levels — Create hiring level | In: name, evaluationIntervalYears, active? | Out: hiring level.
+PATCH /api/hiring-levels/{hiringLevelId} — Update hiring level | In: expectedRevision, name?, evaluationIntervalYears?, active? | Out: hiring level.
+DELETE /api/hiring-levels/{hiringLevelId} — Delete unused hiring level | In: path only | Out: 204.
+GET /api/departments — List departments | In: q?, page | Out: department page.
+
+Development
+GET /api/test/{area} — Check development access | In: area and session | Out: access probe response.
