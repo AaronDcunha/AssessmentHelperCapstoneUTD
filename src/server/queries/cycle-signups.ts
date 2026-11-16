@@ -60,6 +60,7 @@ function signupResponse(row: SignupRow, canReadObservations: boolean, canPublish
         && !observation.completedAt && !observation.signedAssessment
         && ["PENDING", "CONFIRMED"].includes(observation.status.toUpperCase()) && canPublish } : {}),
     signupId: row.signupId, revision: row.revision, observationId: observation?.observationId ?? null,
+    observationCompleted: !!observation?.completedAt || observation?.status?.toUpperCase() === "COMPLETED",
     observee: { id: row.professor.user.userId, name: row.professor.user.fullName, email: row.professor.user.email },
     section: {
       id: section.sectionId, sectionNumber: section.sectionCode, semesterId: section.semesterId,

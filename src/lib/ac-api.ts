@@ -37,6 +37,7 @@ export type ObserverSelectionSignup = {
   revision?: number;
   observationRevision?: number | null;
   candidateCount?: number | null; canPublishDraft?: boolean; recommendationsReleasedAt?: string | null;
+  observationCompleted: boolean;
   currentDraftListId?: string | null; currentReleasedListId?: string | null;
   section: {
     id: string; sectionNumber: string; semesterId?: string;

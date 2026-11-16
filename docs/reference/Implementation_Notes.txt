@@ -1,3 +1,7 @@
+November 16, 2026 AC Faculty Signups:
+Observer Selection hides signups whose observation is completed. The cycle
+signups API retains these records and exposes observationCompleted for filtering.
+
 November 11, 2026 AC Semester Feedback:
 AC users with feedback.read can review submitted process feedback at /ac/feedback.
 The page defaults to the unique current semester based on configured dates and

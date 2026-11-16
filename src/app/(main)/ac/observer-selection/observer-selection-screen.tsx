@@ -88,7 +88,8 @@ function CycleObserverSelection({ selectedCycle, canGenerate, canRelease, canReg
     setLoading(true); setLoadError(null);
     try {
       const signups = await acApi.getObserverSelectionSignups(cycleId);
-      const loaded = signups.map(signup => ({ signup, revision: signup.observationRevision ?? null }));
+      const loaded = signups.filter(signup => !signup.observationCompleted)
+        .map(signup => ({ signup, revision: signup.observationRevision ?? null }));
       if (currentRequest !== requestId.current) return;
       setRows(loaded);
       const selectable = new Set(loaded.filter(hasObservation).filter(row => initialRow(row) || publishable(row))
