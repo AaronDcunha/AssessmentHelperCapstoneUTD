@@ -46,7 +46,7 @@ export function parseObservationHistoryResponse(value: unknown): ObservationHist
       participation,
       courseSection: `${text(course.code)}.${text(section.sectionNumber)}`,
       otherProfessor: other ? text(other.name) : "Not assigned",
-      statusLabel: status === "COMPLETED" ? "Completed" : status,
+      statusLabel: status === "SURVEY_PENDING" ? "Survey pending" : status === "COMPLETED" ? "Completed" : status,
     };
   });
 }

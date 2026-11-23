@@ -28,6 +28,7 @@ const STAGE_LABELS: Record<string, string> = {
   "awaiting-observer-submission": "Awaiting observer submission",
   "awaiting-observee-acknowledgement": "Awaiting observee acknowledgement",
   "awaiting-finalization": "Awaiting finalization",
+  "survey-pending": "Survey pending",
   "reported-not-occurred": "Reported as missed",
 };
 const PAGE_SIZES = [5, 10, 25] as const;
@@ -92,7 +93,7 @@ function ExecutiveSummary({ rows }: { rows: ReportsResponse["byHiringLevel"] }) 
                 <td className={numberClass}>{item.needsReview ?? "—"}</td>
                 <td>{stages.length ? <ul className="space-y-ah-4 text-label">{stages.map(([stage, count]) => {
                   const overdue = item.overdueStages?.[stage];
-                  return <li key={stage}>{stageLabel(stage)}: {count}{overdue ? ` (${overdue} past the observation deadline)` : ""}</li>;
+                  return <li key={stage}>{stageLabel(stage)}: {count}{overdue ? ` (${overdue} past the ${stage === "survey-pending" ? "feedback" : "observation"} deadline)` : ""}</li>;
                 })}</ul> : <span className="text-muted">—</span>}</td>
               </tr>;
             })}</tbody>

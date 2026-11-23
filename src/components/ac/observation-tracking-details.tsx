@@ -1,5 +1,11 @@
+import Image from "next/image";
 import { Section } from "@/components/ui/section";
 import type { ObservationDetail, ObservationMeeting } from "@/lib/ac-api";
+
+export function observationStatusLabel(status: string | null | undefined) {
+  return status?.trim().replace(/_+/g, " ").toLowerCase()
+    .replace(/(^|\s)\p{L}/gu, (letter) => letter.toUpperCase()) || undefined;
+}
 
 function meetingZone(value: string | null | undefined) {
   if (value) {
@@ -28,18 +34,57 @@ function MeetingDetails({ meeting }: { meeting: ObservationMeeting }) {
   </div>;
 }
 
+const milestoneBadge = {
+  completed: "bg-light text-sidebar",
+  next: "bg-sidebar text-surface",
+  pending: "bg-neutral-bg text-ink",
+};
+
+function ObservationProgress({ detail }: { detail: ObservationDetail }) {
+  const steps = detail.progress ?? [];
+  const completedCount = steps.filter(step => step.state.toLowerCase() === "completed").length;
+  const closed = ["COMPLETED", "CANCELLED", "CANCELED", "NOT_OCCURRED"].includes(detail.observation.status?.toUpperCase() ?? "");
+  const nextIndex = closed ? -1 : steps.findIndex(step => step.state.toLowerCase() === "pending");
+
+  return <Section title="Observation progress"
+    actions={steps.length > 0 && <p className="text-label text-muted">{completedCount} of {steps.length} milestones complete</p>}
+    className="[&>div:first-child]:mb-ah-12 [&>div:first-child]:items-center">
+    {steps.length > 0 ? (
+      <ol role="list" aria-label="Observation progress timeline" className="border-t border-border pt-ah-12">
+        {steps.map((step, index) => {
+          const complete = step.state.toLowerCase() === "completed";
+          const next = index === nextIndex;
+          const tone = complete ? "completed" : next ? "next" : "pending";
+          const label = next ? "Next step" : observationStatusLabel(step.state) ?? "State not provided";
+          const date = complete && step.completedAt ? timestamp(step.completedAt) : "—";
+          const guidance = step.key === "survey" ? "The observee and observer each submit a survey."
+            : next && step.key === "observer" ? "Choose an observer to move on to scheduling." : null;
+          return <li key={`${step.key}-${index}`} aria-current={next ? "step" : undefined}
+            className="group relative grid min-h-[60px] grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-ah-8 py-ah-8 sm:gap-ah-16">
+            <span aria-hidden="true" className="absolute inset-y-0 left-[11px] w-0.5 bg-border group-first:top-1/2 group-last:bottom-1/2" />
+            <span aria-hidden="true" className="relative grid size-ah-24 place-items-center">
+              {complete ? <span className="grid size-ah-24 place-items-center rounded-ah-pill bg-sidebar">
+                <Image src="/observation-progress/completed-check.svg" alt="" width={12} height={12} unoptimized />
+              </span> : next ? <Image src="/observation-progress/next-marker.svg" alt="" width={24} height={24} unoptimized />
+                : <span className="size-ah-24 rounded-ah-pill border-2 border-muted bg-surface" />}
+            </span>
+            <div className="min-w-0 space-y-ah-4">
+              <h3 className="text-body text-ink">{step.label?.trim() || step.key}</h3>
+              {date !== "—" ? <time dateTime={step.completedAt ?? undefined} className="block text-caption text-muted">{date}</time>
+                : guidance && !complete ? <p className="text-caption text-muted">{guidance}</p> : null}
+            </div>
+            <span className={`rounded-ah-pill px-ah-8 py-ah-4 text-center text-label sm:px-ah-12 ${milestoneBadge[tone]}`}>{label}</span>
+          </li>;
+        })}
+      </ol>
+    ) : <p className="text-body text-muted">No progress information is available.</p>}
+  </Section>;
+}
+
 export function ObservationTrackingDetails({ detail }: { detail: ObservationDetail }) {
   const scheduled = detail.observation.scheduledMeeting;
   return <>
-    <Section title="Observation progress">
-      {detail.progress?.length ? <ol className="space-y-ah-16" aria-label="Observation progress timeline">
-        {detail.progress.map((step, index) => <li key={`${step.key}-${index}`} className="border-l-2 border-border pl-ah-16">
-          <h3 className="text-label text-ink">{step.label?.trim() || step.key}</h3>
-          <p className="text-body text-ink">{step.state || "State not provided"}</p>
-          <p className="text-caption text-muted">{step.completedAt ? `Completed: ${timestamp(step.completedAt)}` : "Completion date not recorded"}</p>
-        </li>)}
-      </ol> : <p className="text-body text-muted">No progress information is available.</p>}
-    </Section>
+    <ObservationProgress detail={detail} />
     <Section title="Scheduled observation">
       {scheduled ? <MeetingDetails meeting={scheduled} /> : <p className="text-body text-muted">
         {scheduled === null ? "No observation meeting is scheduled." : "Scheduled meeting information is unavailable."}

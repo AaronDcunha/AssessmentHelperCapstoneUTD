@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/form-fields";
 import { Section } from "@/components/ui/section";
 import { acApi, ApiRequestError, type Cycle, type Semester } from "@/lib/ac-api";
-import { configurationError, defaultSemesterDeadlines, cycleDeadlines, deadlineKeys, deadlinePayload, validDateOnly, type Deadlines } from "@/lib/ac-configuration";
+import { configurationError, defaultSemesterDeadlines, cycleDeadlines, deadlineKeys, deadlinePayload, semesterDeadlineBounds, semesterDeadlineError, validDateOnly, type Deadlines } from "@/lib/ac-configuration";
 import { currentSemester } from "@/lib/observer-selection";
 import { guardUnsavedNavigation } from "@/lib/unsaved-navigation";
 import { useAcCycle } from "@/components/ac/cycle-context";
@@ -28,6 +28,8 @@ function SemesterForm({ semester, cycle, canManage, leaveRef, onSaved, onDeleted
   const busy = useRef(false), request = useRef<null | (() => Promise<{ semester: Semester; cycle: Cycle }>)>(null);
   const dirty = JSON.stringify(settings) !== JSON.stringify(settingsFor(baseline.semester, baseline.cycle));
   const allowed = canManage && (!baseline.cycle || !!baseline.cycle.allowedActions?.includes("updateSettings"));
+  const deadlineBounds = semesterDeadlineBounds(settings.startsOn, settings.endsOn);
+  const deadlineError = (key: keyof Deadlines) => semesterDeadlineError(key, settings[key], settings.startsOn, settings.endsOn);
   useEffect(() => {
     leaveRef.current = () => !busy.current && !uncertain && (!dirty || window.confirm("Discard unsaved semester changes?"));
     return () => { leaveRef.current = () => true; };
@@ -37,14 +39,11 @@ function SemesterForm({ semester, cycle, canManage, leaveRef, onSaved, onDeleted
     setMessage("");
     setSettings(current => {
       const next = { ...current, [name]: value };
-      if (!baseline.cycle) {
-        if (name === "startsOn" && (!current.signupDeadline || current.signupDeadline === `${current.startsOn}T12:00`)) next.signupDeadline = value ? `${value}T12:00` : "";
-        if (name === "endsOn" && validDateOnly(value)) {
-          const date = new Date(`${value}T12:00:00Z`); date.setUTCDate(date.getUTCDate() + 7);
-          if (!current.observationDeadline || current.observationDeadline === `${current.endsOn}T12:00`) next.observationDeadline = `${value}T12:00`;
-          const old = validDateOnly(current.endsOn) ? new Date(`${current.endsOn}T12:00:00Z`) : null;
-          old?.setUTCDate(old.getUTCDate() + 7);
-          if (!current.feedbackDeadline || current.feedbackDeadline === `${old?.toISOString().slice(0, 10)}T12:00`) next.feedbackDeadline = `${date.toISOString().slice(0, 10)}T12:00`;
+      if (!baseline.cycle && (name === "startsOn" || name === "endsOn")) {
+        const currentDefaults = defaultSemesterDeadlines(current.startsOn, current.endsOn);
+        const nextDefaults = defaultSemesterDeadlines(next.startsOn, next.endsOn);
+        for (const key of deadlineKeys) {
+          if (!current[key] || current[key] === currentDefaults[key]) next[key] = nextDefaults[key];
         }
       }
       return next;
@@ -57,6 +56,8 @@ function SemesterForm({ semester, cycle, canManage, leaveRef, onSaved, onDeleted
     try {
       if (!request.current) {
         if (!validDateOnly(settings.startsOn) || !validDateOnly(settings.endsOn) || settings.startsOn > settings.endsOn) throw new Error("Enter valid ordered semester dates.");
+        const rangeError = deadlineKeys.map(deadlineError).find(Boolean);
+        if (rangeError) throw new Error(rangeError);
         const deadlines = deadlinePayload(settings, settings.timeZone, settings.timeZone === baseline.semester?.timeZone ? baseline.cycle : undefined);
         const dates = { startsOn: settings.startsOn, endsOn: settings.endsOn, timeZone: settings.timeZone };
         const original = baseline.semester, originalCycle = baseline.cycle;
@@ -102,16 +103,16 @@ function SemesterForm({ semester, cycle, canManage, leaveRef, onSaved, onDeleted
   }
   return <form onSubmit={submit} className="space-y-ah-24" aria-busy={saving}>
     <Section title={baseline.semester ? baseline.semester.name : "New Semester"} description="Semester dates and evaluation deadlines" contentClassName="space-y-ah-16">
-      {!baseline.cycle && <p className="text-muted">Saving creates an evaluation cycle with this semester. Suggested deadlines are editable: signup at noon on the start date, observation at noon on the end date, feedback at noon seven days later.</p>}
+      {!baseline.cycle && <p className="text-muted">Saving creates an evaluation cycle with this semester. You can adjust the suggested deadlines.</p>}
       {!allowed && <p className="text-warning">You cannot change these settings.</p>}
       <fieldset disabled={saving || uncertain || !allowed} className="grid min-w-0 grid-cols-1 gap-ah-16 md:grid-cols-2">
         {!baseline.semester && <><Select label="Season" name="season" {...bind("season")}><option>Spring</option><option>Summer</option><option>Fall</option></Select><Input label="Year" name="year" type="number" min="2000" max="2099" required {...bind("year")} /></>}
-        <Input label="Semester Start" name="startsOn" type="date" required {...bind("startsOn")} />
-        <Input label="Semester End" name="endsOn" type="date" required {...bind("endsOn")} />
+        <Input label="Semester Start" name="startsOn" type="date" max={settings.endsOn || undefined} required {...bind("startsOn")} />
+        <Input label="Semester End" name="endsOn" type="date" min={settings.startsOn || undefined} required {...bind("endsOn")} />
         <Input label="Time zone" name="timeZone" required hint="IANA zone, for example America/Chicago. Deadline times use this zone." {...bind("timeZone")} />
-        {deadlineKeys.map(key => <Input key={key} label={{ signupDeadline: "Signup Deadline", observationDeadline: "Observation Deadline", feedbackDeadline: "Feedback Deadline" }[key]} name={key} type="datetime-local" step="1" required {...bind(key)} />)}
+        {deadlineKeys.map(key => <Input key={key} label={{ signupDeadline: "Signup Deadline", observationDeadline: "Observation Deadline", feedbackDeadline: "Feedback Deadline" }[key]} name={key} type="datetime-local" step="1" required error={deadlineError(key)} aria-describedby="semester-deadline-rules" {...deadlineBounds} {...bind(key)} />)}
       </fieldset>
-      <p className="text-caption text-muted">Signup must be before observation, then feedback. Feedback can follow semester end. Unchanged deadlines retain their exact saved times.</p>
+      <p id="semester-deadline-rules" className="text-caption text-muted">All deadlines must fall within the semester dates, including the first and last day. Signup must come before observation, then feedback.</p>
     </Section>
     {message && <p role={message === "Settings saved." ? "status" : "alert"} className={message === "Settings saved." ? "text-sidebar" : "text-danger"}>{message}</p>}
     {uncertain && <p role="alert" className="text-warning">Creation may have succeeded. Retry the original creation to recover it before changing fields or semesters.</p>}

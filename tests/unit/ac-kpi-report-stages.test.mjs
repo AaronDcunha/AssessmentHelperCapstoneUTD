@@ -1,7 +1,8 @@
 import '../../scripts/server-loader.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-const { pendingActionOverdue, unmatchedStage } = await import('../../src/server/queries/ac-metrics.ts');
+const { pendingActionOverdue, pendingStage, unmatchedStage } = await import('../../src/server/queries/ac-metrics.ts');
+const { feedbackWindowOpen } = await import('../../src/server/services/feedback-window.ts');
 
 const now = new Date('2026-10-30T12:00:00Z');
 const past = new Date('2026-10-29T12:00:00Z');
@@ -37,4 +38,16 @@ test('cancelled generations and releases cannot advance an unmatched signup stag
   assert.equal(unmatchedStage([...retained, { status: 'PENDING', currentDraftListId: 'new' }]), 'awaiting-release');
   assert.equal(unmatchedStage([...retained, { status: 'PENDING', currentReleasedList: {publishedAt:now} }]), 'awaiting-selection');
   assert.equal(unmatchedStage([{status:'PENDING',recommendationGenerationId:'unclassified',recommendationsReleasedAt:now}]), 'awaiting-generation');
+});
+
+test('required surveys open at assessment lock and use the inclusive feedback deadline', () => {
+  const record = { ...observation, status: 'SURVEY_PENDING', cycle: { observationDeadline: past, feedbackDeadline: now },
+    signedAssessment: { isLocked: true, observerSignedAt: past, observeeSignedAt: past } };
+  assert.equal(pendingStage(record, now), 'survey-pending');
+  assert.equal(feedbackWindowOpen(record, now), true);
+  assert.equal(feedbackWindowOpen(record, future), false);
+  assert.equal(feedbackWindowOpen({ ...record, signedAssessment: null }, now), false);
+  assert.equal(feedbackWindowOpen({ ...record, status: 'CANCELLED' }, now), false);
+  assert.equal(pendingActionOverdue(record, now, past, now), false);
+  assert.equal(pendingActionOverdue(record, future, past, now), true);
 });

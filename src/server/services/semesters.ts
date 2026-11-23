@@ -1,5 +1,5 @@
 import type { PrismaClient } from "../../generated/prisma/client";
-import { ConfigurationError, date, deadlines, fields, invalid, object, revision, timeZone, uuid, type ConfigurationUser } from "../configuration-validation";
+import { ConfigurationError, date, deadlines, fields, invalid, object, revision, timeZone, uuid, validateSemesterDeadlines, type ConfigurationUser } from "../configuration-validation";
 import { authorize, semesterResponse } from "../queries/configuration";
 import { removeFacultyAttachmentFile } from "./faculty-attachments";
 
@@ -23,6 +23,7 @@ export async function createSemester(prisma: PrismaClient, user: ConfigurationUs
         return semesterResponse(existing);
       }
     }
+    if (d) validateSemesterDeadlines(d, { startsOn, endsOn, timeZone: zone });
     const saved = await db.semester.create({ data: { ...data, ...(semesterId ? { semesterId } : {}) } });
     if (d) await db.evaluationCycle.create({ data: { semesterId: saved.semesterId, cycleName: saved.termName, signupDeadline: new Date(d.signupDeadline), observationDeadline: new Date(d.observationDeadline), feedbackDeadline: new Date(d.feedbackDeadline) } });
     return semesterResponse(saved);

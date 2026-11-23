@@ -1216,6 +1216,21 @@ requires the full workflow and OBSERVEE feedback only. Reports include signup-on
 unmatched faculty and unfinished observation stage counts. All values are labelled
 live recalculations, including after the feedback deadline; no snapshot/schema,
 form-save, matching-generation, or notification mutation was introduced.
+November 23, 2026 semester deadline bounds:
+Signup, observation, and feedback deadlines must fall within the semester's
+configured local start and end dates, inclusive. Semester Settings checks
+edited boundaries and deadlines together. Existing out-of-range values remain
+visible and must be corrected before saving.
+
+November 23, 2026 required observation survey:
+Both the observee and observer must submit a survey. Their final assessment
+acknowledgement locks the form and opens the survey immediately, through the
+cycle feedback deadline. It queues one email and in-app notice per participant
+with the deadline in the semester time zone. New observations remain
+SURVEY_PENDING until both participant responses are recorded, even after the
+deadline. Academic evaluation history still uses the locked assessment date.
+Previously completed records are preserved without retroactive notifications.
+
 October 30, 2026 shared demo signup seed:
 The ten signup fixtures are now reproducible through prisma/seed-signups.mjs and
 npm run db:seed:signups (preview: db:seed:signups:preview). npm run db:seed and

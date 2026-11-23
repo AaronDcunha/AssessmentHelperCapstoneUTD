@@ -1,6 +1,6 @@
 import "server-only";
 import type { Prisma } from "../../generated/prisma/client";
-import { feedbackWindowOpen } from "../services/feedback-window";
+import { feedbackReady, feedbackWindowOpen } from "../services/feedback-window";
 import type { AccountUser } from "../account-auth";
 import { getPrisma } from "../prisma";
 import { availableOption, observerAvailable, workflowObservation } from "../services/faculty-invitations";
@@ -54,7 +54,8 @@ export async function getFacultyLinks(user: AccountUser, cycleId: string, now = 
   }) : [];
   return { allowedActions: { invite: user.permissions.includes("invitations.send.own"), select: user.permissions.includes("observer.select.own"), respond: user.permissions.includes("invitations.respond.own"), lateAcceptance: user.permissions.includes("late-acceptance.request.own"), feedback: user.permissions.includes("feedback.submit.own") }, recommendations, requests, feedback: feedback.map(record => ({ observationId: record.observationId,
     label: `${record.signup.section.course.courseCode}.${record.signup.section.sectionCode}`,
-    submitted: record.processFeedback.length > 0, allowed: feedbackWindowOpen(record, now),
+    submitted: record.processFeedback.length > 0, allowed: feedbackWindowOpen(record, now), ready: feedbackReady(record),
+    deadline: record.cycle.feedbackDeadline.toISOString(),
     role: record.signup.professor.userId === user.id ? "observee" : "observer",
     attachments: record.processFeedback.flatMap(feedback => feedback.attachments.map(attachment => ({ id: attachment.attachmentId, name: attachment.originalName }))) })) };
 }

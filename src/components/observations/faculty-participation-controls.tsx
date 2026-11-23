@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/form-fields";
 import { acApi } from "@/lib/ac-api";
+import { deadlineDisplay } from "@/lib/ac-configuration";
 import { postFacultyAction } from "./faculty-api";
 import type { FacultyWorkflow } from "@/server/queries/faculty-workflow";
 
@@ -27,15 +28,21 @@ export function FacultyIssueControl({ observationId, kind, disabled = false }: {
   </div>;
 }
 
-export function FacultyFeedbackControl({ data }: { data: FacultyWorkflow | null }) {
+export function FacultyFeedbackControl({ data, observationId }: { data: FacultyWorkflow | null; observationId?: string }) {
   const router = useRouter(), [opened, setOpened] = useState(false), [id, setId] = useState(""), [rating, setRating] = useState(""), [difficulties, setDifficulties] = useState(""), [suggestions, setSuggestions] = useState(""), [pending, setPending] = useState(false), [message, setMessage] = useState("");
-  const items = data?.links?.feedback ?? [], available = data?.links?.allowedActions.feedback ? items.filter(item => item.allowed && !item.submitted) : [];
+  const items = (data?.links?.feedback ?? []).filter(item => !observationId || item.observationId === observationId);
+  const canSubmit = data?.links?.allowedActions.feedback;
+  const available = canSubmit ? items.filter(item => item.allowed && !item.submitted) : [];
+  const selected = available.find(item => item.observationId === id) ?? available[0];
+  const timeZone = data?.dashboard.cycle?.timeZone ?? "UTC";
   const [file, setFile] = useState<File | null>(null), [uploaded, setUploaded] = useState<{ id: string; observationId: string } | null>(null);
-  return <div className="space-y-ah-16"><Button variant="secondary" disabled={!available.length} onClick={() => setOpened(!opened)}>Complete Survey</Button>
-    {opened && <form className="space-y-ah-16 rounded-ah-8 border border-border bg-surface p-ah-24" onSubmit={async event => {
+  return <div id="observation-survey" className="space-y-ah-16">
+    {selected && <p className="text-label text-ink">Required survey due <time dateTime={selected.deadline}>{deadlineDisplay(selected.deadline, timeZone)} ({timeZone})</time>. Both participants must submit.</p>}
+    <Button variant="secondary" disabled={!selected || pending} aria-expanded={opened && !!selected} onClick={() => setOpened(!opened)}>Complete Survey</Button>
+    {opened && selected && <form className="space-y-ah-16 rounded-ah-8 border border-border bg-surface p-ah-24" onSubmit={async event => {
       event.preventDefault(); if (pending) return; setPending(true); setMessage("");
       try {
-        const observationId = id || available[0]?.observationId;
+        const observationId = selected.observationId;
         let attachment = uploaded?.observationId === observationId ? uploaded.id : null;
         if (file && !attachment) {
           const form = new FormData(); form.set("observationId", observationId); form.set("file", file);
@@ -43,14 +50,17 @@ export function FacultyFeedbackControl({ data }: { data: FacultyWorkflow | null 
           if (!response.ok) throw new Error(result.error ?? "Upload failed.");
           attachment = result.attachmentId; setUploaded({ id: result.attachmentId, observationId });
         }
-        const result = await postFacultyAction<{ message: string }>("feedback", { observationId, satisfaction: Number(rating), difficulties, suggestions, ...(attachment ? { attachmentIds: [attachment] } : {}) }); setMessage(result.message); setOpened(false); router.refresh();
+        const result = await postFacultyAction<{ message: string }>("feedback", { observationId, satisfaction: Number(rating), difficulties, suggestions, ...(attachment ? { attachmentIds: [attachment] } : {}) }); setMessage(result.message); setOpened(false); setRating(""); setDifficulties(""); setSuggestions(""); setFile(null); setUploaded(null); router.refresh();
       }
       catch (error) { setMessage(error instanceof Error ? error.message : "The survey could not be saved."); }
       finally { setPending(false); }
-    }}><Select label="Observation" value={id || available[0]?.observationId || ""} onChange={event => setId(event.target.value)}>{available.map(item => <option key={item.observationId} value={item.observationId}>{item.label} · {item.role}</option>)}</Select>
+    }}><Select label="Observation" value={selected.observationId} disabled={pending} onChange={event => { setId(event.target.value); setFile(null); setUploaded(null); }}>{available.map(item => <option key={item.observationId} value={item.observationId}>{item.label} · {item.role}</option>)}</Select>
       <Select label="How satisfied were you with the process?" required value={rating} onChange={event => setRating(event.target.value)}><option value="">Choose a rating</option>{["Very dissatisfied", "Dissatisfied", "Neutral", "Satisfied", "Very satisfied"].map((label, index) => <option key={label} value={index + 1}>{index + 1} · {label}</option>)}</Select>
       <Textarea label="Difficulties" maxLength={20000} value={difficulties} onChange={event => setDifficulties(event.target.value)} /><Textarea label="Suggestions" maxLength={20000} value={suggestions} onChange={event => setSuggestions(event.target.value)} /><Input type="file" label="Supporting material (optional)" accept="application/pdf,image/png,image/jpeg" disabled={pending || !!uploaded} onChange={event => setFile(event.target.files?.[0] ?? null)} hint="PDF, PNG or JPEG up to 5 MiB. Stored privately." /><Button type="submit" disabled={pending}>Submit Feedback</Button></form>}
-    {!available.length && <p className="text-caption text-muted">{items.some(item => item.submitted) ? "Your feedback is recorded." : "Feedback opens when both participants acknowledge the assessment or after the observation deadline. It closes at the feedback deadline."}</p>}
+    {!selected && <p className="text-caption text-muted">{!canSubmit ? "Survey submission is unavailable."
+      : items.some(item => item.ready && !item.allowed && !item.submitted) ? "The feedback deadline has passed."
+        : items.length > 0 && items.every(item => item.submitted) ? "Your feedback is recorded."
+          : "The required survey opens once both participants acknowledge the observation."}</p>}
     {message && <p role="status" className="text-muted">{message}</p>}
     {items.flatMap(item => item.attachments).map(attachment => <a className="block text-caption text-sidebar underline" key={attachment.id} href={`/api/me/dashboard/feedback/attachments/${attachment.id}`}>Download {attachment.name}</a>)}
   </div>;

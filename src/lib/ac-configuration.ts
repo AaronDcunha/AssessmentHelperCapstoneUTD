@@ -3,6 +3,11 @@ import { parseCalendarDate } from "./calendar-date";
 
 export const deadlineKeys = ["signupDeadline", "observationDeadline", "feedbackDeadline"] as const;
 export type Deadlines = Record<typeof deadlineKeys[number], string>;
+export const deadlineLabels: Record<keyof Deadlines, string> = {
+  signupDeadline: "Signup deadline",
+  observationDeadline: "Observation deadline",
+  feedbackDeadline: "Feedback deadline",
+};
 
 export function configurationError(error: unknown): string {
   if (!(error instanceof ApiRequestError)) return error instanceof TypeError ? "Could not connect. Check your connection and retry; your edits are preserved." : error instanceof Error ? error.message : "The request failed. Please retry.";
@@ -28,6 +33,19 @@ export function deadlineInput(iso: string | null | undefined, timeZone: string) 
 }
 export function validDateOnly(value: string) {
   return !!parseCalendarDate(value);
+}
+
+export function semesterDeadlineBounds(startsOn?: string | null, endsOn?: string | null) {
+  return {
+    min: startsOn && validDateOnly(startsOn) ? `${startsOn}T00:00:00` : undefined,
+    max: endsOn && validDateOnly(endsOn) ? `${endsOn}T23:59:59` : undefined,
+  };
+}
+
+export function semesterDeadlineError(key: keyof Deadlines, value: string, startsOn?: string | null, endsOn?: string | null) {
+  const day = value.slice(0, 10);
+  return validDateOnly(day) && ((!!startsOn && day < startsOn) || (!!endsOn && day > endsOn))
+    ? `${deadlineLabels[key]} must fall within the semester dates.` : undefined;
 }
 /** Convert a wall clock in the semester zone. Reject gaps/folds instead of silently
  * moving the cutoff. Unedited inputs retain the exact original instant (including ms).
@@ -101,9 +119,12 @@ export function templatePayload(draft: TemplateDraft): ObservationTemplateWrite 
   return { title: draft.title, criteria, commentPrompts: draft.commentPrompts.map((item, order) => ({ ...(item.id ? { id: item.id } : {}), prompt: text(item.prompt, "Comment prompt"), required: item.required, order })), signatureLabels: { observer: text(draft.signatureLabels.observer, "Observer signature label"), observee: text(draft.signatureLabels.observee, "Observee signature label") } };
 }
 
-/** Editable noon defaults in the semester wall clock; conversion happens on save. */
+/** Editable defaults use the semester wall clock and remain ordered on a one-day semester. */
 export function defaultSemesterDeadlines(startsOn: string, endsOn: string): Deadlines {
-  const end = validDateOnly(endsOn) ? new Date(`${endsOn}T12:00:00Z`) : null;
-  end?.setUTCDate(end.getUTCDate() + 7);
-  return { signupDeadline: validDateOnly(startsOn) ? `${startsOn}T12:00` : "", observationDeadline: end ? `${endsOn}T12:00` : "", feedbackDeadline: end ? `${end.toISOString().slice(0, 10)}T12:00` : "" };
+  const hasEnd = validDateOnly(endsOn);
+  return {
+    signupDeadline: validDateOnly(startsOn) ? `${startsOn}T12:00` : "",
+    observationDeadline: hasEnd ? `${endsOn}T${startsOn === endsOn ? "15:00" : "12:00"}` : "",
+    feedbackDeadline: hasEnd ? `${endsOn}T17:00` : "",
+  };
 }

@@ -51,7 +51,7 @@ async function textIncludes(text) { await wait(`document.querySelector('main')?.
 
 const uuid = n => `00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 let semesters = [{ id: uuid(1), name: 'Fall 2026', startsOn: '2026-08-31', endsOn: '2026-12-16', timeZone: 'America/Chicago', revision: 0 }];
-let cycle = { id: uuid(2), semester: semesters[0], revision: 0, signupDeadline: '2026-10-31T22:30:00.000Z', observationDeadline: '2026-11-30T23:00:00.000Z', feedbackDeadline: '2026-12-20T23:00:00.000Z', allowedActions: ['update','updateSettings'] };
+let cycle = { id: uuid(2), semester: semesters[0], revision: 0, signupDeadline: '2026-10-31T22:30:00.000Z', observationDeadline: '2026-11-30T23:00:00.000Z', feedbackDeadline: '2026-12-16T23:00:00.000Z', allowedActions: ['update','updateSettings'] };
 let newCycle = null;
 const writes = []; let failure;
 async function fulfill(event, body, status=200) { await send('Fetch.fulfillRequest',{requestId:event.requestId,responseCode:status,responseHeaders:[{name:'Content-Type',value:'application/json'}],body:Buffer.from(JSON.stringify(body)).toString('base64')}); }

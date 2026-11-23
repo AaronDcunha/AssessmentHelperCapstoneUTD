@@ -471,7 +471,17 @@ try {
   assert.equal(finalized.filter(result => result.status === 'fulfilled').length, 1);
   const assessment = await prisma.signedAssessment.findUnique({ where: { observationId: paired.observationId } });
   assert.ok(assessment.isLocked && assessment.observerSignedAt && assessment.observeeSignedAt);
-  assert.equal((await prisma.observation.findUnique({ where: { observationId: paired.observationId } })).status, 'COMPLETED');
+  assert.equal((await prisma.observation.findUnique({ where: { observationId: paired.observationId } })).status, 'SURVEY_PENDING');
+  const surveyNotices = await prisma.notification.findMany({ where: { eventKey: `observation-survey:${paired.observationId}` }, include: { emailDelivery: true } });
+  assert.deepEqual(new Set(surveyNotices.map(item => item.userId)), new Set([observer.id, faculty[0].id]));
+  assert.equal(surveyNotices.length, 2, 'Concurrent finalization queues one notice per participant');
+  const surveyCycle = await prisma.evaluationCycle.findUniqueOrThrow({ where: { cycleId }, include: { semester: true } });
+  const { deadlineDisplay } = load('src/lib/ac-configuration.ts');
+  const due = deadlineDisplay(surveyCycle.feedbackDeadline.toISOString(), surveyCycle.semester.timeZone);
+  for (const notice of surveyNotices) {
+    assert.equal(notice.emailDelivery?.status, 'pending');
+    assert.ok(notice.message.includes(due) && notice.message.includes(surveyCycle.semester.timeZone));
+  }
   const frozenBeforeLiveEdit = await forms.getFacultyAssessment(observer);
   const editedAfterFinalization = await configuration.updateTemplate(prisma, committee, template.id, { expectedRevision: editedAfterFirstSignature.revision, title: 'Changed live template after finalization', criteria: [{ id: template.criteria[0].id, key: 'rating', prompt: 'A different live question', type: 'rating', required: true, order: 0, options: [{ value: 10, label: 'Different low' }, { value: 20, label: 'Different high' }] }], signatureLabels: { observer: 'Changed observer label', observee: 'Changed observee label' } });
   const archivedAfterFinalization = await configuration.deleteTemplate(prisma, committee, template.id, { expectedRevision: editedAfterFinalization.revision });
@@ -502,6 +512,7 @@ try {
   await assert.rejects(invitations.selectFacultyObserver(faculty[1], { candidateId: deadlineRecord.candidate.candidateId }));
   assert.equal(await forms.getFacultyAssessment(faculty[0]), null);
   await assert.rejects(assessments.saveFacultyAssessment(faculty[0], { action: 'save', revision: deadlineForm.revision, responses }));
+  await assert.rejects(participation.submitFacultyFeedback(faculty[1], { observationId: deadlineRecord.record.observationId, satisfaction: 4, difficulties: '', suggestions: '' }), /after both participants acknowledge/);
   checked('observation deadline enforced on direct acceptance, final selection and assessment writes');
   assert.ok(originalObservationDeadline > new Date());
   await prisma.evaluationCycle.update({ where: { cycleId }, data: { observationDeadline: originalObservationDeadline } });
@@ -514,7 +525,17 @@ try {
   await assert.rejects(attachments.readFacultyAttachment(observer, uploaded.attachmentId));
   await assert.rejects(participation.submitFacultyFeedback(observer, { observationId: paired.observationId, satisfaction: 5, difficulties: '', suggestions: '', attachmentIds: [uploaded.attachmentId] }));
   await participation.submitFacultyFeedback(faculty[0], { observationId: paired.observationId, satisfaction: 4, difficulties: 'None', suggestions: 'Keep it simple', attachmentIds: [uploaded.attachmentId] });
+  assert.equal((await prisma.observation.findUniqueOrThrow({ where: { observationId: paired.observationId } })).status, 'SURVEY_PENDING');
+  assert.equal(await prisma.processFeedback.count({ where: { observationId: paired.observationId } }), 1);
+  const { getCycleReport, getObservation } = load('src/server/queries/ac-reports.ts');
+  const pendingReport = await getCycleReport(prisma, committee, new URL('http://localhost'), cycleId, 'reports');
+  assert.equal(pendingReport.outstandingObservations.find(item => item.observationId === paired.observationId)?.stage, 'survey-pending');
+  const pendingDetails = await getObservation(prisma, committee, paired.observationId, 'details');
+  assert.equal(pendingDetails.progress.find(item => item.key === 'survey')?.state, 'pending');
   await participation.submitFacultyFeedback(observer, { observationId: paired.observationId, satisfaction: 5, difficulties: '', suggestions: '' });
+  assert.equal((await prisma.observation.findUniqueOrThrow({ where: { observationId: paired.observationId } })).status, 'COMPLETED');
+  const completedDetails = await getObservation(prisma, committee, paired.observationId, 'details');
+  assert.equal(completedDetails.progress.find(item => item.key === 'survey')?.state, 'completed');
   await participation.submitFacultyFeedback(faculty[0], { observationId: paired.observationId, satisfaction: 4, difficulties: 'None', suggestions: 'Keep it simple' });
   assert.equal(await prisma.processFeedback.count({ where: { observationId: paired.observationId } }), 2);
   await assert.rejects(participation.submitFacultyFeedback(faculty[3], { observationId: paired.observationId, satisfaction: 4, difficulties: '', suggestions: '' }));

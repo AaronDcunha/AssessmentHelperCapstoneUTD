@@ -130,9 +130,10 @@ Deadline inputs include time (unlike the date-only screenshot) to avoid silently
 truncating configured instants. Values display/convert in the semester's IANA zone;
 writes are UTC ISO timestamps ending in Z. Unedited deadlines preserve the exact
 original instant, including milliseconds. Edited DST gaps/repeated times require
-an unambiguous choice. There is no invented end-of-day cutoff. Semester boundaries
-stay date-only; feedback can follow semester end. Settings preserve the stored time
-zone rather than offering an unsupported semester rename.
+an unambiguous choice. Signup, observation, and feedback deadlines must fall on
+or between the semester's start and end dates in its configured time zone.
+Previously saved out-of-range deadlines remain visible and must be corrected
+before saving. Settings preserve the stored time zone unless it is explicitly edited.
 
 Only a sole cycle is automatically selected; multiple cycles require an explicit
 choice. Template selection includes drafts rather than relying on `/current`.

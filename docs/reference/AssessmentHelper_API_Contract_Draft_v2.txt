@@ -310,7 +310,8 @@ POST /api/evaluation-cycles (COMPLETED) -- cycles.manage, university-wide.
   B: {semesterId,signupDeadline,observationDeadline,feedbackDeadline}. R: Cycle.
 PATCH /api/evaluation-cycles/{cycleId} (COMPLETED) -- cycles.manage, university-wide.
   B: {expectedRevision,signupDeadline?,observationDeadline?,feedbackDeadline?}. R: Cycle.
-  Signup < observation < feedback; AC may edit passed deadlines, reopening periods.
+  Signup < observation < feedback. All three must fall within the configured
+  semester dates in its time zone. AC may edit passed deadlines, reopening periods.
 GET /api/semesters (COMPLETED) -- authorized lookup for filters and cycle setup.
   Q: year?,season?. R: List<Semester>.
   season filter: Spring|Summer|Fall. Names map from stored termName.
@@ -320,7 +321,8 @@ PUT /api/evaluation-cycles/{cycleId}/settings (COMPLETED) -- cycles.manage.
     deadlines:{signupDeadline,observationDeadline,feedbackDeadline}}.
   R: {semester:Semester,cycle:Cycle}. Both revisions increment in one transaction.
   Boundaries are valid dates with startsOn <= endsOn. timeZone is an IANA zone.
-  Deadlines are UTC timestamps; they need not fall inside semester boundaries.
+  Deadline timestamps are UTC. Their semester-local dates must fall within
+  startsOn and endsOn, inclusive.
   Reads: cycles.read/manage sees all; faculty own-record grants see semesters/cycles
   where they teach, signed up, observe, or are an observer candidate (semester
   lookup itself uses teaching assignments). Unknown/out-of-scope detail returns 404.
@@ -700,7 +702,10 @@ GET /api/evaluation-cycles/{cycleId}/feedback-form -- NEW.
 POST /api/evaluation-cycles/{cycleId}/feedback -- eligible participating faculty.
   B: {templateVersionId,answers:[{questionId,value}],difficulties?,suggestions?,
     attachmentIds?:string[]}. R: Feedback.
-  After observation period, within feedback window; validate ownership/schema.
+  Current implementation uses POST /api/me/dashboard/feedback. It requires a
+  locked, mutually acknowledged assessment and accepts submissions through the
+  cycle feedback deadline. Both assigned participants must submit before a new
+  SURVEY_PENDING observation becomes COMPLETED.
   Survey schema, duplicate submissions, dual-role counting and edits remain TBD.
 GET /api/me/feedback
   Q: cycleId?. R: List<Feedback>. Own responses only.

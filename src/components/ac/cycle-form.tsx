@@ -6,7 +6,7 @@ import { Button, ButtonLink } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/form-fields";
 import { Section } from "@/components/ui/section";
 import { acApi, type Cycle, type Semester } from "@/lib/ac-api";
-import { configurationError, cycleDeadlines, deadlineKeys, deadlinePayload, type Deadlines } from "@/lib/ac-configuration";
+import { configurationError, cycleDeadlines, deadlineKeys, deadlineLabels, deadlinePayload, semesterDeadlineBounds, semesterDeadlineError, type Deadlines } from "@/lib/ac-configuration";
 import { useApiResource } from "./use-api-resource";
 import { useAcCycle } from "./cycle-context";
 
@@ -50,6 +50,8 @@ function LoadedCycleForm({ mode, data, reload }: { mode: "create" | "edit"; data
   const active = useRef(true);
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const semester = data.cycle?.semester ?? data.semesters.find(item => item.id === semesterId);
+  const deadlineBounds = semesterDeadlineBounds(semester?.startsOn, semester?.endsOn);
+  const deadlineError = (key: keyof Deadlines) => semesterDeadlineError(key, form[key], semester?.startsOn, semester?.endsOn);
   const allowed = mode === "create" || data.cycle?.allowedActions?.includes("update");
   const existingSemesterIds = new Set(cycles.map(cycle => cycle.semester?.id));
   const semesterHasCycle = mode === "create" && existingSemesterIds.has(semesterId);
@@ -61,6 +63,8 @@ function LoadedCycleForm({ mode, data, reload }: { mode: "create" | "edit"; data
     setMessage(null); setConflict(false);
     try {
       if (!semester?.id || !semester.timeZone) throw new Error("Choose a semester with a configured time zone.");
+      const rangeError = deadlineKeys.map(deadlineError).find(Boolean);
+      if (rangeError) throw new Error(rangeError);
       const deadlines = deadlinePayload(form, semester.timeZone, data.cycle ?? undefined);
       if (mode === "edit" && data.cycle && deadlineKeys.every(key => deadlines[key] === data.cycle![key])) throw new Error("Change at least one deadline before saving.");
       busy.current = true; setSaving(true);
@@ -90,9 +94,9 @@ function LoadedCycleForm({ mode, data, reload }: { mode: "create" | "edit"; data
           <option value="">Select semester</option>
           {data.semesters.map(item => <option key={item.id} value={item.id} disabled={existingSemesterIds.has(item.id)}>{item.name}{existingSemesterIds.has(item.id) ? " — cycle already exists" : ""}</option>)}
         </Select> : <Input label="Semester" value={semester?.name ?? "Unavailable"} readOnly />}
-        {deadlineKeys.map(key => <Input key={key} label={`${key === "signupDeadline" ? "Signup" : key === "observationDeadline" ? "Observation" : "Feedback"} deadline`} name={key} type="datetime-local" step="1" required value={form[key]} onChange={event => setForm(current => ({ ...current, [key]: event.target.value }))} />)}
+        {deadlineKeys.map(key => <Input key={key} label={deadlineLabels[key]} name={key} type="datetime-local" step="1" required error={deadlineError(key)} aria-describedby="cycle-deadline-rules" {...deadlineBounds} value={form[key]} onChange={event => setForm(current => ({ ...current, [key]: event.target.value }))} />)}
       </fieldset>
-      <p className="text-caption text-muted">Deadline times use {semester?.timeZone ?? "the selected semester’s time zone"}. Exact times are saved as UTC instants. Feedback may fall after semester end.</p>
+      <p id="cycle-deadline-rules" className="text-caption text-muted">Deadlines must fall within the semester dates and use {semester?.timeZone ?? "the selected semester’s time zone"}.</p>
       {message && <p role="alert" className="text-danger">{message}</p>}
       {conflict && <Button variant="secondary" disabled={saving} onClick={() => { if (window.confirm("Discard edits and reload the latest cycle?")) reload(); }}>Reload latest cycle</Button>}
       <div className="flex flex-wrap gap-ah-16">

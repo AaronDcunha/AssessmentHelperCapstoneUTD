@@ -1,5 +1,5 @@
 import "server-only";
-import { feedbackWindowOpen } from "./feedback-window";
+import { feedbackWindowOpen, surveyCompletedAt } from "./feedback-window";
 import type { AccountUser } from "../account-auth";
 import { facultyTransaction, notifyCommittee, requireFacultyGrants, touchObservation, workflowId, workflowInput, workflowObservation } from "./faculty-invitations";
 import { createObservationAlert } from "./alerts";
@@ -54,15 +54,23 @@ export async function submitFacultyFeedback(user: AccountUser, body: unknown) {
     const record = await workflowObservation(db, id), now = new Date();
     const professor = await db.professor.findUnique({ where: { userId: user.id } });
     if (!professor || ![record.signup.professorId, record.observerId].includes(professor.professorId)) throw new FacultyActionError("Forbidden", 403);
-    if (!feedbackWindowOpen(record, now)) throw new FacultyActionError("Process feedback is outside its submission window.");
-    await touchObservation(db, record);
     const feedbackRole = record.signup.professorId === professor.professorId ? "OBSERVEE" : "OBSERVER";
     const existing = await db.processFeedback.findUnique({ where: { observationId_professorId_feedbackRole: { observationId: id, professorId: professor.professorId, feedbackRole } } });
     if (existing) return { message: "Your feedback is already recorded." };
+    if (!feedbackWindowOpen(record, now)) throw new FacultyActionError("Submit the survey after both participants acknowledge the observation and by the feedback deadline.");
+    await touchObservation(db, record);
     const attachments = await db.feedbackAttachment.findMany({ where: { attachmentId: { in: attachmentIds }, ownerId: user.id, observationId: id, feedbackId: null } });
     if (attachments.length !== attachmentIds.length) throw new FacultyActionError("Supporting files must be your own unattached uploads for this observation.", 403);
     const feedback = await db.processFeedback.create({ data: { observationId: id, professorId: professor.professorId, feedbackRole, satisfaction: input.satisfaction as number, difficulties, suggestions } });
     await db.feedbackAttachment.updateMany({ where: { attachmentId: { in: attachmentIds } }, data: { feedbackId: feedback.feedbackId } });
+    if (record.status === "SURVEY_PENDING") {
+      const submissions = await db.processFeedback.findMany({ where: { observationId: id }, select: { professorId: true, feedbackRole: true, submittedAt: true } });
+      if (surveyCompletedAt(submissions, record.signup.professorId, record.observerId)) {
+        await db.observation.update({ where: { observationId: id }, data: { status: "COMPLETED" } });
+        return { message: "Both surveys are recorded. The observation is complete." };
+      }
+      return { message: "Your survey is recorded. The observation will be complete once both surveys are submitted." };
+    }
     return { message: "Your process feedback was saved." };
   });
 }

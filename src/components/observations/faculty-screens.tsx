@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Input, Select, Textarea } from "@/components/ui/form-fields";
 import { TableCell } from "@/components/ui/table";
+import { observationStatusLabel } from "@/components/ac/observation-tracking-details";
 import { AssessmentRatingField } from "./assessment-rating-field";
 import { facultyRoutes as routes } from "./faculty-routes";
 import { ProposedDateSelector } from "./proposed-date-selector";
@@ -193,7 +194,7 @@ export function ObservationsScreen({ data }: { data: FacultyWorkflow | null }) {
     <FacultyCycleSelector dashboard={data?.dashboard} />
     <FacultyObservationSelector dashboard={data?.dashboard} />
     <Block title="Current observations"><div className={panel}>
-      {data?.observation ? <><p>{data.observation.course}.{data.observation.section} · {data.observation.status}</p><p className="text-muted">As {data.observation.participation === "observee" ? "Observee" : "Observer"}</p><ButtonLink href={routes.details} variant="secondary">View Current Observation</ButtonLink>{data.observation.scheduledAt && <ButtonLink href={routes.appointment} variant="secondary">View Appointment</ButtonLink>}</> : <p>{data ? "No active observation records are available." : "Observation data is temporarily unavailable."}</p>}
+      {data?.observation ? <><p>{data.observation.course}.{data.observation.section} · {observationStatusLabel(data.observation.status)}</p><p className="text-muted">As {data.observation.participation === "observee" ? "Observee" : "Observer"}</p><ButtonLink href={routes.details} variant="secondary">View Current Observation</ButtonLink>{data.observation.scheduledAt && <ButtonLink href={routes.appointment} variant="secondary">View Appointment</ButtonLink>}</> : <p>{data ? "No active observation records are available." : "Observation data is temporarily unavailable."}</p>}
     </div></Block>
     <FacultyFeedbackControl data={data} />
     <div className="flex flex-wrap gap-ah-16"><ButtonLink href={data?.existingSignup ? routes.details : routes.signup}>{data?.existingSignup ? "View Observation Details" : "Sign Up for Observation"}</ButtonLink><Back /></div>
@@ -218,11 +219,11 @@ export function ObservationDetailsScreen({ data, canReadAssessment = false }: { 
   const record = data?.observation;
   return <div className="space-y-ah-24">
     <FacultyCycleSelector dashboard={data?.dashboard} /><FacultyObservationSelector dashboard={data?.dashboard} />
-    {record ? <ObservationDetails key={record.id} observationId={record.id} canReadAssessment={canReadAssessment} backHref={routes.observations} backLabel="Back to Observations">
+    {record ? <ObservationDetails key={`${record.id}:${record.status}`} observationId={record.id} canReadAssessment={canReadAssessment} backHref={routes.observations} backLabel="Back to Observations">
     <Block title="Actions"><div className="flex max-w-[992px] flex-col gap-ah-16">
       <ButtonLink variant="secondary" href={routes.form}>View Observation Form</ButtonLink>
       <FacultyIssueControl observationId={record.id} kind="NOT_OCCURRED" disabled={!record.canReportNotCompleted} />
-      <FacultyFeedbackControl data={data} />
+      <FacultyFeedbackControl data={data} observationId={record.id} />
     </div></Block>
     {record?.participation === "observee" && <><div className="flex flex-wrap gap-ah-16"><ButtonLink href={routes.recommendations} variant="secondary">View Recommendations</ButtonLink>{record.canChooseObserver ? <ButtonLink href={routes.confirmed} variant="secondary">Choose Accepted Observer</ButtonLink> : <Button variant="secondary" disabled>Choose Accepted Observer</Button>}</div><FacultyIssueControl observationId={record.id} kind="ALERT" /></>}
     <p id="observation-actions-unavailable" className="text-caption text-muted">Report non-occurrence after the appointment starts and before acknowledging. The observation form requires a scheduled observation and an assigned observer.</p>

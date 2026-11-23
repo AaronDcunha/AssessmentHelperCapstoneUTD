@@ -45,7 +45,7 @@ function database(overrides = {}) {
     evaluationCycle: { findMany: invoke('prisma', () => overrides.noCycle ? [] : (overrides.multipleCycles ? [cycle, { ...cycle, id: 'second' }] : [cycle]).map(c => ({ cycleId: c.id, cycleName: c.name, semesterId: c.semesterId, signupDeadline: c.signupDeadline, observationDeadline: c.observationDeadline, feedbackDeadline: c.feedbackDeadline, semester: { termName: c.semester, termCode: c.termCode, startsOn: new Date(c.startsOn), endsOn: new Date(c.endsOn), timeZone: c.timeZone } }))) },
     observation: { findMany: invoke('observations', args => {
       if (args.where.signedAssessment) { const e = overrides.evaluation; return e?.observationId ? [{ observationId: e.observationId, signedAssessment: { completedAt: e.completedAt }, cycle: { semesterId: e.semesterId, semester: { termName: e.semester, termCode: e.termCode } } }] : []; }
-      const o = overrides.observation; return o ? [{ observationId: o.id, status: o.status, observerId: professorId, scheduledAt: o.scheduledAt, signup: { professorId: o.participation === 'observee' ? professorId : 'other', section: { course: { courseCode: o.course }, sectionCode: o.section } } }] : [];
+      const o = overrides.observation; return o ? [{ observationId: o.id, status: o.status, observerId: professorId, scheduledAt: o.scheduledAt, processFeedback: o.processFeedback ?? [], signup: { professorId: o.participation === 'observee' ? professorId : 'other', section: { course: { courseCode: o.course }, sectionCode: o.section } } }] : [];
     }) },
     observationCandidate: { count: invoke('pending', () => overrides.count ?? 0) },
     notification: { findMany: invoke('activity', () => (overrides.activity ?? []).map(row => ({ ...row, notificationId: row.id }))) },
@@ -254,4 +254,26 @@ test('dashboard reads own signup in the selected cycle and renders the same prog
  const noCycle=database({signedUp:true,noCycle:true});assert.equal((await runtime(noCycle,user)('src/server/queries/faculty-dashboard.ts').getFacultyDashboard(user,{now})).hasCurrentSignup,null);assert.ok(!noCycle.calls.some(c=>c.signup));
  const completed=database({signedUp:true,evaluation:{...evaluation,observationId:'done',completedAt:now,semesterId:cycle.semesterId,semester:cycle.semester,termCode:cycle.termCode}});
  const tree=await runtime(completed,user)('src/app/(main)/dashboard/page.tsx').default();assert.ok(renderToStaticMarkup(createElement(()=>tree)).includes('Completed'));
+});
+
+test('dashboard shows the required survey separately from a completed evaluation', async () => {
+  const user = { ...actor, permissions: [...actor.permissions, 'feedback.submit.own'] };
+  for (const submitted of [false, true]) {
+    const db = database({
+      evaluation: { ...evaluation, observationId: 'assessment', completedAt: now, semesterId: cycle.semesterId, semester: cycle.semester, termCode: cycle.termCode },
+      observation: { id: 'assessment', status: 'SURVEY_PENDING', participation: 'observee', course: 'TEST', section: '1', scheduledAt: null,
+        processFeedback: submitted ? [{ feedbackRole: 'OBSERVEE' }] : [] },
+    });
+    const load = runtime(db, user);
+    const data = await load('src/server/queries/faculty-dashboard.ts').getFacultyDashboard(user, { now });
+    assert.equal(data.evaluation.lastCompletedEvaluation.semesterId, cycle.semesterId);
+    assert.deepEqual(data.surveyProgress, { awaitingOwn: submitted ? 0 : 1, awaitingOther: submitted ? 1 : 0 });
+    assert.deepEqual(db.calls.find(call => call.observations?.include?.processFeedback).observations.include.processFeedback.where, { professorId });
+    const page = await load('src/app/(main)/dashboard/page.tsx').default();
+    const html = renderToStaticMarkup(createElement(() => page));
+    assert.match(html, />Completed</);
+    assert.match(html, />Survey pending</);
+    assert.equal(html.includes('href="/observations#observation-survey"'), !submitted);
+    assert.equal(html.includes('Waiting for the other participant'), submitted);
+  }
 });

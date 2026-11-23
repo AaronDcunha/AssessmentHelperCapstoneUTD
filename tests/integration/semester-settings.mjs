@@ -13,7 +13,7 @@ import pg from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 const { PrismaClient } = await import('../../src/generated/prisma/client.ts');
 const { createSemester } = await import('../../src/server/services/semesters.ts');
-const { createCycle } = await import('../../src/server/services/configuration.ts');
+const { createCycle, updateCycle, updateSettings } = await import('../../src/server/services/configuration.ts');
 const url = new URL(process.env.DATABASE_URL);
 assert.ok(['localhost', '127.0.0.1', '[::1]'].includes(url.hostname));
 url.searchParams.delete('schema');
@@ -23,7 +23,7 @@ const setup = new pg.Pool({ connectionString: url.toString(), options: `-c searc
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: url.toString() }, { schema }) });
 const user = { id: randomUUID(), permissions: ['cycles.manage'] };
 const dates = { startsOn: '2028-08-21', endsOn: '2028-12-15', timeZone: 'America/Chicago' };
-const deadlines = { signupDeadline: '2028-08-21T17:00:00.000Z', observationDeadline: '2028-12-15T18:00:00.000Z', feedbackDeadline: '2028-12-22T18:00:00.000Z' };
+const deadlines = { signupDeadline: '2028-08-21T05:00:00.000Z', observationDeadline: '2028-12-15T18:00:00.000Z', feedbackDeadline: '2028-12-16T05:59:59.999Z' };
 let created = false;
 try {
   await admin.query(`CREATE SCHEMA ${schema}`); created = true;
@@ -33,6 +33,8 @@ try {
   }
   const payload = { year: 2028, season: 'Fall', ...dates, deadlines, creationId: randomUUID() };
   await assert.rejects(() => createSemester(prisma, { ...user, permissions: [] }, payload), e => e.status === 403);
+  await assert.rejects(() => createSemester(prisma, user, { ...payload, deadlines: { ...deadlines, signupDeadline: '2028-08-21T04:59:59.999Z' } }), e => e.status === 422 && /Signup deadline/.test(e.message));
+  await assert.rejects(() => createSemester(prisma, user, { ...payload, deadlines: { ...deadlines, feedbackDeadline: '2028-12-16T06:00:00.000Z' } }), e => e.status === 422 && /Feedback deadline/.test(e.message));
   const saved = await createSemester(prisma, user, payload);
   assert.equal((await createSemester(prisma, user, payload)).id, saved.id);
   assert.equal(await prisma.semester.count(), 1); assert.equal(await prisma.evaluationCycle.count(), 1);
@@ -45,6 +47,7 @@ try {
   assert.equal(await prisma.semester.findUnique({ where: { semesterId: failedId } }), null);
   await setup.query(`ALTER TABLE "evaluation_cycle" DROP CONSTRAINT reject_test_cycle`);
   const legacy = await createSemester(prisma, user, { year: 2029, season: 'Spring', ...dates });
+  await assert.rejects(() => createCycle(prisma, user, { semesterId: legacy.id, ...deadlines, feedbackDeadline: '2028-12-16T06:00:00.000Z' }), e => e.status === 422);
   const cyclePayload = { semesterId: legacy.id, ...deadlines, semester: dates, expectedSemesterRevision: 0, creationId: randomUUID() };
   await assert.rejects(() => createCycle(prisma, user, { ...cyclePayload, expectedSemesterRevision: 99 }), e => e.status === 409);
   assert.equal(await prisma.evaluationCycle.count({ where: { semesterId: legacy.id } }), 0);
@@ -55,7 +58,15 @@ try {
   const before = await prisma.semester.findUnique({ where: { semesterId: legacy.id } });
   await assert.rejects(() => createCycle(prisma, user, { ...cyclePayload, creationId: randomUUID(), expectedSemesterRevision: 1, semester: { ...dates, endsOn: '2028-12-16' } }), e => e.code === 'P2002');
   assert.deepEqual(await prisma.semester.findUnique({ where: { semesterId: legacy.id } }), before);
-  console.log('Semester settings: atomic creation, replay, duplicate prevention, permissions, stale revisions and rollback passed.');
+  await assert.rejects(() => updateCycle(prisma, user, cycle.id, { expectedRevision: cycle.revision, signupDeadline: '2028-08-21T04:59:59.999Z' }), e => e.status === 422 && /Signup deadline/.test(e.message));
+  const settings = { expectedCycleRevision: cycle.revision, expectedSemesterRevision: cycle.semester.revision, semester: dates, deadlines };
+  await assert.rejects(() => updateSettings(prisma, user, cycle.id, { ...settings, semester: { ...dates, endsOn: '2028-12-14' } }), e => e.status === 422);
+  await assert.rejects(() => updateSettings(prisma, user, cycle.id, { ...settings, semester: { ...dates, timeZone: 'UTC' } }), e => e.status === 422 && /Feedback deadline/.test(e.message));
+  const updated = await updateSettings(prisma, user, cycle.id, settings);
+  assert.equal(updated.cycle.revision, cycle.revision + 1);
+  assert.equal(updated.semester.revision, cycle.semester.revision + 1);
+  assert.equal(updated.cycle.feedbackDeadline, deadlines.feedbackDeadline);
+  console.log('Semester settings: inclusive local bounds, atomic creation and edits, replay, permissions, stale revisions and rollback passed.');
 } finally {
   await prisma.$disconnect(); await setup.end();
   if (created) await admin.query(`DROP SCHEMA ${schema} CASCADE`);

@@ -4,6 +4,7 @@ import { facultyEligibility } from "../services/faculty-evaluation";
 import { cycleSignups, cycleMetrics, completedObservation, pendingStage, pendingActionOverdue, unmatchedStage } from "./ac-metrics";
 import { protectedObservation } from "../observation-protection";
 import { readTemplateSnapshot } from "../template-snapshot";
+import { surveyCompletedAt } from "../services/feedback-window";
 
 export type ReportView = "reports" | "attention" | "faculty-status" | "observations" | "metrics";
 export type ObservationView = "details" | "template" | "assessment";
@@ -63,7 +64,7 @@ export function observationWhere(url: URL, cycleId: string, now: Date): Prisma.O
   if (status) {
     const statuses: Record<string, Prisma.ObservationWhereInput> = {
       "in-progress": { status: { notIn: cancelled }, completedAt: null, observerId: { not: null } },
-      complete: { completedAt: { not: null } }, incomplete: outstanding(now), unmatched,
+      complete: { completedAt: { not: null }, status: { not: "SURVEY_PENDING" } }, incomplete: outstanding(now), unmatched,
     };
     if (statuses[status]) clauses.push(statuses[status]);
     else if (/^[A-Z][A-Z_]{0,49}$/.test(status)) clauses.push({ status });
@@ -191,7 +192,8 @@ export async function getCycleReport(db: Connection, user: ConfigurationUser, ur
   const levels = await db.hiringLevel.findMany({ where: id.hiringLevelId ? { hiringLevelId: id.hiringLevelId } : {}, orderBy: { levelName: "asc" } });
   const signups = await cycleSignups(db, cycleId, id);
   const unmatchedSignups = signups.filter(s => !s.observations.some(o => o.observerId && !cancelled.includes(o.status)));
-  const unfinished = signups.flatMap(s => s.observations.filter(o => !cancelled.includes(o.status) && !completedObservation(o)).map(o => ({ observation: o, signup: s, stage: pendingStage(o, now), overdue: pendingActionOverdue(o, now, cycle.observationDeadline) })));
+  const unfinished = signups.flatMap(s => s.observations.filter(o => !cancelled.includes(o.status) && (o.status === "SURVEY_PENDING" || !completedObservation(o)))
+    .map(o => ({ observation: o, signup: s, stage: pendingStage(o, now), overdue: pendingActionOverdue(o, now, cycle.observationDeadline, cycle.feedbackDeadline) })));
   const byHiringLevel = levels.map(h => ({ hiringLevelId: h.hiringLevelId, name: h.levelName,
       due: faculty.filter(p => p.hiringLevel.id === h.hiringLevelId && p.evaluationStatus === "due").length,
       overdue: faculty.filter(p => p.hiringLevel.id === h.hiringLevelId && p.evaluationStatus === "overdue").length,
@@ -210,7 +212,7 @@ export async function getCycleReport(db: Connection, user: ConfigurationUser, ur
     byHiringLevel, availableViews: ["faculty-status", "attention", "observations"],
     definitions: { unmatched: "Cycle signups without a confirmed observer, including signups without an observation row.",
       eligibility: "Shared Faculty eligibility, current rank and available history; no historical rank/eligibility snapshot is stored.",
-      incomplete: "Non-cancelled, unfinished observations grouped by pending stage. Pending actions become overdue at the observation deadline; upcoming appointments and reported non-occurrence are not marked as overdue actions." } };
+      incomplete: "Non-cancelled observations with unfinished assessments or surveys. Surveys are overdue after the feedback deadline. Other pending actions use the observation deadline." } };
 }
 
 // Convert a stored schedule's local wall time using its semester's IANA zone.
@@ -241,6 +243,7 @@ export async function getObservation(db: Connection, user: ConfigurationUser, ob
   const o = await db.observation.findFirst({ where: { observationId: uuid(observationId),
     ...(broad ? {} : { OR: [{ signup: { professor: { userId: user.id } } }, { observer: { userId: user.id } }] }) },
     include: { ...observationInclude, timeOptions: { orderBy: { preferredDate: "asc" } },
+      processFeedback: { select: { professorId: true, feedbackRole: true, submittedAt: true } },
       assignedTemplate: { include: { criteria: { orderBy: { displayOrder: "asc" } } } },
       facultyIssues: { where: { kind: "ALERT" }, select: { issueId: true }, orderBy: { createdAt: "desc" }, take: 1 },
       signedAssessment: { include: { template: { include: { criteria: { orderBy: { displayOrder: "asc" } } } } } } } });
@@ -249,13 +252,15 @@ export async function getObservation(db: Connection, user: ConfigurationUser, ob
   if (view === "details") {
     const proposed = meetings(o, o.timeOptions);
     const scheduled = o.scheduledAt ? proposed.find(m => m.startsAt === o.scheduledAt!.toISOString()) ?? null : null;
+    const surveysSubmittedAt = surveyCompletedAt(o.processFeedback, o.signup.professorId, o.observerId);
     return { observation: { ...observationResponse(o, user), scheduledMeeting: scheduled }, proposedMeetings: proposed, protectedForHistory: protectedObservation(o),
       pendingAlert: (broad || o.signup.professor.userId === user.id) && o.facultyIssues.length ? { id: o.facultyIssues[0].issueId } : null,
       progress: [{ key: "signup", label: "Signed up", state: "completed", completedAt: o.signup.signupDate },
         { key: "observer", label: "Observer selected", state: o.observerId ? "completed" : "pending", completedAt: null },
         { key: "scheduled", label: "Observation scheduled", state: o.scheduledAt ? "completed" : "pending", completedAt: null },
         { key: "observation", label: "Observation completed", state: o.completedAt ? "completed" : "pending", completedAt: o.completedAt },
-        { key: "assessment", label: "Assessment locked", state: a?.isLocked ? "completed" : "pending", completedAt: a?.isLocked ? a.completedAt : null }],
+        { key: "assessment", label: "Assessment locked", state: a?.isLocked ? "completed" : "pending", completedAt: a?.isLocked ? a.completedAt : null },
+        ...(o.status !== "COMPLETED" || surveysSubmittedAt ? [{ key: "survey", label: "Both surveys submitted", state: surveysSubmittedAt ? "completed" : "pending", completedAt: surveysSubmittedAt }] : [])],
       templateVersionId: o.assignedTemplateId ?? a?.templateId ?? null,
       ...(o.scheduledAt && !scheduled ? { unavailableReason: "The stored appointment cannot be matched to a proposed class meeting." } : {}) };
   }

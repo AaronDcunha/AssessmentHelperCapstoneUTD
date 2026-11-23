@@ -6,6 +6,8 @@ import { sendNotification } from "./notification-delivery";
 import { getFacultyAssessment, assessmentView, type AssessmentRow, type AssessmentAnswers, type Criterion, type CommentPrompt } from "../queries/faculty-assessment";
 import { FacultyActionError } from "./faculty-actions";
 import { createTemplateSnapshot } from "../template-snapshot";
+import { deadlineDisplay } from "../../lib/ac-configuration";
+import { surveyCompletedAt } from "./feedback-window";
 
 export function validateAssessmentAnswers(criteria: readonly Criterion[], value: unknown, complete: boolean, prompts: readonly CommentPrompt[] = []): AssessmentAnswers {
   if (!criteria.length || criteria.some(c => !["RATING", "TEXT"].includes(c.type)
@@ -62,9 +64,34 @@ export async function saveFacultyAssessment(user: AccountUser, body: unknown) {
       const updated = await client.signedAssessment.updateMany({ where: { assessmentId: record.signedAssessment.assessmentId, isLocked: false }, data });
       if (!updated.count) throw new FacultyActionError("The assessment is already locked.");
     } else await client.signedAssessment.create({ data: { observationId: form.observationId, templateId: form.templateId, ...data } });
-    if (locked) await client.observation.update({ where: { observationId: form.observationId }, data: { status: "COMPLETED", completedAt: timestamp } });
-    if (input.action === "acknowledge") await sendNotification({ email: true, recipients: { userId: form.participation === "observee" ? (await client.professor.findUniqueOrThrow({ where: { professorId: record.observerId! } })).userId : record.signup.professor.userId }, title: locked ? "Observation completed" : "Observation ready for acknowledgement", message: locked ? "Both participants acknowledged the observation. The assessment is finalized and locked." : "The observer submitted the assessment. You may review it and acknowledge that the observation occurred.", type: "ASSESSMENT_UPDATED", observationId: form.observationId, eventKey: `assessment:${form.observationId}:${form.participation}` }, client);
+    let surveyPending = false;
+    if (locked) {
+      const submissions = await client.processFeedback.findMany({ where: { observationId: form.observationId }, select: { professorId: true, feedbackRole: true, submittedAt: true } });
+      surveyPending = !surveyCompletedAt(submissions, record.signup.professorId, record.observerId);
+      await client.observation.update({ where: { observationId: form.observationId }, data: { status: surveyPending ? "SURVEY_PENDING" : "COMPLETED", completedAt: timestamp } });
+      if (surveyPending) {
+        const observer = await client.professor.findUniqueOrThrow({ where: { professorId: record.observerId! }, select: { userId: true } });
+        const timeZone = record.signup.section.semester.timeZone;
+        const due = deadlineDisplay(record.cycle.feedbackDeadline.toISOString(), timeZone);
+        await sendNotification({
+          email: true,
+          recipients: { userIds: [record.signup.professor.userId, observer.userId] },
+          type: "OBSERVATION_SURVEY_REQUIRED",
+          title: "Required observation survey",
+          message: `The observation for ${form.course}.${form.section} and its assessment are complete. The observee and observer must each submit the feedback survey by ${due} (${timeZone}). Open Observations and choose Complete Survey.`,
+          observationId: form.observationId,
+          eventKey: `observation-survey:${form.observationId}`,
+        }, client);
+      }
+    } else if (input.action === "acknowledge") {
+      await sendNotification({ email: true, recipients: { userId: record.signup.professor.userId },
+        title: "Observation ready for acknowledgement", message: "The observer submitted the assessment. You may review it and acknowledge that the observation occurred.",
+        type: "ASSESSMENT_UPDATED", observationId: form.observationId, eventKey: `assessment:${form.observationId}:${form.participation}` }, client);
+    }
     const row: AssessmentRow = { ...form, responses, scheduledAt: form.scheduledAt ? new Date(form.scheduledAt) : null, observerSignedAt, observeeSignedAt, locked };
-    return { form: assessmentView(row, user), message: locked ? "Both acknowledgements are recorded. The form is finalized and locked." : input.action === "save" ? "Draft saved." : "Your acknowledgement is recorded. The other participant must acknowledge separately." };
+    return { form: assessmentView(row, user), message: locked ? surveyPending
+      ? "The assessment is locked. Both participants must complete the survey."
+      : "Both acknowledgements are recorded. The form is finalized and locked."
+      : input.action === "save" ? "Draft saved." : "Your acknowledgement is recorded. The other participant must acknowledge separately." };
   });
 }

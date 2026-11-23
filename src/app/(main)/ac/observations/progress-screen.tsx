@@ -10,6 +10,7 @@ import { TableCell } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { loadObservationProgressPage, type ObservationPagePosition, type ObservationProgressPage as ProgressPage } from "@/lib/observation-progress-pagination";
 import { acApi, type ObservationItem, userDisplayName } from "@/lib/ac-api";
+import { observationStatusLabel } from "@/components/ac/observation-tracking-details";
 
 const EMPTY_PAGE: ProgressPage = { items: [], next: null };
 const FIRST_PAGE: ObservationPagePosition = { cycleIndex: 0 };
@@ -49,7 +50,7 @@ export default function ObservationProgressPage({canSendReminders=false}:{canSen
     <div className="space-y-ah-24">
       <div className="grid min-h-[88px] max-w-[976px] grid-cols-1 gap-ah-16 md:grid-cols-2">
         <Select label="Status" name="status" value={status} onChange={(event) => setStatus(event.target.value)} className="h-control-56">
-          <option value="all">All</option><option value="in-progress">In progress</option><option value="complete">Complete</option><option value="incomplete">Incomplete</option><option value="unmatched">Unmatched</option>
+          <option value="all">All</option><option value="in-progress">In progress</option><option value="SURVEY_PENDING">Survey pending</option><option value="complete">Complete</option><option value="incomplete">Incomplete</option><option value="unmatched">Unmatched</option>
         </Select>
         <CycleSelector allowAll />
       </div>
@@ -69,7 +70,7 @@ export default function ObservationProgressPage({canSendReminders=false}:{canSen
                 <TableCell className="h-[80px]!">{userDisplayName(row.observee)}</TableCell>
                 <TableCell className="h-[80px]!">{userDisplayName(row.observer)}</TableCell>
                 <TableCell className="h-[80px]!">{courseLabel(row)}</TableCell>
-                <TableCell className="h-[80px]!">{row.status ?? "—"}</TableCell>
+                <TableCell className="h-[80px]!">{observationStatusLabel(row.status) ?? "—"}</TableCell>
                 <TableCell className="h-[80px]!"><Link href={`/ac/observations/${row.id}`} className="inline-flex min-h-9 min-w-[110px] items-center justify-center px-ah-12 text-label text-sidebar">View</Link></TableCell>
               </tr>
             ))}

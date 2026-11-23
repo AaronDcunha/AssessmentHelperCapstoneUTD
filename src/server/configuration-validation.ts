@@ -1,3 +1,5 @@
+import { deadlineInput, deadlineKeys, semesterDeadlineError } from "../lib/ac-configuration";
+
 export class ConfigurationError extends Error {
   status: number;
   code: string;
@@ -36,6 +38,16 @@ export function deadlines(body: Record<string, unknown>) {
   const result = { signupDeadline: timestamp(body.signupDeadline), observationDeadline: timestamp(body.observationDeadline), feedbackDeadline: timestamp(body.feedbackDeadline) };
   if (!(result.signupDeadline < result.observationDeadline && result.observationDeadline < result.feedbackDeadline)) invalid("Deadlines must be ordered: signup, observation, feedback.");
   return result;
+}
+export function validateSemesterDeadlines(values: ReturnType<typeof deadlines>, semester: {
+  startsOn?: string | null;
+  endsOn?: string | null;
+  timeZone: string;
+}) {
+  for (const key of deadlineKeys) {
+    const message = semesterDeadlineError(key, deadlineInput(values[key], semester.timeZone), semester.startsOn, semester.endsOn);
+    if (message) invalid(message);
+  }
 }
 export function pagination(url: URL) {
   const raw = url.searchParams.get("limit") ?? "20";

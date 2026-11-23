@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Prisma, PrismaClient } from "../../generated/prisma/client";
 import { ConfigurationError, commentPrompts, criteria, date, deadlines, fields, invalid, object, revision,
-  signatureLabels, text, timeZone, uuid, type ConfigurationUser } from "../configuration-validation";
+  signatureLabels, text, timeZone, uuid, validateSemesterDeadlines, type ConfigurationUser } from "../configuration-validation";
 import { authorize, getCycle, getTemplate } from "../queries/configuration";
 import { createTemplateSnapshot } from "../template-snapshot";
 
@@ -12,7 +12,7 @@ function deadlineData(d: ReturnType<typeof deadlines>) {
 }
 async function readCycle(db: Prisma.TransactionClient, id: string, expected: unknown) {
   const rev = revision(expected);
-  const cycle = await db.evaluationCycle.findUnique({ where: { cycleId: uuid(id) } });
+  const cycle = await db.evaluationCycle.findUnique({ where: { cycleId: uuid(id) }, include: { semester: true } });
   if (!cycle) missing("Evaluation cycle not found.");
   if (cycle.revision !== rev) stale();
   return cycle;
@@ -47,6 +47,11 @@ export async function createCycle(prisma: PrismaClient, user: ConfigurationUser,
         return getCycle(db, user, existing.cycleId);
       }
     }
+    validateSemesterDeadlines(d, {
+      startsOn: startsOn ?? semester.startsOn?.toISOString().slice(0, 10),
+      endsOn: endsOn ?? semester.endsOn?.toISOString().slice(0, 10),
+      timeZone: zone ?? semester.timeZone,
+    });
     if (settings) {
       const updated = await db.semester.updateMany({ where: { semesterId, revision: expected }, data: { startsOn: new Date(startsOn!), endsOn: new Date(endsOn!), timeZone: zone, revision: { increment: 1 } } });
       if (!updated.count) stale();
@@ -64,6 +69,11 @@ export async function updateCycle(prisma: PrismaClient, user: ConfigurationUser,
     const current = await readCycle(db, id, body.expectedRevision);
     const d = deadlines({ signupDeadline: current.signupDeadline.toISOString(), observationDeadline: current.observationDeadline.toISOString(),
       feedbackDeadline: current.feedbackDeadline.toISOString(), ...body });
+    validateSemesterDeadlines(d, {
+      startsOn: current.semester.startsOn?.toISOString().slice(0, 10),
+      endsOn: current.semester.endsOn?.toISOString().slice(0, 10),
+      timeZone: current.semester.timeZone,
+    });
     await saveDeadlines(db, id, current.revision, d);
     return getCycle(db, user, id);
   });
@@ -82,6 +92,8 @@ export async function updateSettings(prisma: PrismaClient, user: ConfigurationUs
   const d = deadlines(deadlineBody), semesterRevision = revision(body.expectedSemesterRevision);
   return prisma.$transaction(async db => {
     const current = await readCycle(db, id, body.expectedCycleRevision);
+    if (current.semester.revision !== semesterRevision) stale();
+    validateSemesterDeadlines(d, { startsOn, endsOn, timeZone: zone ?? current.semester.timeZone });
     await saveDeadlines(db, id, current.revision, d);
     const result = await db.semester.updateMany({ where: { semesterId: current.semesterId, revision: semesterRevision },
       data: { startsOn: new Date(startsOn), endsOn: new Date(endsOn), ...(zone === undefined ? {} : { timeZone: zone }), revision: { increment: 1 } } });

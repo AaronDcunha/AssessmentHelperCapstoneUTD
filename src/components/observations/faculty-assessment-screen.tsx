@@ -66,6 +66,7 @@ export function FacultyAssessmentScreen({ initial, unavailable = false }: { init
         {current.locked && <p role="status">This form is finalized and locked.</p>}
       </div>
       {feedback && <p role="status" className="rounded-ah-8 bg-neutral-bg p-ah-16 text-ink">{feedback}</p>}
+      {current.locked && <ButtonLink variant="secondary" href={`${facultyRoutes.observations}#observation-survey`}>Go to observation surveys</ButtonLink>}
       <div className="flex flex-wrap gap-ah-16">{step > 1 && <Button variant="secondary" className="min-w-[200px]" disabled={pending} onClick={() => move(step - 1)}>Back</Button>}<Button type="submit" className="min-w-[240px]" disabled={pending || (step === 3 && (current.locked || !current.canAcknowledge))} aria-busy={pending}>{pending ? "Saving…" : step === 3 ? "Submit Form" : "Next"}</Button><ButtonLink variant="secondary" href={facultyRoutes.details}>Cancel</ButtonLink></div>
     </form>
   </div>;

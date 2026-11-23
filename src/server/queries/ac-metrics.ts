@@ -33,6 +33,7 @@ export function completedObservation(o: Pick<Observation, "signedAssessment">) {
 }
 
 export function pendingStage(o: Observation, now: Date) {
+  if (o.status === "SURVEY_PENDING") return "survey-pending";
   if (o.status === "NOT_OCCURRED" || o.facultyIssues.length) return "reported-not-occurred";
   if (!o.observerId) return "awaiting-observer";
   if (!o.scheduledAt) return "awaiting-appointment";
@@ -42,7 +43,8 @@ export function pendingStage(o: Observation, now: Date) {
   return "awaiting-finalization";
 }
 
-export function pendingActionOverdue(o: Observation, now: Date, observationDeadline: Date) {
+export function pendingActionOverdue(o: Observation, now: Date, observationDeadline: Date, feedbackDeadline: Date) {
+  if (o.status === "SURVEY_PENDING") return now > feedbackDeadline;
   if (cancelled.includes(o.status) || completedObservation(o)) return false;
   const stage = pendingStage(o, now);
   return observationDeadline <= now && stage !== "upcoming" && stage !== "reported-not-occurred";

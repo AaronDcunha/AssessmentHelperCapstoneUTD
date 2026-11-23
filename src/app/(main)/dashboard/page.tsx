@@ -19,6 +19,7 @@ export default async function FacultyDashboardPage() {
     // A read failure is unavailable data, never a fabricated zero or empty history.
   }
   const observation = dashboard?.currentObservation;
+  const survey = dashboard?.surveyProgress;
   const lastEvaluation = dashboard?.evaluation.lastCompletedEvaluation;
   const evaluationLabel = evaluationProgressLabel(dashboard?.evaluation.status, dashboard?.hasCurrentSignup === true, dashboard?.cycle?.semesterId, lastEvaluation?.semesterId);
   const observationLabel = !dashboard || !dashboard.access.observations || dashboard.pendingObserverRequestCount === null ? "Unavailable"
@@ -41,6 +42,20 @@ export default async function FacultyDashboardPage() {
             Last completed: {lastEvaluation?.semester ?? (dashboard?.access.evaluation ? "None recorded" : "Unavailable")}
           </p>
           {dashboard?.evaluation.status === "unknown" && <p className="text-caption text-muted">{dashboard.evaluation.reason}</p>}
+          {survey && <div className="mt-ah-4 space-y-ah-4 border-t border-border pt-ah-8">
+            <p className="text-label text-ink">Survey pending</p>
+            {survey.awaitingOwn > 0 && <>
+              <p className="text-caption text-muted">{survey.awaitingOwn === 1 ? "You have a required survey to submit." : `You have ${survey.awaitingOwn} required surveys to submit.`}</p>
+              {user.permissions.includes("feedback.submit.own") &&
+                <ButtonLink href={`${facultyRoutes.observations}#observation-survey`} variant="secondary" className="min-h-11">
+                  {survey.awaitingOwn === 1 ? "Complete survey" : "View surveys"}
+                </ButtonLink>}
+            </>}
+            {survey.awaitingOther > 0 && <p className="text-caption text-muted">
+              {survey.awaitingOther === 1 ? "You submitted your survey. Waiting for the other participant."
+                : `You submitted ${survey.awaitingOther} surveys that are still waiting for the other participants.`}
+            </p>}
+          </div>}
         </article>
 
         <article className="flex min-h-[148px] flex-col justify-start gap-ah-8 rounded-ah-8 border border-border bg-surface p-ah-24">

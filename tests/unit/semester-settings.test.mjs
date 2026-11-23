@@ -10,7 +10,7 @@ const require = createRequire(import.meta.url);
 const nodes = value => !value || typeof value !== 'object' ? [] : [value, ...[value.props?.children].flat(Infinity).flatMap(nodes)];
 const button = (tree, label) => nodes(tree).find(node => node.type === 'Button' && node.props.children === label);
 const semester = { id: 'semester', name: 'Fall 2026', year: 2026, season: 'Fall', startsOn: '2026-08-24', endsOn: '2026-12-15', timeZone: 'America/Chicago', revision: 4 };
-const cycle = { id: 'cycle', semester, revision: 7, allowedActions: ['updateSettings'], signupDeadline: '2026-08-24T17:00:00.123Z', observationDeadline: '2026-12-15T18:00:00.456Z', feedbackDeadline: '2026-12-22T18:00:00.789Z' };
+const cycle = { id: 'cycle', semester, revision: 7, allowedActions: ['updateSettings'], signupDeadline: '2026-08-24T17:00:00.123Z', observationDeadline: '2026-12-15T18:00:00.456Z', feedbackDeadline: '2026-12-16T05:59:59.789Z' };
 function harness(api, props = {}) {
   const state = [], effects = []; let cursor = 0; const cleanups = [];
   const react = {
@@ -39,14 +39,25 @@ test('saved settings retain exact instants/revisions; Cancel restores values and
   await app.submit(); assert.equal(payload.expectedCycleRevision, 7); assert.equal(payload.expectedSemesterRevision, 4);
   assert.equal(payload.deadlines.signupDeadline, cycle.signupDeadline); assert.equal(app.saved.length, 1);
 });
-test('creation prefills noon deadlines and retries the identical request after a lost response', async () => {
+test('creation prefills in-semester deadlines and retries the identical request after a lost response', async () => {
   const calls = []; let attempt = 0;
   const app = harness({ createSemester: async body => { calls.push(body); if (!attempt++) throw new TypeError('Lost response'); return semester; }, getEvaluationCycles: async () => [cycle] });
   app.change('startsOn', '2026-08-24'); app.change('endsOn', '2026-12-15');
-  assert.equal(nodes(app.render()).find(n => n.props.name === 'feedbackDeadline').props.value, '2026-12-22T12:00');
+  assert.equal(nodes(app.render()).find(n => n.props.name === 'feedbackDeadline').props.value, '2026-12-15T17:00');
   await app.submit(); assert.ok(button(app.render(), 'Retry creation')); assert.equal(button(app.render(), 'Cancel').props.disabled, true);
   assert.equal(app.leaveRef.current(), false); await app.submit();
   assert.deepEqual(calls[0], calls[1]); assert.ok(calls[0].creationId); assert.equal(calls[0].deadlines.observationDeadline, '2026-12-15T18:00:00.000Z'); assert.equal(app.saved.length, 1);
+});
+test('date inputs expose both bounds and shortening the semester blocks save', async () => {
+  const app = harness({ updateCycleSettings: () => assert.fail('Out-of-range settings must not be submitted') }, { semester, cycle });
+  for (const key of helpers.deadlineKeys) {
+    const input = nodes(app.render()).find(node => node.props.name === key);
+    assert.equal(input.props.min, '2026-08-24T00:00:00');
+    assert.equal(input.props.max, '2026-12-15T23:59:59');
+  }
+  app.change('endsOn', '2026-12-14');
+  await app.submit();
+  assert.ok(nodes(app.render()).some(node => node.props.role === 'alert' && /within the semester dates/.test(node.props.children)));
 });
 test('a semester without a cycle saves dates and creates its cycle without navigation', async () => {
   let payload;

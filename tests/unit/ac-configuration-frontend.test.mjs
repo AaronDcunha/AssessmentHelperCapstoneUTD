@@ -120,12 +120,13 @@ test('semester lookup follows every cursor and rejects partial results on a fail
 });
 
 
-test('semester default deadlines remain local noon across month/year and DST boundaries', async () => {
+test('semester default deadlines stay in bounds and use the semester time zone', async () => {
   const { defaultSemesterDeadlines } = await import('../../src/lib/ac-configuration.ts');
   assert.deepEqual(defaultSemesterDeadlines('', ''), { signupDeadline: '', observationDeadline: '', feedbackDeadline: '' });
   const defaults = defaultSemesterDeadlines('2026-08-24', '2026-12-28');
-  assert.deepEqual(defaults, { signupDeadline: '2026-08-24T12:00', observationDeadline: '2026-12-28T12:00', feedbackDeadline: '2027-01-04T12:00' });
+  assert.deepEqual(defaults, { signupDeadline: '2026-08-24T12:00', observationDeadline: '2026-12-28T12:00', feedbackDeadline: '2026-12-28T17:00' });
   const dst = deadlinePayload(defaultSemesterDeadlines('2026-03-01', '2026-03-07'), 'America/Chicago');
   assert.equal(dst.observationDeadline, '2026-03-07T18:00:00.000Z');
-  assert.equal(dst.feedbackDeadline, '2026-03-14T17:00:00.000Z');
+  assert.equal(dst.feedbackDeadline, '2026-03-07T23:00:00.000Z');
+  assert.doesNotThrow(() => deadlinePayload(defaultSemesterDeadlines('2026-08-24', '2026-08-24'), 'America/Chicago'));
 });
