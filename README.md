@@ -88,7 +88,9 @@ Local setup requires no external API key. For real email delivery, obtain SMTP a
    npm run db:setup
    ```
 
-   `db:setup` applies the checked-in migrations, checks the schema, and loads the demo data. The seed adds demo accounts and course data, then creates ten signup fixtures and attempts to create late-invitation scenarios. The signup fixtures require a configured current semester, a future observation deadline, and enough upcoming class meetings. If that step fails, the basic demo data remains available. Correct the reported configuration and rerun `npm run db:seed`.
+   `db:setup` applies the checked-in migrations, checks the schema, and loads demo accounts and course data. It uses upcoming class meetings in the current evaluation cycle to prepare demo signups and late-invitation examples.
+
+   To work with the demo examples separately, use `npm run db:seed:signups:preview` to preview signups and `npm run db:seed:signups -- --late-invitations` to populate the workflow examples.
 
 4. **Start the application.**
 
@@ -141,7 +143,13 @@ These instructions describe a self-hosted Node.js deployment on a server or VM.
 
    `db:migrate` applies pending migrations. The build generates Prisma Client before compiling the application. For an existing deployment, back up PostgreSQL and the private attachment directory before applying an update.
 
-5. **Provision access.** The application requires a database-backed account with the appropriate grants. For a private demonstration, use the local installation steps to initialize and seed a local database on the VM before serving the production build. Restrict access to that environment because it contains demo credentials. For a real deployment, use a database with an authorized Admin already provisioned or arrange a controlled account import with the project team. The repository currently has no standalone production Admin bootstrap command.
+5. **Provision the first Administrator.** From an interactive terminal configured with the deployment's `DATABASE_URL`, run:
+
+   ```sh
+   npm run admin:bootstrap
+   ```
+
+   Enter the Administrator's full name, email, and password. The command displays the generated username using the first and last name with punctuation removed. Password entry is hidden. The command initializes the built-in access roles needed on a fresh database and stops if an active Administrator already exists. After starting the app, sign in with the new account and verify access to **Admin → Users**.
 
 6. **Start the production app.** If the reverse proxy runs on the same host, bind Next.js to loopback and route HTTPS traffic to port `3000`.
 

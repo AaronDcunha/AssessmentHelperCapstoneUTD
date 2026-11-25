@@ -51,11 +51,13 @@ async function seed() {
       const updates = table === 'semester' ? ['term_code','term_name'] : preserve ? [] : undefined;
       await upsert(table,rows,keys[table],updates);
     }
-    await upsert('role',['Faculty','Admin','AC'].map(name=>({role_id:stableId(`role:${name}`),role_name:name})),['role_id']);
+    await upsert('role',Object.keys(rolePermissions).map(name=>({role_id:stableId(`role:${name}`),role_name:name})),['role_name'],[]);
+    const { rows: roles } = await client.query('SELECT role_name, role_id FROM role');
+    const roleIds = new Map(roles.map(row => [row.role_name, row.role_id]));
     await upsert('permission',[...new Set(Object.values(rolePermissions).flat())].map(name=>({permission_id:stableId(`permission:${name}`),permission_name:name})),['permission_name'],[]);
     const { rows: permissions } = await client.query('SELECT permission_name, permission_id FROM permission');
     const permissionIds = new Map(permissions.map(row => [row.permission_name, row.permission_id]));
-    await upsert('role_permission',Object.entries(rolePermissions).flatMap(([role,permissions])=>permissions.map(name=>({role_id:stableId(`role:${role}`),permission_id:permissionIds.get(name)}))),['role_id','permission_id'],[]);
+    await upsert('role_permission',Object.entries(rolePermissions).flatMap(([role,permissions])=>permissions.map(name=>({role_id:roleIds.get(role),permission_id:permissionIds.get(name)}))),['role_id','permission_id'],[]);
     const credentials = accounts.map(a => {
       const salt = randomBytes(16).toString('hex');
       const hash = scryptSync('123',salt,64).toString('hex');
@@ -63,7 +65,7 @@ async function seed() {
     });
     // Preserve password changes and additional role assignments on subsequent runs.
     await upsert('login_credential',credentials,['user_id'],[]);
-    await upsert('user_role',accounts.flatMap(a=>a.roles.map(role=>({user_id:a.userId,role_id:stableId(`role:${role}`)}))),['user_id','role_id'],[]);
+    await upsert('user_role',accounts.flatMap(a=>a.roles.map(role=>({user_id:a.userId,role_id:roleIds.get(role)}))),['user_id','role_id'],[]);
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');

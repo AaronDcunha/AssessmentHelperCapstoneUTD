@@ -59,3 +59,16 @@ test('an invalid professor rolls back the entire fixture batch', async () => {
   await assert.rejects(seedSignups(f.prisma, { now: f.now }), /inactive/);
   assert.deepEqual(f.records(), { signups: [], observations: [], options: [] });
 });
+
+test('a short remaining calendar seeds available meetings and skips professors with none', async () => {
+  const f = database();
+  [...f.faculty.values()][0].teaches[0].section.classMeetings = [];
+  const now = new Date('2026-11-22T12:00:00Z');
+  const preview = await seedSignups(f.prisma, { now, dryRun: true });
+  assert.match(preview.rows[0].action, /skipped/);
+  assert.deepEqual(preview.rows[1].dates, ['2026-11-23']);
+  assert.equal(f.records().signups.length, 0);
+  await seedSignups(f.prisma, { now });
+  assert.equal(f.records().signups.length, 9);
+  assert.equal(f.records().options.length, 9);
+});

@@ -39,25 +39,35 @@ export async function seedSignups(prisma, { dryRun = false, now = new Date(), cy
       assert.ok(eligibility.canSignUp, `${name}: ${eligibility.reason}`);
       const sections = professor.teaches.map(t => t.section).filter(s => s.semesterId === cycle.semesterId)
         .sort((a, b) => a.course.courseCode.localeCompare(b.course.courseCode) || a.sectionCode.localeCompare(b.sectionCode) || a.sectionId.localeCompare(b.sectionId));
-      const choices = sections.map(section => ({ section, meetings: section.classMeetings.map(m => ({ id: m.meetingId, day: m.dayOfWeek, startTime: m.startTime, endTime: m.endTime, location: m.location })) }))
-        .map(item => ({ ...item, options: proposedMeetingOptions(item.meetings, now, cycle.observationDeadline, calendar) }));
-      const choice = choices.find(c => c.options.filter(o => meetingOccurrence(o.date, c.meetings, semester.timeZone)).length >= 3);
-      assert.ok(choice, `${name} needs an assigned course with three valid future meetings.`);
-      const dates = choice.options.filter(o => meetingOccurrence(o.date, choice.meetings, semester.timeZone)).slice(0, 3).map(o => o.date);
+      const choices = sections.map(section => {
+        const meetings = section.classMeetings.map(m => ({ id: m.meetingId, day: m.dayOfWeek, startTime: m.startTime, endTime: m.endTime, location: m.location }));
+        const options = proposedMeetingOptions(meetings, now, cycle.observationDeadline, calendar)
+          .flatMap(({ date }) => {
+            const occurrence = meetingOccurrence(date, meetings, semester.timeZone);
+            return occurrence ? [{ date, occurrence }] : [];
+          }).slice(0, 3);
+        return { section, options };
+      });
+      const choice = choices.sort((a, b) => b.options.length - a.options.length)[0];
+      if (!choice?.options.length) {
+        rows.push({ name, action: 'skipped: no future assigned class meetings before the observation deadline' });
+        continue;
+      }
       const signupId = stableId(`signup-demo-v1:${cycle.cycleId}:${professorId}`), observationId = stableId(`signup-demo-observation-v1:${cycle.cycleId}:${professorId}`);
       if (!dryRun) {
         await db.evaluationSignup.create({ data: { signupId, cycleId: cycle.cycleId, professorId, sectionId: choice.section.sectionId, signupDate: now } });
         await db.observation.create({ data: { observationId, signupId, cycleId: cycle.cycleId, status: 'PENDING' } });
-        for (const date of dates) await db.observationTimeOption.create({ data: { observationId, preferredDate: new Date(`${date}T00:00:00Z`), ...meetingOccurrence(date, choice.meetings, semester.timeZone) } });
+        for (const { date, occurrence } of choice.options) await db.observationTimeOption.create({ data: { observationId, preferredDate: new Date(`${date}T00:00:00Z`), ...occurrence } });
       }
-      rows.push({ name, action: dryRun ? 'would create' : 'created', signupId, observationId, course: `${choice.section.course.courseCode}.${choice.section.sectionCode}`, dates });
+      rows.push({ name, action: dryRun ? 'would create' : 'created', signupId, observationId, course: `${choice.section.course.courseCode}.${choice.section.sectionCode}`, dates: choice.options.map(option => option.date) });
     }
-    const invitations = lateInvitations ? await seedLateInvitations(db, cycle, now, dryRun) : [];
+    const plannedObservations = new Set(rows.filter(row => row.action === 'would create').map(row => row.observationId));
+    const invitations = lateInvitations ? await seedLateInvitations(db, cycle, now, dryRun, plannedObservations) : [];
     return { invitations, dryRun, semester: semester.termName, signupDeadlinePassed: cycle.signupDeadline <= now, rows };
   }, { isolationLevel: 'Serializable', timeout: 60000 });
 }
 
-async function seedLateInvitations(db, cycle, now, dryRun) {
+async function seedLateInvitations(db, cycle, now, dryRun, plannedObservations) {
   const scenarios = [
     { observee: 'Gale Aster', observer: 'Robin Wren', requested: false },
     { observee: 'Quartz Prairie', observer: 'Cove Yew', requested: true },
@@ -85,7 +95,7 @@ async function seedLateInvitations(db, cycle, now, dryRun) {
       results.push({ ...scenario, action: 'skipped existing workflow or missing future meetings' });
       continue;
     }
-    if (!observation && !dryRun) {
+    if (!observation && !plannedObservations.has(observationId)) {
       results.push({ ...scenario, action: 'skipped because the demo observation is missing' });
       continue;
     }
