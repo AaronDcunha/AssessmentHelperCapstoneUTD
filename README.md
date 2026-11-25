@@ -14,6 +14,7 @@ Assessment Helper helps faculty and the Assessment Committee (AC) at The Univers
 - [Deployment](#deployment)
 - [Background Jobs](#background-jobs)
 - [Resetting the Local Database](#resetting-the-local-database)
+- [Final Verification](#final-verification)
 - [Additional Documentation](#additional-documentation)
 
 ## Prerequisites
@@ -184,6 +185,17 @@ npm run db:seed
 ```
 
 Confirm the reset when prompted. Run the commands in order and stop if one fails. The commands reapply migrations and restore the demo data, login reference, and signup fixtures. Restart the app and workers afterward. Mailpit’s captured messages and uploaded files are stored separately from the database.
+
+## Final Verification
+
+- Tested commit: `1b3c853c97f7b005fa5ab49b4a24b925ca486ea9`
+- Date: November 25, 2026
+- Environment: Windows, Node.js 24.22.1, npm 12.2.3, PostgreSQL 18
+- Clean installation and app startup: Passed.
+- Demo data and Faculty login: Passed. Demo data loaded and a seeded Faculty account signed in successfully.
+- API authentication and Faculty workflow integration tests: Passed.
+- First Administrator bootstrap and Admin → Users access: Passed.
+- Production build, lint, and TypeScript checks: Passed.
 
 ## Additional Documentation
 
