@@ -8,6 +8,7 @@
     "jobs:faculty": "node --import ./scripts/server-loader.mjs --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/scheduler.ts",
     "db:generate": "prisma generate --config prisma.config.mjs",
     "db:migrate": "prisma migrate deploy --config prisma.config.mjs",
+    "admin:bootstrap": "node --import ./scripts/server-loader.mjs --env-file-if-exists=.env scripts/admin-bootstrap.mjs",
     "predev": "prisma generate --config prisma.config.mjs",
     "prebuild": "prisma generate --config prisma.config.mjs",
     "dev": "next dev",
@@ -47,5 +48,10 @@
   },
   "engines": {
     "node": ">=24.22.1 <25"
+  },
+  "overrides": {
+    "@prisma/config": {
+      "effect": "3.22.5"
+    }
   }
 }
